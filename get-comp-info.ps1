@@ -36,7 +36,8 @@ $mac = (Get-NetAdapter |
     } |
     Select-Object -First 1 -ExpandProperty MacAddress)
 
-$username = "$env:USERDOMAIN\$env:USERNAME"
+$username = $env:USERNAME
+$comment = ""
 
 # ============================================================
 # Формирование объекта
@@ -50,6 +51,7 @@ $computer = [ordered]@{
     manufacturer = $manufacturer
     model       = $model
     username    = $username
+    comment     = $comment
     windows     = $os.Caption
     collectedAt = (Get-Date).ToString("o")
 }
@@ -91,6 +93,7 @@ function Show-ComputerComparison($previousComputer) {
         [pscustomobject]@{ Label = "Manufacturer"; Name = "manufacturer" },
         [pscustomobject]@{ Label = "Model"; Name = "model" },
         [pscustomobject]@{ Label = "User"; Name = "username" },
+        [pscustomobject]@{ Label = "Comment"; Name = "comment" },
         [pscustomobject]@{ Label = "Windows"; Name = "windows" }
     )
 
@@ -122,6 +125,11 @@ function Show-ComputerComparison($previousComputer) {
 
     return $hasChanges
 }
+
+# Show the collected data first, then let the user add an optional note.
+Show-ComputerInformation
+$comment = Read-Host "Comment (optional)"
+$computer.comment = $comment
 
 # ============================================================
 # Подготовка файла
@@ -155,6 +163,12 @@ if (Test-Path $filePath) {
     Write-Host "$emojiWarning WARNING!" -ForegroundColor Yellow
     Write-Host "$emojiFile File already exists:"
     Write-Host $filePath
+
+    # An empty answer means that the existing comment must not be erased.
+    if ([string]::IsNullOrWhiteSpace($comment)) {
+        $computer.comment = $previousComputer.comment
+    }
+
     $hasChanges = Show-ComputerComparison $previousComputer
 
     if (-not $hasChanges) {
@@ -170,9 +184,7 @@ if (Test-Path $filePath) {
         Write-Host "$emojiCancelled Operation cancelled." -ForegroundColor Yellow
         exit
     }
-}
-else {
-    Show-ComputerInformation
+
 }
 
 # ============================================================
