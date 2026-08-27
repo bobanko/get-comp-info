@@ -68,8 +68,7 @@ function Show-ComputerInformation {
     Write-Host "IP:           $ip"
     Write-Host "MAC:          $mac"
     Write-Host "Serial:       $serial"
-    Write-Host "Manufacturer: $manufacturer"
-    Write-Host "Model:        $model"
+    Write-Host "Computer:     $manufacturer $model"
     Write-Host "User:         $username"
     Write-Host "Windows:      $($os.Caption)"
     Write-Host ""
@@ -83,6 +82,19 @@ function Get-DisplayValue($value) {
     return [string]$value
 }
 
+function Get-ComputerDisplayValue($computer) {
+    $parts = @()
+
+    foreach ($propertyName in @("manufacturer", "model")) {
+        $value = $computer.$propertyName
+        if ($null -ne $value -and -not [string]::IsNullOrWhiteSpace([string]$value)) {
+            $parts += [string]$value
+        }
+    }
+
+    return Get-DisplayValue ($parts -join " ")
+}
+
 function Show-ComputerComparison($previousComputer) {
     $hasChanges = $false
     $fields = @(
@@ -90,8 +102,7 @@ function Show-ComputerComparison($previousComputer) {
         [pscustomobject]@{ Label = "IP"; Name = "ip" },
         [pscustomobject]@{ Label = "MAC"; Name = "mac" },
         [pscustomobject]@{ Label = "Serial"; Name = "serial" },
-        [pscustomobject]@{ Label = "Manufacturer"; Name = "manufacturer" },
-        [pscustomobject]@{ Label = "Model"; Name = "model" },
+        [pscustomobject]@{ Label = "Computer"; Name = "computer" },
         [pscustomobject]@{ Label = "User"; Name = "username" },
         [pscustomobject]@{ Label = "Comment"; Name = "comment" },
         [pscustomobject]@{ Label = "Windows"; Name = "windows" }
@@ -104,8 +115,14 @@ function Show-ComputerComparison($previousComputer) {
     Write-Host ("{0,-15}-+-{1,-30}-+-{2}" -f ("-" * 15), ("-" * 30), ("-" * 30))
 
     foreach ($field in $fields) {
-        $previousValue = Get-DisplayValue $previousComputer.($field.Name)
-        $currentValue = Get-DisplayValue $computer[$field.Name]
+        if ($field.Name -eq "computer") {
+            $previousValue = Get-ComputerDisplayValue $previousComputer
+            $currentValue = Get-ComputerDisplayValue $computer
+        }
+        else {
+            $previousValue = Get-DisplayValue $previousComputer.($field.Name)
+            $currentValue = Get-DisplayValue $computer[$field.Name]
+        }
         $color = if ($previousValue -ne $currentValue) { "Yellow" } else { "DarkGray" }
 
         if ($previousValue -ne $currentValue) {
