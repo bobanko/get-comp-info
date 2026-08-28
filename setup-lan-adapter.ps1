@@ -66,7 +66,8 @@ $locations = @(
 function Select-MenuItem {
     param(
         [string]$Title,
-        [object[]]$Items
+        [object[]]$Items,
+        [string]$EscapeHint = "Esc — назад."
     )
 
     if ($Items.Count -eq 0) {
@@ -78,7 +79,7 @@ function Select-MenuItem {
     while ($true) {
         Clear-Host
         Write-Host "`n$Title" -ForegroundColor Cyan
-        Write-Host "Стрелки Вверх/Вниз — выбор, Enter — продолжить." -ForegroundColor DarkGray
+        Write-Host "Стрелки Вверх/Вниз — выбор, Enter — продолжить, $EscapeHint" -ForegroundColor DarkGray
         Write-Host "`n"
 
         for ($index = 0; $index -lt $Items.Count; $index++) {
@@ -86,11 +87,19 @@ function Select-MenuItem {
             $marker = if ($index -eq $selectedIndex) { ">" } else { " " }
             $line = "{0} {1}. {2}" -f $marker, ($index + 1), $item.Label
 
-            if ($index -eq $selectedIndex) {
-                Write-Host $line -ForegroundColor Cyan
+            if ($item.StatusText) {
+                if ($index -eq $selectedIndex) {
+                    Write-Host ">" -NoNewline -ForegroundColor Cyan
+                }
+                else {
+                    Write-Host " " -NoNewline
+                }
+
+                Write-Host (" {0}. {1} " -f ($index + 1), $item.Label) -NoNewline
+                Write-Host $item.StatusText -ForegroundColor $item.StatusColor
             }
-            elseif ($item.Color) {
-                Write-Host $line -ForegroundColor $item.Color
+            elseif ($index -eq $selectedIndex) {
+                Write-Host $line -ForegroundColor Cyan
             }
             else {
                 Write-Host $line
@@ -106,8 +115,56 @@ function Select-MenuItem {
                 $selectedIndex = ($selectedIndex + 1) % $Items.Count
             }
             13 { return $Items[$selectedIndex].Value } # Enter
+            27 { return $null } # Escape
         }
 
+    }
+}
+
+function Read-LastIpOctet {
+    param(
+        [int]$FirstHostOctet,
+        [int]$LastHostOctet
+    )
+
+    while ($true) {
+        Write-Host "`nПоследний октет IP-адреса ($FirstHostOctet-$LastHostOctet, Esc — назад): " -NoNewline
+        $value = ""
+
+        while ($true) {
+            $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+            $submitted = $false
+
+            switch ($key.VirtualKeyCode) {
+                27 {
+                    Write-Host ""
+                    return $null
+                }
+                8 {
+                    if ($value.Length -gt 0) {
+                        $value = $value.Substring(0, $value.Length - 1)
+                        Write-Host "`b `b" -NoNewline
+                    }
+                }
+                13 { $submitted = $true }
+                default {
+                    if ([string]$key.Character -match '^\d$') {
+                        $value += [string]$key.Character
+                        Write-Host ([string]$key.Character) -NoNewline
+                    }
+                }
+            }
+
+            if ($submitted) {
+                Write-Host ""
+                if ($value -match '^\d+$' -and [int]$value -ge $FirstHostOctet -and [int]$value -le $LastHostOctet) {
+                    return [int]$value
+                }
+
+                Write-Host "Введите число от $FirstHostOctet до $LastHostOctet." -ForegroundColor Red
+                break
+            }
+        }
     }
 }
 
@@ -159,45 +216,82 @@ $locationMenuItems = foreach ($item in $locations) {
         Value      = $item
     }
 }
-$location = Select-MenuItem -Title "$emojiNetwork Выберите корпус" -Items $locationMenuItems
-
 # 20 is the usual network; 21 and 22 use the same host portion and settings.
 $subnetOptions = @(20, 21, 22)
 $subnetMenuItems = foreach ($subnet in $subnetOptions) {
     [pscustomobject]@{
-        Label = "Сегмент $subnet"
+        Label = "$subnet"
         Value = $subnet
     }
 }
 
-# Keep a visual gap between the completed location block and the segment menu.
-Write-Host "`n"
-$secondOctet = Select-MenuItem -Title "Выберите сегмент сети" -Items $subnetMenuItems
+$adapterMenuItems = $null
 
-$prefix = "10.{0}.{1}" -f $secondOctet, $location.ThirdOctet
-$gateway = "{0}.{1}" -f $prefix, $location.GatewayOctet
+:locationSelection while ($true) {
+    $location = Select-MenuItem -Title "$emojiNetwork Выберите корпус" -Items $locationMenuItems -EscapeHint "Esc — отменить."
+    if ($null -eq $location) {
+        Write-Host "$emojiCancelled Операция отменена." -ForegroundColor Yellow
+        exit
+    }
 
-$adapters = @(Receive-Job -Job $adapterJob -Wait -AutoRemoveJob |
-    Sort-Object @{ Expression = { Get-AdapterPriority $_ } },
-                @{ Expression = { $_.Status -eq "Disabled" } },
-                @{ Expression = { $_.Name } })
-if ($adapters.Count -eq 0) {
-    throw "Сетевые адаптеры не найдены."
-}
+    :segmentSelection while ($true) {
+        $secondOctet = Select-MenuItem -Title "Выберите сегмент сети" -Items $subnetMenuItems
+        if ($null -eq $secondOctet) {
+            continue locationSelection
+        }
 
-$adapterMenuItems = foreach ($item in $adapters) {
-    $status = Get-AdapterStatusDisplay -Adapter $item
-    [pscustomobject]@{
-        Label      = "{0} ({1}) {2}" -f $item.Name, $item.InterfaceDescription, $status.Text
-        Color      = $status.Color
-        Value      = $item
+        $prefix = "10.{0}.{1}" -f $secondOctet, $location.ThirdOctet
+        $gateway = "{0}.{1}" -f $prefix, $location.GatewayOctet
+
+        if ($null -eq $adapterMenuItems) {
+            $adapters = @(Receive-Job -Job $adapterJob -Wait -AutoRemoveJob |
+                Where-Object { $_.HardwareInterface -and $_.MediaType -eq "802.3" } |
+                Sort-Object @{ Expression = { Get-AdapterPriority $_ } },
+                            @{ Expression = { $_.Status -eq "Disabled" } },
+                            @{ Expression = { $_.Name } })
+            if ($adapters.Count -eq 0) {
+                throw "Проводные сетевые адаптеры не найдены."
+            }
+
+            $adapterMenuItems = foreach ($item in $adapters) {
+                $status = Get-AdapterStatusDisplay -Adapter $item
+                [pscustomobject]@{
+                    Label       = "{0} ({1})" -f $item.Name, $item.InterfaceDescription
+                    StatusText  = $status.Text
+                    StatusColor = $status.Color
+                    Value       = $item
+                }
+            }
+        }
+
+        :adapterSelection while ($true) {
+            $hasSingleAdapter = $adapterMenuItems.Count -eq 1
+            if ($hasSingleAdapter) {
+                $adapter = $adapterMenuItems[0].Value
+                Write-Host "`nИспользуется единственный доступный адаптер: " -NoNewline
+                Write-Host $adapterMenuItems[0].Label -NoNewline
+                Write-Host (" " + $adapterMenuItems[0].StatusText) -ForegroundColor $adapterMenuItems[0].StatusColor
+            }
+            else {
+                $adapter = Select-MenuItem -Title "Выберите сетевой адаптер" -Items $adapterMenuItems
+                if ($null -eq $adapter) {
+                    continue segmentSelection
+                }
+            }
+
+            $lastOctet = Read-LastIpOctet -FirstHostOctet $location.FirstHostOctet -LastHostOctet $location.LastHostOctet
+            if ($null -eq $lastOctet) {
+                if ($hasSingleAdapter) {
+                    continue segmentSelection
+                }
+
+                continue adapterSelection
+            }
+
+            break locationSelection
+        }
     }
 }
-$adapter = Select-MenuItem -Title "Выберите сетевой адаптер" -Items $adapterMenuItems
-
-do {
-    $lastOctet = Read-Host "`nПоследний октет IP-адреса ($($location.FirstHostOctet)-$($location.LastHostOctet))"
-} while ($lastOctet -notmatch '^\d+$' -or [int]$lastOctet -lt $location.FirstHostOctet -or [int]$lastOctet -gt $location.LastHostOctet)
 
 $ipAddress = "{0}.{1}" -f $prefix, $lastOctet
 
