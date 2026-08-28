@@ -1,11 +1,18 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
+
+# Keep Russian text and emoji readable in Windows PowerShell consoles.
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
+[Console]::InputEncoding = [System.Text.UTF8Encoding]::new()
+$emojiNetwork = [char]::ConvertFromUtf32(0x1F5A7)
+$emojiCancelled = [char]::ConvertFromUtf32(0x26D4)
+$emojiSuccess = [char]::ConvertFromUtf32(0x2705)
 
 $currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $currentPrincipal = New-Object Security.Principal.WindowsPrincipal($currentIdentity)
 $isAdministrator = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
 if (-not $isAdministrator) {
-    Write-Host "Requesting administrator privileges..." -ForegroundColor Yellow
+    Write-Host "Запрашиваются права администратора..." -ForegroundColor Yellow
 
     try {
         $elevatedArguments = @(
@@ -17,7 +24,7 @@ if (-not $isAdministrator) {
         exit
     }
     catch {
-        Write-Host "Administrator privileges were not granted. The configuration was not changed." -ForegroundColor Red
+        Write-Host "Права администратора не были предоставлены. Настройки не изменены." -ForegroundColor Red
         exit 1
     }
 }
@@ -63,7 +70,7 @@ function Select-MenuItem {
     )
 
     if ($Items.Count -eq 0) {
-        throw "The menu contains no items."
+        throw "В меню нет доступных пунктов."
     }
 
     $selectedIndex = 0
@@ -71,8 +78,8 @@ function Select-MenuItem {
     while ($true) {
         Clear-Host
         Write-Host "`n$Title" -ForegroundColor Cyan
-        Write-Host "Use Up/Down arrows and Enter, or press a number (1-$([Math]::Min($Items.Count, 9)))." -ForegroundColor DarkGray
-        Write-Host ""
+        Write-Host "Стрелки Вверх/Вниз — выбор, Enter — продолжить." -ForegroundColor DarkGray
+        Write-Host "`n"
 
         for ($index = 0; $index -lt $Items.Count; $index++) {
             $item = $Items[$index]
@@ -82,8 +89,8 @@ function Select-MenuItem {
             if ($index -eq $selectedIndex) {
                 Write-Host $line -ForegroundColor Cyan
             }
-            elseif ($item.IsDisabled) {
-                Write-Host $line -ForegroundColor DarkGray
+            elseif ($item.Color) {
+                Write-Host $line -ForegroundColor $item.Color
             }
             else {
                 Write-Host $line
@@ -101,11 +108,34 @@ function Select-MenuItem {
             13 { return $Items[$selectedIndex].Value } # Enter
         }
 
-        if ($key.Character -match '^[1-9]$') {
-            $number = [int][string]$key.Character
-            if ($number -le $Items.Count) {
-                return $Items[$number - 1].Value
-            }
+    }
+}
+
+function Get-AdaptersInBackground {
+    Start-Job -ScriptBlock {
+        Get-NetAdapter | Select-Object Name, InterfaceDescription, Status, HardwareInterface, MediaType, ifIndex
+    }
+}
+
+function Get-AdapterStatusDisplay {
+    param([object]$Adapter)
+
+    switch ([string]$Adapter.Status) {
+        "Disabled" { return @{ Text = "[Отключён — будет включён]"; Color = "Red" } }
+        "Up" { return @{ Text = "[Включён]"; Color = "Green" } }
+        "Disconnected" { return @{ Text = "[Включён, нет подключения]"; Color = "Yellow" } }
+        default { return @{ Text = "[$($Adapter.Status)]"; Color = "DarkYellow" } }
+    }
+}
+
+function Confirm-Configuration {
+    while ($true) {
+        Write-Host "`nEnter — применить настройки; Esc — отменить." -ForegroundColor DarkGray
+        $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+
+        switch ($key.VirtualKeyCode) {
+            13 { return $true }
+            27 { return $false }
         }
     }
 }
@@ -120,74 +150,74 @@ function Get-AdapterPriority {
     return 3
 }
 
+# Loading adapters can take noticeable time on some PCs, so start before the first menu.
+$adapterJob = Get-AdaptersInBackground
+
 $locationMenuItems = foreach ($item in $locations) {
     [pscustomobject]@{
         Label      = "{0} (10.20.{1}.{2}/{3})" -f $item.Name, $item.ThirdOctet, ($item.GatewayOctet - 1), $item.PrefixLength
-        IsDisabled = $false
         Value      = $item
     }
 }
-$location = Select-MenuItem -Title "Select location:" -Items $locationMenuItems
+$location = Select-MenuItem -Title "$emojiNetwork Выберите корпус" -Items $locationMenuItems
 
 # 20 is the usual network; 21 and 22 use the same host portion and settings.
 $subnetOptions = @(20, 21, 22)
-$subnetInput = Read-Host "Network segment: 20 (default), 21, or 22"
-if ([string]::IsNullOrWhiteSpace($subnetInput)) {
-    $secondOctet = 20
+$subnetMenuItems = foreach ($subnet in $subnetOptions) {
+    [pscustomobject]@{
+        Label = "Сегмент $subnet"
+        Value = $subnet
+    }
 }
-elseif ($subnetInput -match '^\d+$' -and [int]$subnetInput -in $subnetOptions) {
-    $secondOctet = [int]$subnetInput
-}
-else {
-    Write-Host "Invalid network segment. Use 20, 21, or 22." -ForegroundColor Red
-    exit 1
-}
+
+# Keep a visual gap between the completed location block and the segment menu.
+Write-Host "`n"
+$secondOctet = Select-MenuItem -Title "Выберите сегмент сети" -Items $subnetMenuItems
 
 $prefix = "10.{0}.{1}" -f $secondOctet, $location.ThirdOctet
 $gateway = "{0}.{1}" -f $prefix, $location.GatewayOctet
 
-$adapters = @(Get-NetAdapter |
+$adapters = @(Receive-Job -Job $adapterJob -Wait -AutoRemoveJob |
     Sort-Object @{ Expression = { Get-AdapterPriority $_ } },
                 @{ Expression = { $_.Status -eq "Disabled" } },
                 @{ Expression = { $_.Name } })
 if ($adapters.Count -eq 0) {
-    throw "No network adapters were found."
+    throw "Сетевые адаптеры не найдены."
 }
 
 $adapterMenuItems = foreach ($item in $adapters) {
-    $isDisabled = $item.Status -eq "Disabled"
-    $status = if ($isDisabled) { "DISABLED - will be enabled" } else { $item.Status }
+    $status = Get-AdapterStatusDisplay -Adapter $item
     [pscustomobject]@{
-        Label      = "{0} ({1}; {2})" -f $item.Name, $item.InterfaceDescription, $status
-        IsDisabled = $isDisabled
+        Label      = "{0} ({1}) {2}" -f $item.Name, $item.InterfaceDescription, $status.Text
+        Color      = $status.Color
         Value      = $item
     }
 }
-$adapter = Select-MenuItem -Title "Select network adapter:" -Items $adapterMenuItems
+$adapter = Select-MenuItem -Title "Выберите сетевой адаптер" -Items $adapterMenuItems
 
 do {
-    $lastOctet = Read-Host "`nLast IP octet ($($location.FirstHostOctet)-$($location.LastHostOctet))"
+    $lastOctet = Read-Host "`nПоследний октет IP-адреса ($($location.FirstHostOctet)-$($location.LastHostOctet))"
 } while ($lastOctet -notmatch '^\d+$' -or [int]$lastOctet -lt $location.FirstHostOctet -or [int]$lastOctet -gt $location.LastHostOctet)
 
 $ipAddress = "{0}.{1}" -f $prefix, $lastOctet
 
-Write-Host "`nThe following configuration will be applied:" -ForegroundColor Yellow
-Write-Host "  Location: $($location.Name)"
-Write-Host "  Adapter:  $($adapter.Name)"
-Write-Host "  IP:       $ipAddress"
-Write-Host "  Mask:     $($location.SubnetMask)"
-Write-Host "  Gateway:  $gateway"
-Write-Host "  DNS:      $($location.DnsServers -join ', ')"
+Write-Host "`nБудут применены следующие изменения:" -ForegroundColor Yellow
+Write-Host "  Корпус:   $($location.Name)" -ForegroundColor Cyan
+Write-Host "  Сегмент:  $secondOctet" -ForegroundColor Cyan
+Write-Host "  Адаптер:  $($adapter.Name)" -ForegroundColor Cyan
+Write-Host "  IP:       $ipAddress" -ForegroundColor Cyan
+Write-Host "  Маска:    $($location.SubnetMask)" -ForegroundColor Cyan
+Write-Host "  Шлюз:     $gateway" -ForegroundColor Cyan
+Write-Host "`nОбщие параметры (без изменений):" -ForegroundColor DarkGray
+Write-Host "  DNS:      $($location.DnsServers -join ', ')" -ForegroundColor DarkGray
 
-$confirmation = Read-Host "Continue? (Y/N)"
-$yesAnswers = @("Y", "y", [string][char]0x0414, [string][char]0x0434)
-if ($confirmation -notin $yesAnswers) {
-    Write-Host "Operation cancelled." -ForegroundColor Yellow
+if (-not (Confirm-Configuration)) {
+    Write-Host "$emojiCancelled Операция отменена." -ForegroundColor Yellow
     exit
 }
 
 if ($adapter.Status -eq "Disabled") {
-    Write-Host "Enabling adapter '$($adapter.Name)'..." -ForegroundColor Yellow
+    Write-Host "Включение адаптера '$($adapter.Name)'..." -ForegroundColor Yellow
     Enable-NetAdapter -Name $adapter.Name -Confirm:$false
 }
 
@@ -200,5 +230,9 @@ Get-NetRoute -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -DestinationPr
 New-NetIPAddress -InterfaceIndex $adapter.ifIndex -IPAddress $ipAddress -PrefixLength $location.PrefixLength -DefaultGateway $gateway | Out-Null
 Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses $location.DnsServers
 
-Write-Host "`nNetwork configuration successfully applied." -ForegroundColor Green
-Get-NetIPConfiguration -InterfaceIndex $adapter.ifIndex | Format-List InterfaceAlias, IPv4Address, IPv4DefaultGateway, DNSServer
+Write-Host "`n$emojiSuccess Настройки сети успешно применены." -ForegroundColor Green
+$appliedConfiguration = Get-NetIPConfiguration -InterfaceIndex $adapter.ifIndex
+Write-Host "  Адаптер:  $($appliedConfiguration.InterfaceAlias)"
+Write-Host "  IPv4:     $($appliedConfiguration.IPv4Address.IPAddress)"
+Write-Host "  Шлюз:     $($appliedConfiguration.IPv4DefaultGateway.NextHop)"
+Write-Host "  DNS:      $($appliedConfiguration.DNSServer.ServerAddresses -join ', ')" -ForegroundColor DarkGray
