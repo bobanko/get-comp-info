@@ -56,24 +56,78 @@ $locations = @(
     }
 )
 
-function Read-MenuChoice {
+function Select-MenuItem {
     param(
-        [string]$Prompt,
-        [int]$Maximum
+        [string]$Title,
+        [object[]]$Items
     )
 
-    do {
-        $answer = Read-Host $Prompt
-    } while ($answer -notmatch '^\d+$' -or [int]$answer -lt 1 -or [int]$answer -gt $Maximum)
+    if ($Items.Count -eq 0) {
+        throw "The menu contains no items."
+    }
 
-    return [int]$answer
+    $selectedIndex = 0
+
+    while ($true) {
+        Clear-Host
+        Write-Host "`n$Title" -ForegroundColor Cyan
+        Write-Host "Use Up/Down arrows and Enter, or press a number (1-$([Math]::Min($Items.Count, 9)))." -ForegroundColor DarkGray
+        Write-Host ""
+
+        for ($index = 0; $index -lt $Items.Count; $index++) {
+            $item = $Items[$index]
+            $marker = if ($index -eq $selectedIndex) { ">" } else { " " }
+            $line = "{0} {1}. {2}" -f $marker, ($index + 1), $item.Label
+
+            if ($index -eq $selectedIndex) {
+                Write-Host $line -ForegroundColor Cyan
+            }
+            elseif ($item.IsDisabled) {
+                Write-Host $line -ForegroundColor DarkGray
+            }
+            else {
+                Write-Host $line
+            }
+        }
+
+        $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+        switch ($key.VirtualKeyCode) {
+            38 { # Up arrow
+                $selectedIndex = ($selectedIndex - 1 + $Items.Count) % $Items.Count
+            }
+            40 { # Down arrow
+                $selectedIndex = ($selectedIndex + 1) % $Items.Count
+            }
+            13 { return $Items[$selectedIndex].Value } # Enter
+        }
+
+        if ($key.Character -match '^[1-9]$') {
+            $number = [int][string]$key.Character
+            if ($number -le $Items.Count) {
+                return $Items[$number - 1].Value
+            }
+        }
+    }
 }
 
-Write-Host "`nSelect location:" -ForegroundColor Cyan
-for ($index = 0; $index -lt $locations.Count; $index++) {
-    Write-Host ("  {0}. {1}" -f ($index + 1), $locations[$index].Name)
+function Get-AdapterPriority {
+    param([object]$Adapter)
+
+    # The usual wired adapter should be first, while preserving all other choices.
+    if ($Adapter.Name -ieq "Ethernet") { return 0 }
+    if ($Adapter.HardwareInterface -and $Adapter.MediaType -eq "802.3") { return 1 }
+    if ($Adapter.Name -match "(?i)^Ethernet") { return 2 }
+    return 3
 }
-$location = $locations[(Read-MenuChoice -Prompt "Location number" -Maximum $locations.Count) - 1]
+
+$locationMenuItems = foreach ($item in $locations) {
+    [pscustomobject]@{
+        Label      = "{0} (10.20.{1}.{2}/{3})" -f $item.Name, $item.ThirdOctet, ($item.GatewayOctet - 1), $item.PrefixLength
+        IsDisabled = $false
+        Value      = $item
+    }
+}
+$location = Select-MenuItem -Title "Select location:" -Items $locationMenuItems
 
 # 20 is the usual network; 21 and 22 use the same host portion and settings.
 $subnetOptions = @(20, 21, 22)
@@ -92,17 +146,24 @@ else {
 $prefix = "10.{0}.{1}" -f $secondOctet, $location.ThirdOctet
 $gateway = "{0}.{1}" -f $prefix, $location.GatewayOctet
 
-$adapters = @(Get-NetAdapter | Where-Object { $_.Status -ne "Disabled" } | Sort-Object -Property ifIndex)
+$adapters = @(Get-NetAdapter |
+    Sort-Object @{ Expression = { Get-AdapterPriority $_ } },
+                @{ Expression = { $_.Status -eq "Disabled" } },
+                @{ Expression = { $_.Name } })
 if ($adapters.Count -eq 0) {
-    throw "No enabled network adapters were found."
+    throw "No network adapters were found."
 }
 
-Write-Host "`nSelect network adapter:" -ForegroundColor Cyan
-for ($index = 0; $index -lt $adapters.Count; $index++) {
-    $adapter = $adapters[$index]
-    Write-Host ("  {0}. {1} ({2}, {3})" -f ($index + 1), $adapter.Name, $adapter.InterfaceDescription, $adapter.Status)
+$adapterMenuItems = foreach ($item in $adapters) {
+    $isDisabled = $item.Status -eq "Disabled"
+    $status = if ($isDisabled) { "DISABLED - will be enabled" } else { $item.Status }
+    [pscustomobject]@{
+        Label      = "{0} ({1}; {2})" -f $item.Name, $item.InterfaceDescription, $status
+        IsDisabled = $isDisabled
+        Value      = $item
+    }
 }
-$adapter = $adapters[(Read-MenuChoice -Prompt "Adapter number" -Maximum $adapters.Count) - 1]
+$adapter = Select-MenuItem -Title "Select network adapter:" -Items $adapterMenuItems
 
 do {
     $lastOctet = Read-Host "`nLast IP octet ($($location.FirstHostOctet)-$($location.LastHostOctet))"
@@ -123,6 +184,11 @@ $yesAnswers = @("Y", "y", [string][char]0x0414, [string][char]0x0434)
 if ($confirmation -notin $yesAnswers) {
     Write-Host "Operation cancelled." -ForegroundColor Yellow
     exit
+}
+
+if ($adapter.Status -eq "Disabled") {
+    Write-Host "Enabling adapter '$($adapter.Name)'..." -ForegroundColor Yellow
+    Enable-NetAdapter -Name $adapter.Name -Confirm:$false
 }
 
 # Remove all existing IPv4 addresses and default gateways from the selected adapter.
