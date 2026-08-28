@@ -95,6 +95,18 @@ function Get-ComputerDisplayValue($computer) {
     return Get-DisplayValue ($parts -join " ")
 }
 
+function Confirm-Overwrite {
+    Write-Host "Enter: overwrite existing file  Esc: cancel" -ForegroundColor DarkGray
+
+    while ($true) {
+        $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+        switch ($key.VirtualKeyCode) {
+            13 { return $true }
+            27 { return $false }
+        }
+    }
+}
+
 function Show-ComputerComparison($previousComputer) {
     $hasChanges = $false
     $fields = @(
@@ -194,9 +206,7 @@ if (Test-Path $filePath) {
         exit
     }
     
-    $answer = Read-Host "Overwrite existing file? (Y/N)"
-
-    if ($answer -notmatch '^[Yy\u0414\u0434]$') {
+    if (-not (Confirm-Overwrite)) {
         Write-Host ""
         Write-Host "$emojiCancelled Operation cancelled." -ForegroundColor Yellow
         exit
