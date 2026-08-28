@@ -4,7 +4,6 @@
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
 [Console]::InputEncoding = [System.Text.UTF8Encoding]::new()
 $emojiNetwork = [char]::ConvertFromUtf32(0x1F5A7)
-$emojiCancelled = [char]::ConvertFromUtf32(0x26D4)
 $emojiSuccess = [char]::ConvertFromUtf32(0x2705)
 
 $currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -65,7 +64,8 @@ $locations = @(
 
 function Select-MenuItem {
     param(
-        [string]$Title,
+        [string]$Step,
+        [string]$Description,
         [object[]]$Items,
         [string]$EscapeHint = "Esc — назад."
     )
@@ -78,9 +78,10 @@ function Select-MenuItem {
 
     while ($true) {
         Clear-Host
-        Write-Host "`n$Title" -ForegroundColor Cyan
         Write-Host "Стрелки Вверх/Вниз — выбор, Enter — продолжить, $EscapeHint" -ForegroundColor DarkGray
-        Write-Host "`n"
+        Write-Host $Step -ForegroundColor Cyan
+        Write-Host $Description
+        Write-Host ""
 
         for ($index = 0; $index -lt $Items.Count; $index++) {
             $item = $Items[$index]
@@ -127,8 +128,17 @@ function Read-LastIpOctet {
         [int]$LastHostOctet
     )
 
+    $validationError = $null
     while ($true) {
-        Write-Host "`nПоследний октет IP-адреса ($FirstHostOctet-$LastHostOctet, Esc — назад): " -NoNewline
+        Clear-Host
+        Write-Host "Enter — подтвердить, Backspace — исправить, Esc — назад." -ForegroundColor DarkGray
+        Write-Host "Шаг 4 из 5" -ForegroundColor Cyan
+        Write-Host "Введите последний октет IP-адреса ($FirstHostOctet-$LastHostOctet)."
+        if ($validationError) {
+            Write-Host $validationError -ForegroundColor Red
+        }
+        Write-Host ""
+        Write-Host "> " -NoNewline
         $value = ""
 
         while ($true) {
@@ -161,7 +171,7 @@ function Read-LastIpOctet {
                     return [int]$value
                 }
 
-                Write-Host "Введите число от $FirstHostOctet до $LastHostOctet." -ForegroundColor Red
+                $validationError = "Введите число от $FirstHostOctet до $LastHostOctet."
                 break
             }
         }
@@ -187,13 +197,37 @@ function Get-AdapterStatusDisplay {
 
 function Confirm-Configuration {
     while ($true) {
-        Write-Host "`nEnter — применить настройки; Esc — отменить." -ForegroundColor DarkGray
         $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
 
         switch ($key.VirtualKeyCode) {
             13 { return $true }
-            27 { return $false }
+            27 { return $null }
         }
+    }
+}
+
+function Show-ConfigurationSummary {
+    param(
+        [object]$Location,
+        [int]$SecondOctet,
+        [object]$Adapter,
+        [string]$IpAddress,
+        [string]$Gateway
+    )
+
+    Clear-Host
+    Write-Host "Enter — применить настройки, Esc — назад." -ForegroundColor DarkGray
+    Write-Host "Шаг 5 из 5" -ForegroundColor Cyan
+    Write-Host "Будут применены следующие изменения:" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  Корпус:   $($Location.Name) [$($Location.ThirdOctet)]" -ForegroundColor DarkGray
+    Write-Host "  Сегмент:  $SecondOctet" -ForegroundColor DarkGray
+    Write-Host "  Адаптер:  $($Adapter.Name)" -ForegroundColor DarkGray
+    Write-Host "  IP:       $IpAddress" -ForegroundColor Cyan
+    Write-Host "  Маска:    $($Location.SubnetMask)" -ForegroundColor Cyan
+    Write-Host "  Шлюз:     $Gateway" -ForegroundColor Cyan
+    for ($dnsIndex = 0; $dnsIndex -lt $Location.DnsServers.Count; $dnsIndex++) {
+        Write-Host "  DNS $($dnsIndex + 1):    $($Location.DnsServers[$dnsIndex])" -ForegroundColor Cyan
     }
 }
 
@@ -212,7 +246,7 @@ $adapterJob = Get-AdaptersInBackground
 
 $locationMenuItems = foreach ($item in $locations) {
     [pscustomobject]@{
-        Label      = "{0} (10.20.{1}.{2}/{3})" -f $item.Name, $item.ThirdOctet, ($item.GatewayOctet - 1), $item.PrefixLength
+        Label      = "{0,-16} [{1}]" -f $item.Name, $item.ThirdOctet
         Value      = $item
     }
 }
@@ -228,14 +262,13 @@ $subnetMenuItems = foreach ($subnet in $subnetOptions) {
 $adapterMenuItems = $null
 
 :locationSelection while ($true) {
-    $location = Select-MenuItem -Title "$emojiNetwork Выберите корпус" -Items $locationMenuItems -EscapeHint "Esc — отменить."
+    $location = Select-MenuItem -Step "$emojiNetwork Шаг 1 из 5" -Description "Выберите корпус." -Items $locationMenuItems -EscapeHint "Esc — нет предыдущего шага."
     if ($null -eq $location) {
-        Write-Host "$emojiCancelled Операция отменена." -ForegroundColor Yellow
-        exit
+        continue locationSelection
     }
 
     :segmentSelection while ($true) {
-        $secondOctet = Select-MenuItem -Title "Выберите сегмент сети" -Items $subnetMenuItems
+        $secondOctet = Select-MenuItem -Step "Шаг 2 из 5" -Description "Выберите сегмент сети." -Items $subnetMenuItems
         if ($null -eq $secondOctet) {
             continue locationSelection
         }
@@ -253,61 +286,56 @@ $adapterMenuItems = $null
                 throw "Проводные сетевые адаптеры не найдены."
             }
 
-            $adapterMenuItems = foreach ($item in $adapters) {
-                $status = Get-AdapterStatusDisplay -Adapter $item
-                [pscustomobject]@{
-                    Label       = "{0} ({1})" -f $item.Name, $item.InterfaceDescription
-                    StatusText  = $status.Text
-                    StatusColor = $status.Color
-                    Value       = $item
+            $adapterMenuItems = @(
+                foreach ($item in $adapters) {
+                    $status = Get-AdapterStatusDisplay -Adapter $item
+                    [pscustomobject]@{
+                        Label       = "{0} ({1})" -f $item.Name, $item.InterfaceDescription
+                        StatusText  = $status.Text
+                        StatusColor = $status.Color
+                        Value       = $item
+                    }
                 }
-            }
+            )
         }
 
+        Clear-Host
         :adapterSelection while ($true) {
             $hasSingleAdapter = $adapterMenuItems.Count -eq 1
             if ($hasSingleAdapter) {
                 $adapter = $adapterMenuItems[0].Value
-                Write-Host "`nИспользуется единственный доступный адаптер: " -NoNewline
-                Write-Host $adapterMenuItems[0].Label -NoNewline
+                Write-Host "`nШаг 3 из 5 — используется единственный доступный адаптер:"
+                Write-Host "  $($adapterMenuItems[0].Label)" -NoNewline
                 Write-Host (" " + $adapterMenuItems[0].StatusText) -ForegroundColor $adapterMenuItems[0].StatusColor
             }
             else {
-                $adapter = Select-MenuItem -Title "Выберите сетевой адаптер" -Items $adapterMenuItems
+                $adapter = Select-MenuItem -Step "Шаг 3 из 5" -Description "Выберите сетевой адаптер." -Items $adapterMenuItems
                 if ($null -eq $adapter) {
                     continue segmentSelection
                 }
             }
 
-            $lastOctet = Read-LastIpOctet -FirstHostOctet $location.FirstHostOctet -LastHostOctet $location.LastHostOctet
-            if ($null -eq $lastOctet) {
-                if ($hasSingleAdapter) {
-                    continue segmentSelection
+            Clear-Host
+            :ipSelection while ($true) {
+                $lastOctet = Read-LastIpOctet -FirstHostOctet $location.FirstHostOctet -LastHostOctet $location.LastHostOctet
+                if ($null -eq $lastOctet) {
+                    if ($hasSingleAdapter) {
+                        continue segmentSelection
+                    }
+
+                    continue adapterSelection
                 }
 
-                continue adapterSelection
-            }
+                $ipAddress = "{0}.{1}" -f $prefix, $lastOctet
+                Show-ConfigurationSummary -Location $location -SecondOctet $secondOctet -Adapter $adapter -IpAddress $ipAddress -Gateway $gateway
+                if (Confirm-Configuration) {
+                    break locationSelection
+                }
 
-            break locationSelection
+                Clear-Host
+            }
         }
     }
-}
-
-$ipAddress = "{0}.{1}" -f $prefix, $lastOctet
-
-Write-Host "`nБудут применены следующие изменения:" -ForegroundColor Yellow
-Write-Host "  Корпус:   $($location.Name)" -ForegroundColor Cyan
-Write-Host "  Сегмент:  $secondOctet" -ForegroundColor Cyan
-Write-Host "  Адаптер:  $($adapter.Name)" -ForegroundColor Cyan
-Write-Host "  IP:       $ipAddress" -ForegroundColor Cyan
-Write-Host "  Маска:    $($location.SubnetMask)" -ForegroundColor Cyan
-Write-Host "  Шлюз:     $gateway" -ForegroundColor Cyan
-Write-Host "`nОбщие параметры (без изменений):" -ForegroundColor DarkGray
-Write-Host "  DNS:      $($location.DnsServers -join ', ')" -ForegroundColor DarkGray
-
-if (-not (Confirm-Configuration)) {
-    Write-Host "$emojiCancelled Операция отменена." -ForegroundColor Yellow
-    exit
 }
 
 if ($adapter.Status -eq "Disabled") {
@@ -329,4 +357,7 @@ $appliedConfiguration = Get-NetIPConfiguration -InterfaceIndex $adapter.ifIndex
 Write-Host "  Адаптер:  $($appliedConfiguration.InterfaceAlias)"
 Write-Host "  IPv4:     $($appliedConfiguration.IPv4Address.IPAddress)"
 Write-Host "  Шлюз:     $($appliedConfiguration.IPv4DefaultGateway.NextHop)"
-Write-Host "  DNS:      $($appliedConfiguration.DNSServer.ServerAddresses -join ', ')" -ForegroundColor DarkGray
+$appliedDnsServers = @($appliedConfiguration.DNSServer.ServerAddresses)
+for ($dnsIndex = 0; $dnsIndex -lt $appliedDnsServers.Count; $dnsIndex++) {
+    Write-Host "  DNS $($dnsIndex + 1):    $($appliedDnsServers[$dnsIndex])" -ForegroundColor Cyan
+}
