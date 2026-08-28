@@ -22,6 +22,18 @@ function Get-ShortValue($value, $length) {
     return $text.Substring(0, [Math]::Max(0, $length - 3)) + "..."
 }
 
+function Test-AddedToExternalDatabase($data) {
+    return $null -ne $data.PSObject.Properties["addedToExternalDatabase"] -and [bool]$data.addedToExternalDatabase
+}
+
+function Get-ExternalDatabaseStatus($data) {
+    if (Test-AddedToExternalDatabase $data) {
+        return "Added"
+    }
+
+    return "Not added"
+}
+
 function Get-InventoryRecords {
     $records = @()
     $warnings = @()
@@ -92,10 +104,6 @@ function Show-List($records, $selectedIndex, $warningCount) {
     if ($warningCount -gt 0) {
         Write-Host "Skipped invalid JSON files: $warningCount" -ForegroundColor Yellow
     }
-    if ($script:notice) {
-        Write-Host $script:notice -ForegroundColor Green
-        $script:notice = ""
-    }
     Write-Host ""
 
     if ($records.Count -eq 0) {
@@ -103,26 +111,34 @@ function Show-List($records, $selectedIndex, $warningCount) {
         return
     }
 
-    Write-Host "Up/Down: select  Enter: open  /: search  S: sort  R: reload  Esc: exit" -ForegroundColor DarkGray
+    Write-Host "Up/Down: select  Enter: open  A: toggle external DB status  /: search  S: sort  R: reload  Esc: exit" -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host ("{0,-3} {1,-24} {2,-22} {3}" -f "", "Hostname", "Serial", "User") -ForegroundColor DarkGray
+    Write-Host ("{0,-3} {1,-24} {2,-22} {3,-24} {4}" -f "", "Hostname", "Serial", "User", "External DB") -ForegroundColor DarkGray
 
-    $pageSize = [Math]::Max(1, [Console]::WindowHeight - 9)
+    # Reserve two lines at the bottom for a possible status message.
+    $pageSize = [Math]::Max(1, [Console]::WindowHeight - 10)
     $pageStart = [Math]::Floor($selectedIndex / $pageSize) * $pageSize
     $pageEnd = [Math]::Min($records.Count - 1, $pageStart + $pageSize - 1)
 
     for ($index = $pageStart; $index -le $pageEnd; $index++) {
         $record = $records[$index]
         $marker = if ($index -eq $selectedIndex) { ">" } else { " " }
-        $line = "{0,-3} {1,-24} {2,-22} {3}" -f $marker,
+        $line = "{0,-3} {1,-24} {2,-22} {3,-24} " -f $marker,
             (Get-ShortValue $record.Data.hostname 24),
             (Get-ShortValue $record.Data.serial 22),
             (Get-ShortValue $record.Data.username 24)
-        Write-Host $line -ForegroundColor $(if ($index -eq $selectedIndex) { "Cyan" } else { "Gray" })
+        Write-Host $line -NoNewline -ForegroundColor $(if ($index -eq $selectedIndex) { "Cyan" } else { "Gray" })
+        Write-Host (Get-ExternalDatabaseStatus $record.Data) -ForegroundColor $(if (Test-AddedToExternalDatabase $record.Data) { "Green" } else { "DarkYellow" })
     }
 
     if ($records.Count -gt $pageSize) {
         Write-Host ""; Write-Host "Showing $($pageStart + 1)-$($pageEnd + 1) of $($records.Count)" -ForegroundColor DarkGray
+    }
+
+    if ($script:notice) {
+        Write-Host ""
+        Write-Host $script:notice -ForegroundColor Green
+        $script:notice = ""
     }
 }
 
@@ -183,13 +199,38 @@ function Save-Comment($record, $comment) {
     Set-Content -LiteralPath $record.FilePath -Value $json -Encoding UTF8
 }
 
+function Save-ExternalDatabaseStatus($record, $isAdded) {
+    if ($null -eq $record.Data.PSObject.Properties["addedToExternalDatabase"]) {
+        $record.Data | Add-Member -MemberType NoteProperty -Name "addedToExternalDatabase" -Value $isAdded
+    }
+    else {
+        $record.Data.addedToExternalDatabase = $isAdded
+    }
+
+    if ($isAdded) {
+        $timestamp = (Get-Date).ToString("o")
+        if ($null -eq $record.Data.PSObject.Properties["addedToExternalDatabaseAt"]) {
+            $record.Data | Add-Member -MemberType NoteProperty -Name "addedToExternalDatabaseAt" -Value $timestamp
+        }
+        else {
+            $record.Data.addedToExternalDatabaseAt = $timestamp
+        }
+    }
+    elseif ($null -ne $record.Data.PSObject.Properties["addedToExternalDatabaseAt"]) {
+        $record.Data.addedToExternalDatabaseAt = $null
+    }
+
+    $json = $record.Data | ConvertTo-Json -Depth 10
+    Set-Content -LiteralPath $record.FilePath -Value $json -Encoding UTF8
+}
+
 function Show-Details($records, $selectedIndex) {
     while ($true) {
         $record = $records[$selectedIndex]
         $data = $record.Data
         Clear-Screen
         Write-Host "Computer details ($($selectedIndex + 1) of $($records.Count))" -ForegroundColor Cyan
-        Write-Host "Left/Right or Up/Down: previous/next  E/F2: edit comment  Esc: list" -ForegroundColor DarkGray
+        Write-Host "Left/Right or Up/Down: previous/next  E/F2: edit comment  A: toggle external DB status  Esc: list" -ForegroundColor DarkGray
         Write-Host ""
         Write-Host ("{0,-15} {1}" -f "Hostname:", (Get-DisplayValue $data.hostname))
         Write-Host ("{0,-15} {1}" -f "Serial:", (Get-DisplayValue $data.serial))
@@ -201,6 +242,12 @@ function Show-Details($records, $selectedIndex) {
         Write-Host ""
         Write-Host "Comment:" -ForegroundColor DarkGray
         Write-Host (Get-DisplayValue $data.comment)
+        Write-Host ""
+        Write-Host "External database:" -NoNewline -ForegroundColor DarkGray
+        Write-Host (" " + (Get-ExternalDatabaseStatus $data)) -ForegroundColor $(if (Test-AddedToExternalDatabase $data) { "Green" } else { "DarkYellow" })
+        if (Test-AddedToExternalDatabase $data) {
+            Write-Host ("Marked at: " + (Get-DisplayValue $data.addedToExternalDatabaseAt)) -ForegroundColor DarkGray
+        }
         Write-Host ""
         Write-Host "File: $($record.FileName)" -ForegroundColor DarkGray
 
@@ -225,7 +272,17 @@ function Show-Details($records, $selectedIndex) {
                 break
             }
             default {
-                if ($key.KeyChar -eq 'e' -or $key.KeyChar -eq 'E') {
+                if ($key.Key -eq [ConsoleKey]::A) {
+                    $newStatus = -not (Test-AddedToExternalDatabase $data)
+                    try {
+                        Save-ExternalDatabaseStatus $record $newStatus
+                        $script:notice = if ($newStatus) { "Marked as added to external database: $($record.FileName)" } else { "External database mark removed: $($record.FileName)" }
+                    }
+                    catch {
+                        $script:notice = "Could not save external database status: $($_.Exception.Message)"
+                    }
+                }
+                elseif ($key.Key -eq [ConsoleKey]::E) {
                     $edit = Edit-Comment $data.comment
                     if ($edit.Saved) {
                         try {
@@ -260,13 +317,24 @@ while ($true) {
             continue
         }
         default {
-            if ($key.KeyChar -eq '/') {
+            if ($key.Key -eq [ConsoleKey]::A -and $records.Count -gt 0) {
+                $record = $records[$selectedIndex]
+                $newStatus = -not (Test-AddedToExternalDatabase $record.Data)
+                try {
+                    Save-ExternalDatabaseStatus $record $newStatus
+                    $script:notice = if ($newStatus) { "Marked as added to external database: $($record.FileName)" } else { "External database mark removed: $($record.FileName)" }
+                }
+                catch {
+                    $script:notice = "Could not save external database status: $($_.Exception.Message)"
+                }
+            }
+            elseif ($key.Key -eq [ConsoleKey]::Oem2) {
                 Clear-Screen
                 $current = if ($script:searchTerm) { " (current: $script:searchTerm)" } else { "" }
                 $script:searchTerm = Read-Host "Search hostname, serial, user, model or comment$current (empty clears)"
                 $selectedIndex = 0
             }
-            elseif ($key.KeyChar -eq 's' -or $key.KeyChar -eq 'S') {
+            elseif ($key.Key -eq [ConsoleKey]::S) {
                 switch ($script:sortMode) {
                     "Hostname" { $script:sortMode = "Serial" }
                     "Serial" { $script:sortMode = "CollectedAt" }
