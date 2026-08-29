@@ -22,6 +22,15 @@ function Get-ShortValue($value, $length) {
     return $text.Substring(0, [Math]::Max(0, $length - 3)) + "..."
 }
 
+function Get-DisplayDate($value) {
+    $date = [datetime]::MinValue
+    if ([datetime]::TryParse([string]$value, [ref]$date)) {
+        return $date.ToString("yyyy-MM-dd HH:mm")
+    }
+
+    return "(not set)"
+}
+
 function Test-AddedToExternalDatabase($data) {
     return $null -ne $data.PSObject.Properties["addedToExternalDatabase"] -and [bool]$data.addedToExternalDatabase
 }
@@ -31,7 +40,12 @@ function Get-ExternalDatabaseStatus($data) {
         return "Added"
     }
 
-    return "Not added"
+    return "Pending"
+}
+
+function Write-ListHeader($title, $width, $sortMode) {
+    $color = if ($script:sortMode -eq $sortMode) { "Cyan" } else { "DarkGray" }
+    Write-Host (("{0,-" + $width + "} ") -f $title) -NoNewline -ForegroundColor $color
 }
 
 function Get-InventoryRecords {
@@ -113,7 +127,13 @@ function Show-List($records, $selectedIndex, $warningCount) {
 
     Write-Host "Up/Down: select  Enter: open  A: toggle external DB status  /: search  S: sort  R: reload  Esc: exit" -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host ("{0,-3} {1,-24} {2,-22} {3,-24} {4}" -f "", "Hostname", "Serial", "User", "External DB") -ForegroundColor DarkGray
+    Write-Host ("{0,-3} " -f "") -NoNewline -ForegroundColor DarkGray
+    Write-ListHeader "Hostname" 20 "Hostname"
+    Write-ListHeader "Serial" 22 "Serial"
+    Write-ListHeader "User" 15 ""
+    Write-ListHeader "Collected" 16 "CollectedAt"
+    Write-ListHeader "DB" 10 ""
+    Write-Host "Comment" -ForegroundColor DarkGray
 
     # Reserve two lines at the bottom for a possible status message.
     $pageSize = [Math]::Max(1, [Console]::WindowHeight - 10)
@@ -123,12 +143,14 @@ function Show-List($records, $selectedIndex, $warningCount) {
     for ($index = $pageStart; $index -le $pageEnd; $index++) {
         $record = $records[$index]
         $marker = if ($index -eq $selectedIndex) { ">" } else { " " }
-        $line = "{0,-3} {1,-24} {2,-22} {3,-24} " -f $marker,
-            (Get-ShortValue $record.Data.hostname 24),
+        $line = "{0,-3} {1,-20} {2,-22} {3,-15} {4,-16} " -f $marker,
+            (Get-ShortValue $record.Data.hostname 20),
             (Get-ShortValue $record.Data.serial 22),
-            (Get-ShortValue $record.Data.username 24)
+            (Get-ShortValue $record.Data.username 15),
+            (Get-DisplayDate $record.Data.collectedAt)
         Write-Host $line -NoNewline -ForegroundColor $(if ($index -eq $selectedIndex) { "Cyan" } else { "Gray" })
-        Write-Host (Get-ExternalDatabaseStatus $record.Data) -ForegroundColor $(if (Test-AddedToExternalDatabase $record.Data) { "Green" } else { "DarkYellow" })
+        Write-Host ("{0,-10} " -f (Get-ExternalDatabaseStatus $record.Data)) -NoNewline -ForegroundColor $(if (Test-AddedToExternalDatabase $record.Data) { "Green" } else { "DarkYellow" })
+        Write-Host (Get-ShortValue $record.Data.comment 40) -ForegroundColor $(if ($index -eq $selectedIndex) { "Cyan" } else { "Gray" })
     }
 
     if ($records.Count -gt $pageSize) {
