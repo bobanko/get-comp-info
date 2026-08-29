@@ -6,6 +6,15 @@
 $emojiNetwork = [char]::ConvertFromUtf32(0x1F5A7)
 $emojiSuccess = [char]::ConvertFromUtf32(0x2705)
 
+try {
+    $Host.UI.RawUI.BackgroundColor = [ConsoleColor]::Black
+    $Host.UI.RawUI.ForegroundColor = [ConsoleColor]::Gray
+    Clear-Host
+}
+catch {
+    # Continue with the host defaults if console colours are unavailable.
+}
+
 $currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $currentPrincipal = New-Object Security.Principal.WindowsPrincipal($currentIdentity)
 $isAdministrator = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -19,8 +28,8 @@ if (-not $isAdministrator) {
             "-ExecutionPolicy", "Bypass",
             "-File", ('"{0}"' -f $PSCommandPath)
         )
-        Start-Process -FilePath "powershell.exe" -Verb RunAs -ArgumentList $elevatedArguments
-        exit
+        $elevatedProcess = Start-Process -FilePath "powershell.exe" -Verb RunAs -ArgumentList $elevatedArguments -Wait -PassThru
+        exit $elevatedProcess.ExitCode
     }
     catch {
         Write-Host "Права администратора не были предоставлены. Настройки не изменены." -ForegroundColor Red
@@ -262,9 +271,10 @@ $subnetMenuItems = foreach ($subnet in $subnetOptions) {
 $adapterMenuItems = $null
 
 :locationSelection while ($true) {
-    $location = Select-MenuItem -Step "$emojiNetwork Шаг 1 из 5" -Description "Выберите корпус." -Items $locationMenuItems -EscapeHint "Esc — нет предыдущего шага."
+    $location = Select-MenuItem -Step "$emojiNetwork Шаг 1 из 5" -Description "Выберите корпус." -Items $locationMenuItems -EscapeHint "Esc — вернуться в главное меню."
     if ($null -eq $location) {
-        continue locationSelection
+        # The launcher recognizes this as a normal direct return to its menu.
+        exit 42
     }
 
     :segmentSelection while ($true) {
