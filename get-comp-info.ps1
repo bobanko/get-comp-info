@@ -50,6 +50,9 @@ function Show-ToolHeader {
 # Получение информации о компьютере
 # ============================================================
 
+Clear-Host
+Write-ToolboxHeader -Section $text.Header
+Write-Host ""
 Write-Host $text.Loading -ForegroundColor DarkGray
 
 $cs = Get-CimInstance Win32_ComputerSystem
