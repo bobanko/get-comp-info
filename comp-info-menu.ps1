@@ -4,6 +4,7 @@
 # returns here instead of closing the launcher.
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
 [Console]::InputEncoding = [System.Text.UTF8Encoding]::new()
+. (Join-Path $PSScriptRoot "console-ui.ps1")
 
 $menuItems = @(
     [PSCustomObject]@{ Title = "🖥️ Собрать информацию о компьютере"; Script = "get-comp-info.ps1" }
@@ -18,8 +19,8 @@ function Show-Menu {
     param([int]$SelectedIndex)
 
     Clear-Host
-    Write-Host "⚙️ТУЛБОКС / главное меню" -ForegroundColor Cyan
-    Write-Host "Стрелки ▲▼ — выбрать, [↲ Enter] — открыть." -ForegroundColor DarkGray
+    Write-ToolboxHeader -Section " / главное меню"
+    Write-Host "[▲▼] — выбрать, [↲ Enter] — открыть." -ForegroundColor DarkGray
     Write-Host ""
     Write-Host ""
 

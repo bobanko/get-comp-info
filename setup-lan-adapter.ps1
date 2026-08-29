@@ -3,7 +3,8 @@
 # Keep Russian text and emoji readable in Windows PowerShell consoles.
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
 [Console]::InputEncoding = [System.Text.UTF8Encoding]::new()
-$emojiNetwork = [char]::ConvertFromUtf32(0x1F5A7)
+. (Join-Path $PSScriptRoot "console-ui.ps1")
+$emojiNetwork = [char]::ConvertFromUtf32(0x1F310)
 $emojiSuccess = [char]::ConvertFromUtf32(0x2705)
 
 try {
@@ -40,7 +41,7 @@ if (-not $isAdministrator) {
 # The gateway belongs to the same subnet; reserve it and only allow usable host IPs.
 $locations = @(
     [pscustomobject]@{
-        Name             = ([string][char]0x0428 + [char]0x0442 + [char]0x0430 + [char]0x0431)
+        Name             = "Корпус А"
         ThirdOctet       = 1
         PrefixLength     = 25
         SubnetMask       = "255.255.255.128"
@@ -50,7 +51,7 @@ $locations = @(
         LastHostOctet    = 254
     },
     [pscustomobject]@{
-        Name             = ([string][char]0x0423 + [char]0x0447 + [char]0x0435 + [char]0x0431 + [char]0x043D + [char]0x044B + [char]0x0439 + " " + [char]0x043A + [char]0x043E + [char]0x0440 + [char]0x043F + [char]0x0443 + [char]0x0441)
+        Name             = "Корпус Б"
         ThirdOctet       = 2
         PrefixLength     = 27
         SubnetMask       = "255.255.255.224"
@@ -60,7 +61,7 @@ $locations = @(
         LastHostOctet    = 94
     },
     [pscustomobject]@{
-        Name             = ([string][char]0x0411 + [char]0x0443 + [char]0x043D + [char]0x043A + [char]0x0435 + [char]0x0440)
+        Name             = "Корпус В"
         ThirdOctet       = 3
         PrefixLength     = 28
         SubnetMask       = "255.255.255.240"
@@ -71,12 +72,17 @@ $locations = @(
     }
 )
 
+function Show-ToolHeader {
+    Write-ToolboxHeader -Section "$emojiNetwork Настройка LAN-адаптера"
+    Write-Host ""
+}
+
 function Select-MenuItem {
     param(
         [string]$Step,
         [string]$Description,
         [object[]]$Items,
-        [string]$EscapeHint = "Esc — назад."
+        [string]$EscapeHint = "[Esc] — назад."
     )
 
     if ($Items.Count -eq 0) {
@@ -87,7 +93,8 @@ function Select-MenuItem {
 
     while ($true) {
         Clear-Host
-        Write-Host "Стрелки Вверх/Вниз — выбор, Enter — продолжить, $EscapeHint" -ForegroundColor DarkGray
+        Show-ToolHeader
+        Write-Host "[▲▼] — выбор, [↲ Enter] — продолжить, $EscapeHint" -ForegroundColor DarkGray
         Write-Host $Step -ForegroundColor Cyan
         Write-Host $Description
         Write-Host ""
@@ -140,7 +147,8 @@ function Read-LastIpOctet {
     $validationError = $null
     while ($true) {
         Clear-Host
-        Write-Host "Enter — подтвердить, Backspace — исправить, Esc — назад." -ForegroundColor DarkGray
+        Show-ToolHeader
+        Write-Host "[↲ Enter] — подтвердить, [Backspace] — исправить, [Esc] — назад." -ForegroundColor DarkGray
         Write-Host "Шаг 4 из 5" -ForegroundColor Cyan
         Write-Host "Введите последний октет IP-адреса ($FirstHostOctet-$LastHostOctet)."
         if ($validationError) {
@@ -225,7 +233,8 @@ function Show-ConfigurationSummary {
     )
 
     Clear-Host
-    Write-Host "Enter — применить настройки, Esc — назад." -ForegroundColor DarkGray
+    Show-ToolHeader
+    Write-Host "[↲ Enter] — применить настройки, [Esc] — назад." -ForegroundColor DarkGray
     Write-Host "Шаг 5 из 5" -ForegroundColor Cyan
     Write-Host "Будут применены следующие изменения:" -ForegroundColor Yellow
     Write-Host ""
@@ -271,7 +280,7 @@ $subnetMenuItems = foreach ($subnet in $subnetOptions) {
 $adapterMenuItems = $null
 
 :locationSelection while ($true) {
-    $location = Select-MenuItem -Step "$emojiNetwork Шаг 1 из 5" -Description "Выберите корпус." -Items $locationMenuItems -EscapeHint "Esc — вернуться в главное меню."
+    $location = Select-MenuItem -Step "$emojiNetwork Шаг 1 из 5" -Description "Выберите корпус." -Items $locationMenuItems -EscapeHint "[Esc] — вернуться в главное меню."
     if ($null -eq $location) {
         # The launcher recognizes this as a normal direct return to its menu.
         exit 42
@@ -310,6 +319,7 @@ $adapterMenuItems = $null
         }
 
         Clear-Host
+        Show-ToolHeader
         :adapterSelection while ($true) {
             $hasSingleAdapter = $adapterMenuItems.Count -eq 1
             if ($hasSingleAdapter) {
@@ -342,7 +352,6 @@ $adapterMenuItems = $null
                     break locationSelection
                 }
 
-                Clear-Host
             }
         }
     }

@@ -1,5 +1,7 @@
 ﻿$ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot "console-ui.ps1")
+
 $dataPath = Join-Path $PSScriptRoot "data"
 $script:sortMode = "Hostname"
 $script:searchTerm = ""
@@ -110,7 +112,7 @@ function Clear-Screen {
 
 function Show-List($records, $selectedIndex, $warningCount) {
     Clear-Screen
-    Write-Host "Computer inventory viewer" -ForegroundColor Cyan
+    Write-ToolboxHeader -Section "Computer inventory viewer"
     Write-Host "Records: $($records.Count) | Sort: $script:sortMode" -ForegroundColor DarkGray
     if ($script:searchTerm) {
         Write-Host "Search: $script:searchTerm" -ForegroundColor Yellow
@@ -121,11 +123,11 @@ function Show-List($records, $selectedIndex, $warningCount) {
     Write-Host ""
 
     if ($records.Count -eq 0) {
-        Write-Host "No records found. Press R to reload or Esc to exit." -ForegroundColor Yellow
+        Write-Host "No records found. Press [R] to reload or [Esc] to exit." -ForegroundColor Yellow
         return
     }
 
-    Write-Host "Up/Down: select  Enter: open  A: toggle external DB status  /: search  S: sort  R: reload  Esc: exit" -ForegroundColor DarkGray
+    Write-Host "[↑↓]: select  [↲ Enter]: open  [A]: toggle external DB status  [/]: search  [S]: sort  [R]: reload  [Esc]: exit" -ForegroundColor DarkGray
     Write-Host ""
     Write-Host ("{0,-3} " -f "") -NoNewline -ForegroundColor DarkGray
     Write-ListHeader "Hostname" 20 "Hostname"
@@ -170,8 +172,8 @@ function Edit-Comment($initialValue) {
 
     while ($true) {
         Clear-Screen
-        Write-Host "Edit comment" -ForegroundColor Cyan
-        Write-Host "Left/Right: move cursor  Home/End: beginning/end  Enter: save  Esc: cancel" -ForegroundColor DarkGray
+        Write-ToolboxHeader -Section "Edit comment"
+        Write-Host "[←→]: move cursor  [Home]/[End]: beginning/end  [↲ Enter]: save  [Esc]: cancel" -ForegroundColor DarkGray
         Write-Host ""
         Write-Host "Comment: $value"
 
@@ -251,8 +253,8 @@ function Show-Details($records, $selectedIndex) {
         $record = $records[$selectedIndex]
         $data = $record.Data
         Clear-Screen
-        Write-Host "Computer details ($($selectedIndex + 1) of $($records.Count))" -ForegroundColor Cyan
-        Write-Host "Left/Right or Up/Down: previous/next  E/F2: edit comment  A: toggle external DB status  Esc: list" -ForegroundColor DarkGray
+        Write-ToolboxHeader -Section "Computer details ($($selectedIndex + 1) of $($records.Count))"
+        Write-Host "[←→]/[↑↓]: previous/next  [E]/[F2]: edit comment  [A]: toggle external DB status  [Esc]: list" -ForegroundColor DarkGray
         Write-Host ""
         Write-Host ("{0,-15} {1}" -f "Hostname:", (Get-DisplayValue $data.hostname))
         Write-Host ("{0,-15} {1}" -f "Serial:", (Get-DisplayValue $data.serial))
