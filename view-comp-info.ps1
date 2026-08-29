@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 
 $dataPath = Join-Path $PSScriptRoot "data"
 $script:sortMode = "Hostname"
@@ -322,7 +322,8 @@ function Show-Details($records, $selectedIndex) {
 }
 
 $selectedIndex = 0
-while ($true) {
+$returnToMenu = $false
+while (-not $returnToMenu) {
     $inventory = Get-InventoryRecords
     $records = Get-VisibleRecords $inventory.Records
     if ($selectedIndex -ge $records.Count) { $selectedIndex = [Math]::Max(0, $records.Count - 1) }
@@ -331,7 +332,7 @@ while ($true) {
     $key = [Console]::ReadKey($true)
 
     switch ($key.Key) {
-        "Escape" { break }
+        "Escape" { $returnToMenu = $true; break }
         "UpArrow" { if ($selectedIndex -gt 0) { $selectedIndex-- }; continue }
         "DownArrow" { if ($selectedIndex -lt $records.Count - 1) { $selectedIndex++ }; continue }
         "Enter" {
@@ -366,4 +367,9 @@ while ($true) {
             }
         }
     }
+}
+
+if ($returnToMenu) {
+    # The launcher recognizes this as a normal direct return to its menu.
+    exit 42
 }

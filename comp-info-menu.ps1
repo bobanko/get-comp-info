@@ -7,6 +7,7 @@
 
 $menuItems = @(
     [PSCustomObject]@{ Title = "Собрать информацию о компьютере"; Script = "get-comp-info.ps1" }
+    [PSCustomObject]@{ Title = "Настроить LAN-адаптер и изменить IP-адрес"; Script = "setup-lan-adapter.ps1" }
     [PSCustomObject]@{ Title = "Просмотреть сохранённую информацию"; Script = "view-comp-info.ps1" }
     [PSCustomObject]@{ Title = "Выйти"; Script = $null }
 )
@@ -43,6 +44,12 @@ function Invoke-MenuScript {
 
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $scriptPath
     $exitCode = $LASTEXITCODE
+
+    # Exit code 42 means that the inventory viewer was closed with Esc.
+    # Return to the menu immediately instead of asking for another key press.
+    if ($exitCode -eq 42) {
+        return
+    }
 
     Write-Host ""
     if ($exitCode -eq 0) {
