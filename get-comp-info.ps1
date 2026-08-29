@@ -1,17 +1,56 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
+[Console]::InputEncoding = [System.Text.UTF8Encoding]::new()
+. (Join-Path $PSScriptRoot "console-ui.ps1")
 
-# Keep the source compatible with Windows PowerShell when the file is opened
-# without a UTF-8 BOM.
+# Keep Russian text and emoji readable in Windows PowerShell.
 $emojiInfo = [char]::ConvertFromUtf32(0x1F4CB)
 $emojiWarning = [char]::ConvertFromUtf32(0x26A0)
 $emojiFile = [char]::ConvertFromUtf32(0x1F4C4)
 $emojiCancelled = [char]::ConvertFromUtf32(0x26D4)
 $emojiSaved = [char]::ConvertFromUtf32(0x1F4BE)
 $emojiFolder = [char]::ConvertFromUtf32(0x1F4C1)
+$emojiLoading = [char]::ConvertFromUtf32(0x23F3)
+
+$text = @{
+    Header           = "💻 Сбор информации о компьютере"
+    Controls         = "[↲ Enter] — продолжить, [Esc] — вернуться в главное меню."
+    Loading          = "⌛ Собираем информацию о компьютере..."
+    InfoTitle        = "Информация о компьютере:"
+    NotSet           = "(не указано)"
+    Overwrite        = "[↲ Enter] — перезаписать файл, [Esc] — вернуться в главное меню."
+    CommentPrompt    = "Комментарий (необязательно): "
+    HostnameLabel    = "Имя ПК"
+    SerialLabel      = "Серийный №"
+    ComputerLabel    = "Компьютер"
+    UserLabel        = "Пользователь"
+    CommentLabel     = "Комментарий"
+    ComparisonHeader = "💻 Сбор информации о компьютере / сравнение"
+    Field            = "Поле"
+    Previous         = "Предыдущее"
+    Current          = "Текущее"
+    PreviousTime     = "Предыдущий сбор: "
+    ChangedHint      = "Изменённые значения выделены жёлтым."
+    ReadError        = "Не удалось прочитать существующий JSON-файл."
+    Warning          = "ВНИМАНИЕ!"
+    ExistingFile     = "Файл уже существует:"
+    NoChanges        = "Изменений не обнаружено. Существующий файл сохранён."
+    Cancelled        = "Операция отменена."
+    Saved            = "Данные успешно сохранены!"
+    File             = "Файл:"
+}
+
+function Show-ToolHeader {
+    Write-ToolboxHeader -Section $text.Header.Trim()
+    Write-Host $text.Controls -ForegroundColor DarkGray
+    Write-Host ""
+}
 
 # ============================================================
 # Получение информации о компьютере
 # ============================================================
+
+Write-Host $text.Loading -ForegroundColor DarkGray
 
 $cs = Get-CimInstance Win32_ComputerSystem
 $bios = Get-CimInstance Win32_BIOS
@@ -62,7 +101,7 @@ $computer = [ordered]@{
 
 function Show-ComputerInformation {
     Write-Host ""
-    Write-Host "$emojiInfo Computer information:"
+    Write-Host "$emojiInfo $($text.InfoTitle)"
     Write-Host ""
     Write-Host "Hostname:     $hostname"
     Write-Host "IP:           $ip"
@@ -70,13 +109,13 @@ function Show-ComputerInformation {
     Write-Host "Serial:       $serial"
     Write-Host "Computer:     $manufacturer $model"
     Write-Host "User:         $username"
-    Write-Host "Windows:      $($os.Caption)"
+    Write-Host "OS:           $($os.Caption)"
     Write-Host ""
 }
 
 function Get-DisplayValue($value) {
     if ($null -eq $value -or [string]::IsNullOrWhiteSpace([string]$value)) {
-        return "(not set)"
+        return $text.NotSet
     }
 
     return [string]$value
@@ -96,13 +135,42 @@ function Get-ComputerDisplayValue($computer) {
 }
 
 function Confirm-Overwrite {
-    Write-Host "Enter: overwrite existing file  Esc: cancel" -ForegroundColor DarkGray
-
     while ($true) {
         $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
         switch ($key.VirtualKeyCode) {
             13 { return $true }
-            27 { return $false }
+            27 { return $null }
+        }
+    }
+}
+
+function Read-OptionalComment {
+    Write-Host $text.CommentPrompt -NoNewline
+    $value = ""
+
+    while ($true) {
+        $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+        switch ($key.VirtualKeyCode) {
+            13 {
+                Write-Host ""
+                return [pscustomobject]@{ Cancelled = $false; Value = $value }
+            }
+            27 {
+                Write-Host ""
+                return [pscustomobject]@{ Cancelled = $true; Value = $null }
+            }
+            8 {
+                if ($value.Length -gt 0) {
+                    $value = $value.Substring(0, $value.Length - 1)
+                    Write-Host "`b `b" -NoNewline
+                }
+            }
+            default {
+                if (-not [char]::IsControl($key.Character)) {
+                    $value += [string]$key.Character
+                    Write-Host ([string]$key.Character) -NoNewline
+                }
+            }
         }
     }
 }
@@ -110,20 +178,21 @@ function Confirm-Overwrite {
 function Show-ComputerComparison($previousComputer) {
     $hasChanges = $false
     $fields = @(
-        [pscustomobject]@{ Label = "Hostname"; Name = "hostname" },
+        [pscustomobject]@{ Label = $text.HostnameLabel; Name = "hostname" },
         [pscustomobject]@{ Label = "IP"; Name = "ip" },
         [pscustomobject]@{ Label = "MAC"; Name = "mac" },
-        [pscustomobject]@{ Label = "Serial"; Name = "serial" },
-        [pscustomobject]@{ Label = "Computer"; Name = "computer" },
-        [pscustomobject]@{ Label = "User"; Name = "username" },
-        [pscustomobject]@{ Label = "Comment"; Name = "comment" },
+        [pscustomobject]@{ Label = $text.SerialLabel; Name = "serial" },
+        [pscustomobject]@{ Label = $text.ComputerLabel; Name = "computer" },
+        [pscustomobject]@{ Label = $text.UserLabel; Name = "username" },
+        [pscustomobject]@{ Label = $text.CommentLabel; Name = "comment" },
         [pscustomobject]@{ Label = "Windows"; Name = "windows" }
     )
 
+    Clear-Host
+    Write-ToolboxHeader -Section $text.ComparisonHeader.Trim()
+    Write-Host $text.Overwrite -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "$emojiInfo Existing data comparison (previous -> current):"
-    Write-Host ""
-    Write-Host ("{0,-15} | {1,-30} | {2}" -f "Field", "Previous", "Current")
+    Write-Host ("{0,-15} | {1,-30} | {2}" -f $text.Field, $text.Previous, $text.Current)
     Write-Host ("{0,-15}-+-{1,-30}-+-{2}" -f ("-" * 15), ("-" * 30), ("-" * 30))
 
     foreach ($field in $fields) {
@@ -146,18 +215,24 @@ function Show-ComputerComparison($previousComputer) {
 
     if ($previousComputer.collectedAt) {
         Write-Host ""
-        Write-Host "Previous data collected: $($previousComputer.collectedAt)" -ForegroundColor DarkGray
+        Write-Host "$($text.PreviousTime)$($previousComputer.collectedAt)" -ForegroundColor DarkGray
     }
 
     Write-Host ""
-    Write-Host "Changed values are highlighted in yellow."
+    Write-Host $text.ChangedHint
 
     return $hasChanges
 }
 
 # Show the collected data first, then let the user add an optional note.
+Clear-Host
+Show-ToolHeader
 Show-ComputerInformation
-$comment = Read-Host "Comment (optional)"
+$commentInput = Read-OptionalComment
+if ($commentInput.Cancelled) {
+    exit 42
+}
+$comment = $commentInput.Value
 $computer.comment = $comment
 
 # ============================================================
@@ -183,14 +258,14 @@ if (Test-Path $filePath) {
     }
     catch {
         Write-Host ""
-        Write-Host "$emojiWarning Cannot read the existing JSON file." -ForegroundColor Yellow
+        Write-Host "$emojiWarning $($text.ReadError)" -ForegroundColor Yellow
         Write-Host $_.Exception.Message -ForegroundColor Yellow
         exit 1
     }
 
     Write-Host ""
-    Write-Host "$emojiWarning WARNING!" -ForegroundColor Yellow
-    Write-Host "$emojiFile File already exists:"
+    Write-Host "$emojiWarning $($text.Warning)" -ForegroundColor Yellow
+    Write-Host "$emojiFile $($text.ExistingFile)"
     Write-Host $filePath
 
     # An empty answer means that the existing comment must not be erased.
@@ -202,14 +277,15 @@ if (Test-Path $filePath) {
 
     if (-not $hasChanges) {
         Write-Host ""
-        Write-Host "$emojiInfo No changes detected. Existing file was kept." -ForegroundColor Green
+        Write-Host "$emojiInfo $($text.NoChanges)" -ForegroundColor Green
         exit
     }
     
-    if (-not (Confirm-Overwrite)) {
+    $shouldOverwrite = Confirm-Overwrite
+    if ($null -eq $shouldOverwrite) {
         Write-Host ""
-        Write-Host "$emojiCancelled Operation cancelled." -ForegroundColor Yellow
-        exit
+        Write-Host "$emojiCancelled $($text.Cancelled)" -ForegroundColor Yellow
+        exit 42
     }
 
 }
@@ -223,7 +299,7 @@ $json = $computer | ConvertTo-Json -Depth 5
 Set-Content -Path $filePath -Value $json -Encoding UTF8
 
 Write-Host ""
-Write-Host "$emojiSaved Saved successfully!" -ForegroundColor Green
+Write-Host "$emojiSaved $($text.Saved)" -ForegroundColor Green
 Write-Host ""
-Write-Host "$emojiFolder File:"
+Write-Host "$emojiFolder $($text.File)"
 Write-Host $filePath
