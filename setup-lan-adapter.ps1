@@ -1,4 +1,14 @@
-﻿$ErrorActionPreference = "Stop"
+﻿[CmdletBinding()]
+param(
+    [switch]$ApplyConfiguration,
+    [int]$ApplyInterfaceIndex,
+    [string]$ApplyIpAddress,
+    [int]$ApplyPrefixLength,
+    [string]$ApplyGateway,
+    [string]$ApplyDnsServers
+)
+
+$ErrorActionPreference = "Stop"
 
 # Keep Russian text and emoji readable in Windows PowerShell consoles.
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
@@ -20,21 +30,64 @@ $currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $currentPrincipal = New-Object Security.Principal.WindowsPrincipal($currentIdentity)
 $isAdministrator = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
-if (-not $isAdministrator) {
-    Write-Host "Запрашиваются права администратора..." -ForegroundColor Yellow
+function Invoke-NetworkConfiguration {
+    param(
+        [int]$InterfaceIndex,
+        [string]$IpAddress,
+        [int]$PrefixLength,
+        [string]$Gateway,
+        [string[]]$DnsServers
+    )
 
-    try {
-        $elevatedArguments = @(
-            "-NoProfile",
-            "-ExecutionPolicy", "Bypass",
-            "-File", ('"{0}"' -f $PSCommandPath)
-        )
-        $elevatedProcess = Start-Process -FilePath "powershell.exe" -Verb RunAs -ArgumentList $elevatedArguments -Wait -PassThru
-        exit $elevatedProcess.ExitCode
+    $networkAdapter = Get-NetAdapter -InterfaceIndex $InterfaceIndex -ErrorAction Stop
+    if ($networkAdapter.Status -eq "Disabled") {
+        Enable-NetAdapter -InterfaceIndex $InterfaceIndex -Confirm:$false -ErrorAction Stop
     }
-    catch {
-        Write-Host "Права администратора не были предоставлены. Настройки не изменены." -ForegroundColor Red
-        exit 1
+
+    Get-NetIPAddress -InterfaceIndex $InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+        Remove-NetIPAddress -Confirm:$false -ErrorAction Stop
+    Get-NetRoute -InterfaceIndex $InterfaceIndex -AddressFamily IPv4 -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
+        Remove-NetRoute -Confirm:$false -ErrorAction Stop
+
+    New-NetIPAddress -InterfaceIndex $InterfaceIndex -IPAddress $IpAddress -PrefixLength $PrefixLength -DefaultGateway $Gateway -ErrorAction Stop | Out-Null
+    Set-DnsClientServerAddress -InterfaceIndex $InterfaceIndex -ServerAddresses $DnsServers -ErrorAction Stop
+}
+
+if ($ApplyConfiguration) {
+    Invoke-NetworkConfiguration -InterfaceIndex $ApplyInterfaceIndex -IpAddress $ApplyIpAddress -PrefixLength $ApplyPrefixLength -Gateway $ApplyGateway -DnsServers ($ApplyDnsServers -split ',')
+    exit 0
+}
+
+function Invoke-SelectedNetworkConfiguration {
+    param(
+        [object]$Adapter,
+        [string]$IpAddress,
+        [int]$PrefixLength,
+        [string]$Gateway,
+        [string[]]$DnsServers
+    )
+
+    if ($isAdministrator) {
+        Invoke-NetworkConfiguration -InterfaceIndex $Adapter.ifIndex -IpAddress $IpAddress -PrefixLength $PrefixLength -Gateway $Gateway -DnsServers $DnsServers
+        return
+    }
+
+    Write-Host "Запрашиваются права администратора для применения настроек..." -ForegroundColor Yellow
+    $elevatedArguments = @(
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", ('"{0}"' -f $PSCommandPath),
+        "-ApplyConfiguration",
+        "-ApplyInterfaceIndex", $Adapter.ifIndex,
+        "-ApplyIpAddress", ('"{0}"' -f $IpAddress),
+        "-ApplyPrefixLength", $PrefixLength,
+        "-ApplyGateway", ('"{0}"' -f $Gateway),
+        "-ApplyDnsServers", ('"{0}"' -f ($DnsServers -join ','))
+    )
+
+    $elevatedProcess = Start-Process -FilePath "powershell.exe" -Verb RunAs -WindowStyle Hidden -ArgumentList $elevatedArguments -Wait -PassThru
+    if ($elevatedProcess.ExitCode -ne 0) {
+        throw "Не удалось применить настройки сети."
     }
 }
 
@@ -73,8 +126,9 @@ $locations = @(
 )
 
 function Show-ToolHeader {
-    Write-ToolboxHeader -Section "$emojiNetwork Настройка LAN-адаптера"
-    Write-Host ""
+    param([string]$WizardStep)
+
+    Write-ToolboxHeader -Section "$emojiNetwork Настройка LAN-адаптера" -WizardStep $WizardStep
 }
 
 function Select-MenuItem {
@@ -93,8 +147,10 @@ function Select-MenuItem {
 
     while ($true) {
         Clear-Host
-        Show-ToolHeader
+        Show-ToolHeader -WizardStep $Step
         Write-Host "[▲▼] — выбор, [↲ Enter] — продолжить, $EscapeHint" -ForegroundColor DarkGray
+        Show-WizardSelection
+        Write-Host ""
         Write-Host $Step -ForegroundColor Cyan
         Write-Host $Description
         Write-Host ""
@@ -147,9 +203,10 @@ function Read-LastIpOctet {
     $validationError = $null
     while ($true) {
         Clear-Host
-        Show-ToolHeader
+        Show-ToolHeader -WizardStep "Шаг 4 из 5"
         Write-Host "[↲ Enter] — подтвердить, [Backspace] — исправить, [Esc] — назад." -ForegroundColor DarkGray
-        Write-Host "Шаг 4 из 5" -ForegroundColor Cyan
+        Show-WizardSelection
+        Write-Host ""
         Write-Host "Введите последний октет IP-адреса ($FirstHostOctet-$LastHostOctet)."
         if ($validationError) {
             Write-Host $validationError -ForegroundColor Red
@@ -233,9 +290,10 @@ function Show-ConfigurationSummary {
     )
 
     Clear-Host
-    Show-ToolHeader
+    Show-ToolHeader -WizardStep "Шаг 5 из 5"
     Write-Host "[↲ Enter] — применить настройки, [Esc] — назад." -ForegroundColor DarkGray
-    Write-Host "Шаг 5 из 5" -ForegroundColor Cyan
+    Show-WizardSelection
+    Write-Host ""
     Write-Host "Будут применены следующие изменения:" -ForegroundColor Yellow
     Write-Host ""
     Write-Host "  Корпус:   $($Location.Name) [$($Location.ThirdOctet)]" -ForegroundColor DarkGray
@@ -278,19 +336,54 @@ $subnetMenuItems = foreach ($subnet in $subnetOptions) {
 }
 
 $adapterMenuItems = $null
+$script:wizardSelection = [ordered]@{
+    Location    = $null
+    SecondOctet = $null
+    Adapter     = $null
+    IpAddress   = $null
+}
+
+function Show-WizardSelection {
+    if ($null -eq $script:wizardSelection.Location) {
+        return
+    }
+
+    $locationText = "$($script:wizardSelection.Location.Name) [$($script:wizardSelection.Location.ThirdOctet)]"
+    $segmentText = if ($null -eq $script:wizardSelection.SecondOctet) { "—" } else { $script:wizardSelection.SecondOctet }
+    $adapterText = if ($null -eq $script:wizardSelection.Adapter) { "—" } else { $script:wizardSelection.Adapter.Name }
+    $ipText = if ([string]::IsNullOrWhiteSpace($script:wizardSelection.IpAddress)) { "—" } else { $script:wizardSelection.IpAddress }
+
+    Write-Host "Выбрано:" -ForegroundColor DarkGray
+    Write-Host "  Корпус:  $locationText" -ForegroundColor DarkGray
+    Write-Host "  Сегмент: $segmentText" -ForegroundColor DarkGray
+    Write-Host "  Адаптер: $adapterText" -ForegroundColor DarkGray
+    Write-Host "  IP:      $ipText" -ForegroundColor DarkGray
+}
 
 :locationSelection while ($true) {
-    $location = Select-MenuItem -Step "$emojiNetwork Шаг 1 из 5" -Description "Выберите корпус." -Items $locationMenuItems -EscapeHint "[Esc] — вернуться в главное меню."
+    $location = Select-MenuItem -Step "Шаг 1 из 5" -Description "Выберите корпус." -Items $locationMenuItems -EscapeHint "[Esc] — вернуться в главное меню."
     if ($null -eq $location) {
         # The launcher recognizes this as a normal direct return to its menu.
         exit 42
     }
 
+    $script:wizardSelection.Location = $location
+    $script:wizardSelection.SecondOctet = $null
+    $script:wizardSelection.Adapter = $null
+    $script:wizardSelection.IpAddress = $null
+
     :segmentSelection while ($true) {
         $secondOctet = Select-MenuItem -Step "Шаг 2 из 5" -Description "Выберите сегмент сети." -Items $subnetMenuItems
         if ($null -eq $secondOctet) {
+            $script:wizardSelection.SecondOctet = $null
+            $script:wizardSelection.Adapter = $null
+            $script:wizardSelection.IpAddress = $null
             continue locationSelection
         }
+
+        $script:wizardSelection.SecondOctet = $secondOctet
+        $script:wizardSelection.Adapter = $null
+        $script:wizardSelection.IpAddress = $null
 
         $prefix = "10.{0}.{1}" -f $secondOctet, $location.ThirdOctet
         $gateway = "{0}.{1}" -f $prefix, $location.GatewayOctet
@@ -319,27 +412,34 @@ $adapterMenuItems = $null
         }
 
         Clear-Host
-        Show-ToolHeader
+        Show-ToolHeader -WizardStep "Шаг 3 из 5"
         :adapterSelection while ($true) {
             $hasSingleAdapter = $adapterMenuItems.Count -eq 1
             if ($hasSingleAdapter) {
                 $adapter = $adapterMenuItems[0].Value
-                Write-Host "`nШаг 3 из 5 — используется единственный доступный адаптер:"
+                Write-Host "`nИспользуется единственный доступный адаптер:"
                 Write-Host "  $($adapterMenuItems[0].Label)" -NoNewline
                 Write-Host (" " + $adapterMenuItems[0].StatusText) -ForegroundColor $adapterMenuItems[0].StatusColor
             }
             else {
                 $adapter = Select-MenuItem -Step "Шаг 3 из 5" -Description "Выберите сетевой адаптер." -Items $adapterMenuItems
                 if ($null -eq $adapter) {
+                    $script:wizardSelection.Adapter = $null
+                    $script:wizardSelection.IpAddress = $null
                     continue segmentSelection
                 }
             }
+
+            $script:wizardSelection.Adapter = $adapter
+            $script:wizardSelection.IpAddress = $null
 
             Clear-Host
             :ipSelection while ($true) {
                 $lastOctet = Read-LastIpOctet -FirstHostOctet $location.FirstHostOctet -LastHostOctet $location.LastHostOctet
                 if ($null -eq $lastOctet) {
+                    $script:wizardSelection.IpAddress = $null
                     if ($hasSingleAdapter) {
+                        $script:wizardSelection.Adapter = $null
                         continue segmentSelection
                     }
 
@@ -347,6 +447,7 @@ $adapterMenuItems = $null
                 }
 
                 $ipAddress = "{0}.{1}" -f $prefix, $lastOctet
+                $script:wizardSelection.IpAddress = $ipAddress
                 Show-ConfigurationSummary -Location $location -SecondOctet $secondOctet -Adapter $adapter -IpAddress $ipAddress -Gateway $gateway
                 if (Confirm-Configuration) {
                     break locationSelection
@@ -357,19 +458,13 @@ $adapterMenuItems = $null
     }
 }
 
-if ($adapter.Status -eq "Disabled") {
-    Write-Host "Включение адаптера '$($adapter.Name)'..." -ForegroundColor Yellow
-    Enable-NetAdapter -Name $adapter.Name -Confirm:$false
+try {
+    Invoke-SelectedNetworkConfiguration -Adapter $adapter -IpAddress $ipAddress -PrefixLength $location.PrefixLength -Gateway $gateway -DnsServers $location.DnsServers
 }
-
-# Remove all existing IPv4 addresses and default gateways from the selected adapter.
-Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-    Remove-NetIPAddress -Confirm:$false
-Get-NetRoute -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
-    Remove-NetRoute -Confirm:$false
-
-New-NetIPAddress -InterfaceIndex $adapter.ifIndex -IPAddress $ipAddress -PrefixLength $location.PrefixLength -DefaultGateway $gateway | Out-Null
-Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses $location.DnsServers
+catch {
+    Write-Host "`nНастройки сети не были применены: $($_.Exception.Message)" -ForegroundColor Red
+    exit 1
+}
 
 Write-Host "`n$emojiSuccess Настройки сети успешно применены." -ForegroundColor Green
 $appliedConfiguration = Get-NetIPConfiguration -InterfaceIndex $adapter.ifIndex
