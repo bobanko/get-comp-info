@@ -9,7 +9,8 @@ catch {
 function Write-ToolboxHeader {
     param(
         [Parameter(Mandatory)]
-        [string]$Section
+        [string]$Section,
+        [string]$WizardStep
     )
 
     $colors = @("Red", "Yellow", "Green", "Cyan", "Blue", "Magenta")
@@ -19,5 +20,12 @@ function Write-ToolboxHeader {
         Write-Host $brand[$index] -NoNewline -ForegroundColor $colors[$index % $colors.Count]
     }
 
-    Write-Host (" " + $Section) -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host $Section -NoNewline -ForegroundColor Cyan
+    if (-not [string]::IsNullOrWhiteSpace($WizardStep)) {
+        Write-Host (" | " + $WizardStep) -ForegroundColor Cyan
+    }
+    else {
+        Write-Host ""
+    }
 }
