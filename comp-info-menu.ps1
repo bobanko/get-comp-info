@@ -6,25 +6,38 @@
 [Console]::InputEncoding = [System.Text.UTF8Encoding]::new()
 
 $menuItems = @(
-    [PSCustomObject]@{ Title = "Собрать информацию о компьютере"; Script = "get-comp-info.ps1" }
-    [PSCustomObject]@{ Title = "Настроить LAN-адаптер и изменить IP-адрес"; Script = "setup-lan-adapter.ps1" }
-    [PSCustomObject]@{ Title = "Просмотреть сохранённую информацию"; Script = "view-comp-info.ps1" }
-    [PSCustomObject]@{ Title = "Выйти"; Script = $null }
+    [PSCustomObject]@{ Title = "🖥️ Собрать информацию о компьютере"; Script = "get-comp-info.ps1" }
+    [PSCustomObject]@{ Title = "🌐 Настроить LAN-адаптер (IP-адрес, маска подсети, DNS)"; Script = "setup-lan-adapter.ps1" }
+    [PSCustomObject]@{ Title = "🗃️ Просмотреть сохранённую информацию"; Script = "view-comp-info.ps1" }
+    [PSCustomObject]@{ Title = "🔍 Сканировать IP-адреса"; Script = "scan-ips.ps1"; IsDraft = $true; IsSeparatedBefore = $true }
+    [PSCustomObject]@{ Title = "🔄️ Обновить проект из GitHub"; Script = "update-from-github.ps1"; IsDraft = $true }
+    [PSCustomObject]@{ Title = "🚪 Выйти"; Script = $null; IsSeparatedBefore = $true }
 )
 
 function Show-Menu {
     param([int]$SelectedIndex)
 
     Clear-Host
-    Write-Host "Стрелки Вверх/Вниз — выбрать, Enter — открыть." -ForegroundColor DarkGray
-    Write-Host "Главное меню" -ForegroundColor Cyan
-    Write-Host "Выберите действие." -ForegroundColor DarkGray
+    Write-Host "⚙️ТУЛБОКС / главное меню" -ForegroundColor Cyan
+    Write-Host "Стрелки ▲▼ — выбрать, [↲ Enter] — открыть." -ForegroundColor DarkGray
+    Write-Host ""
     Write-Host ""
 
+
     for ($index = 0; $index -lt $menuItems.Count; $index++) {
+        if ($menuItems[$index].IsSeparatedBefore) {
+            Write-Host ""
+        }
+
         $prefix = if ($index -eq $SelectedIndex) { ">" } else { " " }
-        $color = if ($index -eq $SelectedIndex) { "Cyan" } else { "Gray" }
-        Write-Host ("{0} {1}" -f $prefix, $menuItems[$index].Title) -ForegroundColor $color
+        $color = if ($index -eq $SelectedIndex) { "Magenta" } else { "Gray" }
+        Write-Host ("{0} {1}" -f $prefix, $menuItems[$index].Title) -NoNewline -ForegroundColor $color
+        if ($menuItems[$index].IsDraft) {
+            Write-Host " [в разработке]" -ForegroundColor Red
+        }
+        else {
+            Write-Host ""
+        }
     }
 }
 
@@ -70,10 +83,10 @@ while (-not $shouldExit) {
 
     switch ($key.Key) {
         "UpArrow" {
-            if ($selectedIndex -gt 0) { $selectedIndex-- }
+            $selectedIndex = ($selectedIndex - 1 + $menuItems.Count) % $menuItems.Count
         }
         "DownArrow" {
-            if ($selectedIndex -lt $menuItems.Count - 1) { $selectedIndex++ }
+            $selectedIndex = ($selectedIndex + 1) % $menuItems.Count
         }
         "Enter" {
             $item = $menuItems[$selectedIndex]
