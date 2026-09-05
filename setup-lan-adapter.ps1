@@ -5,7 +5,8 @@ param(
     [string]$ApplyIpAddress,
     [int]$ApplyPrefixLength,
     [string]$ApplyGateway,
-    [string]$ApplyDnsServers
+    [string]$ApplyDnsServers,
+    [string]$ApplyErrorFile
 )
 
 $ErrorActionPreference = "Stop"
@@ -39,23 +40,70 @@ function Invoke-NetworkConfiguration {
         [string[]]$DnsServers
     )
 
-    $networkAdapter = Get-NetAdapter -InterfaceIndex $InterfaceIndex -ErrorAction Stop
-    if ($networkAdapter.Status -eq "Disabled") {
-        Enable-NetAdapter -InterfaceIndex $InterfaceIndex -Confirm:$false -ErrorAction Stop
+    try {
+        $networkAdapter = Get-NetAdapter -InterfaceIndex $InterfaceIndex -ErrorAction Stop
+    }
+    catch {
+        throw "Не удалось получить адаптер с индексом ${InterfaceIndex}: $($_.Exception.Message)"
     }
 
-    Get-NetIPAddress -InterfaceIndex $InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-        Remove-NetIPAddress -Confirm:$false -ErrorAction Stop
-    Get-NetRoute -InterfaceIndex $InterfaceIndex -AddressFamily IPv4 -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
-        Remove-NetRoute -Confirm:$false -ErrorAction Stop
+    if ($networkAdapter.Status -eq "Disabled") {
+        try {
+            $networkAdapter | Enable-NetAdapter -Confirm:$false -ErrorAction Stop
+        }
+        catch {
+            throw "Не удалось включить адаптер '$($networkAdapter.Name)': $($_.Exception.Message)"
+        }
+    }
 
-    New-NetIPAddress -InterfaceIndex $InterfaceIndex -IPAddress $IpAddress -PrefixLength $PrefixLength -DefaultGateway $Gateway -ErrorAction Stop | Out-Null
-    Set-DnsClientServerAddress -InterfaceIndex $InterfaceIndex -ServerAddresses $DnsServers -ErrorAction Stop
+    try {
+        Get-NetIPAddress -InterfaceIndex $InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+            Remove-NetIPAddress -Confirm:$false -ErrorAction Stop
+    }
+    catch {
+        throw "Не удалось удалить прежний IPv4-адрес адаптера '$($networkAdapter.Name)': $($_.Exception.Message)"
+    }
+
+    try {
+        Get-NetRoute -InterfaceIndex $InterfaceIndex -AddressFamily IPv4 -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
+            Remove-NetRoute -Confirm:$false -ErrorAction Stop
+    }
+    catch {
+        throw "Не удалось удалить прежний маршрут по умолчанию адаптера '$($networkAdapter.Name)': $($_.Exception.Message)"
+    }
+
+    try {
+        New-NetIPAddress -InterfaceIndex $InterfaceIndex -IPAddress $IpAddress -PrefixLength $PrefixLength -DefaultGateway $Gateway -ErrorAction Stop | Out-Null
+    }
+    catch {
+        throw "Не удалось назначить адрес $IpAddress/$PrefixLength и шлюз $Gateway адаптеру '$($networkAdapter.Name)': $($_.Exception.Message)"
+    }
+
+    try {
+        Set-DnsClientServerAddress -InterfaceIndex $InterfaceIndex -ServerAddresses $DnsServers -ErrorAction Stop
+    }
+    catch {
+        throw "IP-адрес назначен, но не удалось установить DNS $($DnsServers -join ', '): $($_.Exception.Message)"
+    }
 }
 
 if ($ApplyConfiguration) {
-    Invoke-NetworkConfiguration -InterfaceIndex $ApplyInterfaceIndex -IpAddress $ApplyIpAddress -PrefixLength $ApplyPrefixLength -Gateway $ApplyGateway -DnsServers ($ApplyDnsServers -split ',')
-    exit 0
+    try {
+        Invoke-NetworkConfiguration -InterfaceIndex $ApplyInterfaceIndex -IpAddress $ApplyIpAddress -PrefixLength $ApplyPrefixLength -Gateway $ApplyGateway -DnsServers ($ApplyDnsServers -split ',')
+        exit 0
+    }
+    catch {
+        $errorDetails = $_.Exception.Message
+        if (-not [string]::IsNullOrWhiteSpace($ApplyErrorFile)) {
+            try {
+                [IO.File]::WriteAllText($ApplyErrorFile, $errorDetails, [Text.UTF8Encoding]::new($false))
+            }
+            catch {
+                # The parent will still report the elevated process exit code.
+            }
+        }
+        exit 1
+    }
 }
 
 function Invoke-SelectedNetworkConfiguration {
@@ -73,6 +121,7 @@ function Invoke-SelectedNetworkConfiguration {
     }
 
     Write-Host "Запрашиваются права администратора для применения настроек..." -ForegroundColor Yellow
+    $errorFile = Join-Path ([IO.Path]::GetTempPath()) ("setup-lan-adapter-{0}.error" -f [guid]::NewGuid().ToString("N"))
     $elevatedArguments = @(
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",
@@ -82,12 +131,26 @@ function Invoke-SelectedNetworkConfiguration {
         "-ApplyIpAddress", ('"{0}"' -f $IpAddress),
         "-ApplyPrefixLength", $PrefixLength,
         "-ApplyGateway", ('"{0}"' -f $Gateway),
-        "-ApplyDnsServers", ('"{0}"' -f ($DnsServers -join ','))
+        "-ApplyDnsServers", ('"{0}"' -f ($DnsServers -join ',')),
+        "-ApplyErrorFile", ('"{0}"' -f $errorFile)
     )
 
-    $elevatedProcess = Start-Process -FilePath "powershell.exe" -Verb RunAs -WindowStyle Hidden -ArgumentList $elevatedArguments -Wait -PassThru
-    if ($elevatedProcess.ExitCode -ne 0) {
-        throw "Не удалось применить настройки сети."
+    try {
+        $elevatedProcess = Start-Process -FilePath "powershell.exe" -Verb RunAs -WindowStyle Hidden -ArgumentList $elevatedArguments -Wait -PassThru
+        if ($elevatedProcess.ExitCode -ne 0) {
+            $errorDetails = if (Test-Path -LiteralPath $errorFile) {
+                Get-Content -LiteralPath $errorFile -Raw -Encoding UTF8
+            }
+            else {
+                "Повышенный процесс завершился с кодом $($elevatedProcess.ExitCode), но не передал описание ошибки."
+            }
+            throw $errorDetails.Trim()
+        }
+    }
+    finally {
+        if (Test-Path -LiteralPath $errorFile) {
+            Remove-Item -LiteralPath $errorFile -Force -ErrorAction SilentlyContinue
+        }
     }
 }
 
@@ -123,6 +186,16 @@ $locations = @(
         FirstHostOctet   = 98
         LastHostOctet    = 110
     }
+    [pscustomobject]@{
+        Name             = "Корпус Г"
+        ThirdOctet       = 4
+        PrefixLength     = 29
+        SubnetMask       = "255.255.255.248"
+        GatewayOctet     = 65
+        DnsServers       = @("10.9.0.1", "10.9.0.2")
+        FirstHostOctet   = 66
+        LastHostOctet    = 70
+    }
 )
 
 function Show-ToolHeader {
@@ -151,7 +224,6 @@ function Select-MenuItem {
         Write-Host "[▲▼] — выбор, [↲ Enter] — продолжить, $EscapeHint" -ForegroundColor DarkGray
         Show-WizardSelection
         Write-Host ""
-        Write-Host $Step -ForegroundColor Cyan
         Write-Host $Description
         Write-Host ""
 
@@ -348,16 +420,18 @@ function Show-WizardSelection {
         return
     }
 
-    $locationText = "$($script:wizardSelection.Location.Name) [$($script:wizardSelection.Location.ThirdOctet)]"
-    $segmentText = if ($null -eq $script:wizardSelection.SecondOctet) { "—" } else { $script:wizardSelection.SecondOctet }
-    $adapterText = if ($null -eq $script:wizardSelection.Adapter) { "—" } else { $script:wizardSelection.Adapter.Name }
-    $ipText = if ([string]::IsNullOrWhiteSpace($script:wizardSelection.IpAddress)) { "—" } else { $script:wizardSelection.IpAddress }
+    $location = $script:wizardSelection.Location
+    Write-Host "Корпус: $($location.Name) $($location.ThirdOctet)" -ForegroundColor DarkGray
 
-    Write-Host "Выбрано:" -ForegroundColor DarkGray
-    Write-Host "  Корпус:  $locationText" -ForegroundColor DarkGray
-    Write-Host "  Сегмент: $segmentText" -ForegroundColor DarkGray
-    Write-Host "  Адаптер: $adapterText" -ForegroundColor DarkGray
-    Write-Host "  IP:      $ipText" -ForegroundColor DarkGray
+    if ($null -ne $script:wizardSelection.SecondOctet) {
+        Write-Host "Сегмент сети: $($script:wizardSelection.SecondOctet)" -ForegroundColor DarkGray
+    }
+    if ($null -ne $script:wizardSelection.Adapter) {
+        Write-Host "Адаптер: $($script:wizardSelection.Adapter.Name)" -ForegroundColor DarkGray
+    }
+    if (-not [string]::IsNullOrWhiteSpace($script:wizardSelection.IpAddress)) {
+        Write-Host "IP-адрес: $($script:wizardSelection.IpAddress)" -ForegroundColor DarkGray
+    }
 }
 
 :locationSelection while ($true) {
