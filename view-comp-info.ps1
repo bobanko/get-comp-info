@@ -24,6 +24,17 @@ function Get-ShortValue($value, $length) {
     return $text.Substring(0, [Math]::Max(0, $length - 3)) + "..."
 }
 
+function Get-ShortIpAddress($value) {
+    $text = Get-DisplayValue $value
+    $octets = $text -split '\.'
+
+    if ($octets.Count -eq 4) {
+        return $octets[-2..-1] -join "."
+    }
+
+    return $text
+}
+
 function Get-DisplayDate($value) {
     $date = [datetime]::MinValue
     if ([datetime]::TryParse([string]$value, [ref]$date)) {
@@ -131,6 +142,7 @@ function Show-List($records, $selectedIndex, $warningCount) {
     Write-Host ""
     Write-Host ("{0,-3} " -f "") -NoNewline -ForegroundColor DarkGray
     Write-ListHeader "Hostname" 20 "Hostname"
+    Write-ListHeader "IP" 10 ""
     Write-ListHeader "Serial" 22 "Serial"
     Write-ListHeader "User" 15 ""
     Write-ListHeader "Collected" 16 "CollectedAt"
@@ -145,8 +157,9 @@ function Show-List($records, $selectedIndex, $warningCount) {
     for ($index = $pageStart; $index -le $pageEnd; $index++) {
         $record = $records[$index]
         $marker = if ($index -eq $selectedIndex) { ">" } else { " " }
-        $line = "{0,-3} {1,-20} {2,-22} {3,-15} {4,-16} " -f $marker,
+        $line = "{0,-3} {1,-20} {2,-10} {3,-22} {4,-15} {5,-16} " -f $marker,
             (Get-ShortValue $record.Data.hostname 20),
+            (Get-ShortValue (Get-ShortIpAddress $record.Data.ip) 10),
             (Get-ShortValue $record.Data.serial 22),
             (Get-ShortValue $record.Data.username 15),
             (Get-DisplayDate $record.Data.collectedAt)
