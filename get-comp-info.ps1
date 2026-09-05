@@ -20,6 +20,7 @@ $text = @{
     NotSet           = "(не указано)"
     Overwrite        = "[↲ Enter] — перезаписать файл, [Esc] — вернуться в главное меню."
     CommentPrompt    = "Комментарий (необязательно): "
+    ComputerIdLabel = "ID компьютера"
     HostnameLabel    = "Имя ПК"
     SerialLabel      = "Серийный №"
     ComputerLabel    = "Компьютер"
@@ -57,12 +58,67 @@ Write-Host $text.Loading -ForegroundColor DarkGray
 
 $cs = Get-CimInstance Win32_ComputerSystem
 $bios = Get-CimInstance Win32_BIOS
+$systemProduct = Get-CimInstance Win32_ComputerSystemProduct
 $os = Get-CimInstance Win32_OperatingSystem
 
 $hostname = $env:COMPUTERNAME
-$serial = $bios.SerialNumber.Trim()
+$serial = ([string]$bios.SerialNumber).Trim()
+$smbiosUuid = [string]$systemProduct.UUID
 $manufacturer = $cs.Manufacturer.Trim()
 $model = $cs.Model.Trim()
+
+function Test-UsableSerialNumber($value) {
+    if ([string]::IsNullOrWhiteSpace([string]$value)) {
+        return $false
+    }
+
+    $normalized = ([string]$value).Trim()
+    $placeholderValues = @(
+        "To be filled by O.E.M.",
+        "To Be Filled By O.E.M.",
+        "Default string",
+        "System Serial Number",
+        "None",
+        "Unknown",
+        "0"
+    )
+
+    return $normalized -notin $placeholderValues
+}
+
+function Get-NormalizedSmbiosUuid($value) {
+    if ([string]::IsNullOrWhiteSpace([string]$value)) {
+        return $null
+    }
+
+    try {
+        $uuid = [guid]([string]$value).Trim()
+    }
+    catch {
+        return $null
+    }
+
+    $normalized = $uuid.ToString().ToUpperInvariant()
+    if ($uuid -eq [guid]::Empty -or $normalized -eq "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF") {
+        return $null
+    }
+
+    return $normalized
+}
+
+$smbiosUuid = Get-NormalizedSmbiosUuid $smbiosUuid
+if ($smbiosUuid) {
+    $computerId = $smbiosUuid
+    $computerIdSource = "smbiosUuid"
+}
+elseif (Test-UsableSerialNumber $serial) {
+    $computerId = $serial
+    $computerIdSource = "serial"
+}
+else {
+    $computerId = $hostname
+    $computerIdSource = "hostname"
+}
 
 $ip = (Get-NetIPAddress -AddressFamily IPv4 |
     Where-Object {
@@ -86,10 +142,13 @@ $comment = ""
 # ============================================================
 
 $computer = [ordered]@{
+    computerId       = $computerId
+    computerIdSource = $computerIdSource
     hostname    = $hostname
     ip          = $ip
     mac         = $mac
     serial      = $serial
+    smbiosUuid  = $smbiosUuid
     manufacturer = $manufacturer
     model       = $model
     username    = $username
@@ -107,6 +166,7 @@ function Show-ComputerInformation {
     Write-Host "$emojiInfo $($text.InfoTitle)"
     Write-Host ""
     Write-Host "Hostname:     $hostname"
+    Write-Host "Computer ID:  $computerId ($computerIdSource)"
     Write-Host "IP:           $ip"
     Write-Host "MAC:          $mac"
     Write-Host "Serial:       $serial"
@@ -181,6 +241,7 @@ function Read-OptionalComment {
 function Show-ComputerComparison($previousComputer) {
     $hasChanges = $false
     $fields = @(
+        [pscustomobject]@{ Label = $text.ComputerIdLabel; Name = "computerId" },
         [pscustomobject]@{ Label = $text.HostnameLabel; Name = "hostname" },
         [pscustomobject]@{ Label = "IP"; Name = "ip" },
         [pscustomobject]@{ Label = "MAC"; Name = "mac" },
@@ -248,7 +309,9 @@ if (-not (Test-Path $dataPath)) {
     New-Item -ItemType Directory -Path $dataPath | Out-Null
 }
 
-$filePath = Join-Path $dataPath "$serial.json"
+$safeComputerId = $computerId -replace '[<>:"/\\|?*]', '_'
+$safeComputerId = $safeComputerId.Trim().TrimEnd('.')
+$filePath = Join-Path $dataPath "$safeComputerId.json"
 
 # ============================================================
 # Проверка существующего файла
