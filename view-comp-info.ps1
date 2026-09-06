@@ -7,6 +7,57 @@ $script:sortMode = "Hostname"
 $script:searchTerm = ""
 $script:notice = ""
 
+function Get-IdentityUuid($value) {
+    $uuid = [guid]::Empty
+    if ([guid]::TryParse(([string]$value).Trim(), [ref]$uuid) -and
+        $uuid -ne [guid]::Empty -and $uuid.ToString() -ne "ffffffff-ffff-ffff-ffff-ffffffffffff") {
+        return $uuid.ToString()
+    }
+    return ""
+}
+
+function Get-IdentitySerial($value) {
+    $serial = ([string]$value).Trim()
+    if ($serial -in @("", "To be filled by O.E.M.", "Default string", "System Serial Number", "None", "Unknown", "0")) {
+        return ""
+    }
+    return $serial
+}
+
+function Get-CurrentComputerIdentity {
+    $uuid = ""
+    $serial = ""
+    # Read hardware identifiers once; the viewer still works when CIM is unavailable.
+    try { $uuid = Get-IdentityUuid (Get-CimInstance Win32_ComputerSystemProduct -ErrorAction Stop).UUID } catch { }
+    try { $serial = Get-IdentitySerial (Get-CimInstance Win32_BIOS -ErrorAction Stop).SerialNumber } catch { }
+    return [pscustomobject]@{
+        Uuid = $uuid
+        Serial = $serial
+        Hostname = ([string]$env:COMPUTERNAME).Trim()
+    }
+}
+
+function Test-CurrentComputer($data) {
+    $uuid = Get-IdentityUuid $data.smbiosUuid
+    if (-not $uuid -and $data.computerIdSource -eq "smbiosUuid") {
+        $uuid = Get-IdentityUuid $data.computerId
+    }
+    if ($uuid -and $script:currentComputer.Uuid) {
+        return $uuid -eq $script:currentComputer.Uuid
+    }
+
+    $serial = Get-IdentitySerial $data.serial
+    if (-not $serial -and $data.computerIdSource -eq "serial") {
+        $serial = Get-IdentitySerial $data.computerId
+    }
+    if ($serial -and $script:currentComputer.Serial) {
+        return $serial -eq $script:currentComputer.Serial
+    }
+
+    $hostname = ([string]$data.hostname).Trim()
+    return $hostname -ne "" -and $hostname -eq $script:currentComputer.Hostname
+}
+
 function Get-DisplayValue($value) {
     if ($null -eq $value -or [string]::IsNullOrWhiteSpace([string]$value)) {
         return "(not set)"
@@ -139,7 +190,7 @@ function Show-List($records, $selectedIndex, $warningCount) {
     }
 
     Write-Host "[↑↓]: select  [↲ Enter]: open  [A]: toggle external DB status  [/]: search  [S]: sort  [R]: reload  [Esc]: exit" -ForegroundColor DarkGray
-    Write-Host ""
+    Write-Host "* — текущий компьютер" -ForegroundColor Green
     Write-Host ("{0,-3} " -f "") -NoNewline -ForegroundColor DarkGray
     Write-ListHeader "Hostname" 20 "Hostname"
     Write-ListHeader "IP" 10 ""
@@ -156,16 +207,19 @@ function Show-List($records, $selectedIndex, $warningCount) {
 
     for ($index = $pageStart; $index -le $pageEnd; $index++) {
         $record = $records[$index]
+        $isCurrentComputer = Test-CurrentComputer $record.Data
         $marker = if ($index -eq $selectedIndex) { ">" } else { " " }
+        if ($isCurrentComputer) { $marker += "*" }
+        $rowColor = if ($isCurrentComputer) { "Green" } elseif ($index -eq $selectedIndex) { "Cyan" } else { "Gray" }
         $line = "{0,-3} {1,-20} {2,-10} {3,-22} {4,-15} {5,-16} " -f $marker,
             (Get-ShortValue $record.Data.hostname 20),
             (Get-ShortValue (Get-ShortIpAddress $record.Data.ip) 10),
             (Get-ShortValue $record.Data.serial 22),
             (Get-ShortValue $record.Data.username 15),
             (Get-DisplayDate $record.Data.collectedAt)
-        Write-Host $line -NoNewline -ForegroundColor $(if ($index -eq $selectedIndex) { "Cyan" } else { "Gray" })
+        Write-Host $line -NoNewline -ForegroundColor $rowColor
         Write-Host ("{0,-10} " -f (Get-ExternalDatabaseStatus $record.Data)) -NoNewline -ForegroundColor $(if (Test-AddedToExternalDatabase $record.Data) { "Green" } else { "DarkYellow" })
-        Write-Host (Get-ShortValue $record.Data.comment 40) -ForegroundColor $(if ($index -eq $selectedIndex) { "Cyan" } else { "Gray" })
+        Write-Host (Get-ShortValue $record.Data.comment 40) -ForegroundColor $rowColor
     }
 
     if ($records.Count -gt $pageSize) {
@@ -276,6 +330,8 @@ function Show-Details($records, $selectedIndex) {
         Write-Host ("{0,-15} {1}" -f "User:", (Get-DisplayValue $data.username))
         Write-Host ("{0,-15} {1}" -f "IP:", (Get-DisplayValue $data.ip))
         Write-Host ("{0,-15} {1}" -f "MAC:", (Get-DisplayValue $data.mac))
+        Write-Host ("{0,-15} {1}" -f "Created:", (Get-DisplayDate $data.createdAt))
+        Write-Host ("{0,-15} {1}" -f "Collected:", (Get-DisplayDate $data.collectedAt))
         Write-Host ""
         Write-Host "Comment:" -ForegroundColor DarkGray
         Write-Host (Get-DisplayValue $data.comment)
@@ -336,6 +392,7 @@ function Show-Details($records, $selectedIndex) {
     }
 }
 
+$script:currentComputer = Get-CurrentComputerIdentity
 $selectedIndex = 0
 $returnToMenu = $false
 while (-not $returnToMenu) {
