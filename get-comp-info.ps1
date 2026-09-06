@@ -207,9 +207,10 @@ function Confirm-Overwrite {
     }
 }
 
-function Read-OptionalComment {
+function Read-OptionalComment($initialValue = "") {
     Write-Host $text.CommentPrompt -NoNewline
-    $value = ""
+    $value = [string]$initialValue
+    Write-Host $value -NoNewline
 
     while ($true) {
         $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
@@ -238,7 +239,7 @@ function Read-OptionalComment {
     }
 }
 
-function Show-ComputerComparison($previousComputer) {
+function Show-ComputerComparison($previousComputer, $controls = $text.Overwrite) {
     $hasChanges = $false
     $fields = @(
         [pscustomobject]@{ Label = $text.ComputerIdLabel; Name = "computerId" },
@@ -254,7 +255,7 @@ function Show-ComputerComparison($previousComputer) {
 
     Clear-Host
     Write-ToolboxHeader -Section $text.ComparisonHeader.Trim()
-    Write-Host $text.Overwrite -ForegroundColor DarkGray
+    Write-Host $controls -ForegroundColor DarkGray
     Write-Host ""
     Write-Host ("{0,-15} | {1,-30} | {2}" -f $text.Field, $text.Previous, $text.Current)
     Write-Host ("{0,-15}-+-{1,-30}-+-{2}" -f ("-" * 15), ("-" * 30), ("-" * 30))
@@ -288,17 +289,6 @@ function Show-ComputerComparison($previousComputer) {
     return $hasChanges
 }
 
-# Show the collected data first, then let the user add an optional note.
-Clear-Host
-Show-ToolHeader
-Show-ComputerInformation
-$commentInput = Read-OptionalComment
-if ($commentInput.Cancelled) {
-    exit 42
-}
-$comment = $commentInput.Value
-$computer.comment = $comment
-
 # ============================================================
 # Подготовка файла
 # ============================================================
@@ -317,10 +307,21 @@ $filePath = Join-Path $dataPath "$safeComputerId.json"
 # Проверка существующего файла
 # ============================================================
 
+# Older inventory files were named after the serial number instead of the UUID.
+if (-not (Test-Path -LiteralPath $filePath) -and (Test-UsableSerialNumber $serial)) {
+    $safeSerial = ($serial -replace '[<>:"/\\|?*]', '_').Trim().TrimEnd('.')
+    $legacyFilePath = Join-Path $dataPath "$safeSerial.json"
+    if (Test-Path -LiteralPath $legacyFilePath) {
+        $filePath = $legacyFilePath
+    }
+}
+
+$previousComputer = $null
 if (Test-Path $filePath) {
 
     try {
         $previousComputer = Get-Content -Raw -LiteralPath $filePath | ConvertFrom-Json -ErrorAction Stop
+        if ($null -eq $previousComputer) { throw "The JSON file is empty." }
     }
     catch {
         Write-Host ""
@@ -329,16 +330,24 @@ if (Test-Path $filePath) {
         exit 1
     }
 
-    Write-Host ""
-    Write-Host "$emojiWarning $($text.Warning)" -ForegroundColor Yellow
-    Write-Host "$emojiFile $($text.ExistingFile)"
-    Write-Host $filePath
+    $computer.comment = $previousComputer.comment
+    [void](Show-ComputerComparison $previousComputer $text.Controls)
+}
+else {
+    Clear-Host
+    Show-ToolHeader
+    Show-ComputerInformation
+}
 
-    # An empty answer means that the existing comment must not be erased.
-    if ([string]::IsNullOrWhiteSpace($comment)) {
-        $computer.comment = $previousComputer.comment
-    }
+# Show the comparison before asking for input when this computer is already saved.
+$commentInput = Read-OptionalComment $computer.comment
+if ($commentInput.Cancelled) {
+    exit 42
+}
+$comment = $commentInput.Value
+$computer.comment = $comment
 
+if ($null -ne $previousComputer) {
     $hasChanges = Show-ComputerComparison $previousComputer
 
     if (-not $hasChanges) {
@@ -359,6 +368,20 @@ if (Test-Path $filePath) {
 # ============================================================
 # Сохранение JSON
 # ============================================================
+
+# Stamp the actual save time, after the user has confirmed the overwrite.
+$savedAt = (Get-Date).ToString("o")
+$computer.collectedAt = $savedAt
+$computer.createdAt = $savedAt
+if ($null -ne $previousComputer) {
+    if (-not [string]::IsNullOrWhiteSpace([string]$previousComputer.createdAt)) {
+        $computer.createdAt = $previousComputer.createdAt
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace([string]$previousComputer.collectedAt)) {
+        # Legacy records only have the date of their last collection.
+        $computer.createdAt = $previousComputer.collectedAt
+    }
+}
 
 $json = $computer | ConvertTo-Json -Depth 5
 
