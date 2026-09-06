@@ -6,6 +6,16 @@ $dataPath = Join-Path $PSScriptRoot "data"
 $script:sortMode = "Hostname"
 $script:searchTerm = ""
 $script:notice = ""
+$script:listColumnWidths = @{
+    Marker = 3
+    Hostname = 16
+    IP = 7
+    Serial = 22
+    User = 12
+    Collected = 16
+    DB = 10
+    Comment = 40
+}
 
 function Get-IdentityUuid($value) {
     $uuid = [guid]::Empty
@@ -60,7 +70,7 @@ function Test-CurrentComputer($data) {
 
 function Get-DisplayValue($value) {
     if ($null -eq $value -or [string]::IsNullOrWhiteSpace([string]$value)) {
-        return "(not set)"
+        return "not set"
     }
 
     return [string]$value
@@ -107,9 +117,14 @@ function Get-ExternalDatabaseStatus($data) {
     return "Pending"
 }
 
-function Write-ListHeader($title, $width, $sortMode) {
+function Format-ListCell($value, $column) {
+    $width = $script:listColumnWidths[$column]
+    return (Get-ShortValue $value $width).PadRight($width) + " "
+}
+
+function Write-ListHeader($title, $sortMode) {
     $color = if ($script:sortMode -eq $sortMode) { "Cyan" } else { "DarkGray" }
-    Write-Host (("{0,-" + $width + "} ") -f $title) -NoNewline -ForegroundColor $color
+    Write-Host (Format-ListCell $title $title) -NoNewline -ForegroundColor $color
 }
 
 function Get-InventoryRecords {
@@ -191,13 +206,13 @@ function Show-List($records, $selectedIndex, $warningCount) {
 
     Write-Host "[↑↓]: select  [↲ Enter]: open  [A]: toggle external DB status  [/]: search  [S]: sort  [R]: reload  [Esc]: exit" -ForegroundColor DarkGray
     Write-Host "* — текущий компьютер" -ForegroundColor Green
-    Write-Host ("{0,-3} " -f "") -NoNewline -ForegroundColor DarkGray
-    Write-ListHeader "Hostname" 20 "Hostname"
-    Write-ListHeader "IP" 10 ""
-    Write-ListHeader "Serial" 22 "Serial"
-    Write-ListHeader "User" 15 ""
-    Write-ListHeader "Collected" 16 "CollectedAt"
-    Write-ListHeader "DB" 10 ""
+    Write-Host (" " * ($script:listColumnWidths.Marker + 1)) -NoNewline -ForegroundColor DarkGray
+    Write-ListHeader "Hostname" "Hostname"
+    Write-ListHeader "IP" ""
+    Write-ListHeader "Serial" "Serial"
+    Write-ListHeader "User" ""
+    Write-ListHeader "Collected" "CollectedAt"
+    Write-ListHeader "DB" ""
     Write-Host "Comment" -ForegroundColor DarkGray
 
     # Reserve two lines at the bottom for a possible status message.
@@ -211,15 +226,17 @@ function Show-List($records, $selectedIndex, $warningCount) {
         $marker = if ($index -eq $selectedIndex) { ">" } else { " " }
         if ($isCurrentComputer) { $marker += "*" }
         $rowColor = if ($isCurrentComputer) { "Green" } elseif ($index -eq $selectedIndex) { "Cyan" } else { "Gray" }
-        $line = "{0,-3} {1,-20} {2,-10} {3,-22} {4,-15} {5,-16} " -f $marker,
-            (Get-ShortValue $record.Data.hostname 20),
-            (Get-ShortValue (Get-ShortIpAddress $record.Data.ip) 10),
-            (Get-ShortValue $record.Data.serial 22),
-            (Get-ShortValue $record.Data.username 15),
-            (Get-DisplayDate $record.Data.collectedAt)
+        Write-Host ($marker.PadRight($script:listColumnWidths.Marker) + " " + (Format-ListCell $record.Data.hostname "Hostname")) -NoNewline -ForegroundColor $rowColor
+        $ipColor = if ([string]::IsNullOrWhiteSpace([string]$record.Data.ip)) { "DarkGray" } else { $rowColor }
+        Write-Host (Format-ListCell (Get-ShortIpAddress $record.Data.ip) "IP") -NoNewline -ForegroundColor $ipColor
+        $line = @(
+            (Format-ListCell $record.Data.serial "Serial")
+            (Format-ListCell $record.Data.username "User")
+            (Format-ListCell (Get-DisplayDate $record.Data.collectedAt) "Collected")
+        ) -join ""
         Write-Host $line -NoNewline -ForegroundColor $rowColor
-        Write-Host ("{0,-10} " -f (Get-ExternalDatabaseStatus $record.Data)) -NoNewline -ForegroundColor $(if (Test-AddedToExternalDatabase $record.Data) { "Green" } else { "DarkYellow" })
-        Write-Host (Get-ShortValue $record.Data.comment 40) -ForegroundColor $rowColor
+        Write-Host (Format-ListCell (Get-ExternalDatabaseStatus $record.Data) "DB") -NoNewline -ForegroundColor $(if (Test-AddedToExternalDatabase $record.Data) { "Green" } else { "DarkYellow" })
+        Write-Host (Get-ShortValue $record.Data.comment $script:listColumnWidths.Comment) -ForegroundColor $rowColor
     }
 
     if ($records.Count -gt $pageSize) {
