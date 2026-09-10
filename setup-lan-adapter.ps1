@@ -221,7 +221,7 @@ function Select-MenuItem {
     while ($true) {
         Clear-Host
         Show-ToolHeader -WizardStep $Step
-        Write-Host "[▲▼] — выбор, [↲ Enter] — продолжить, $EscapeHint" -ForegroundColor DarkGray
+        Write-ToolboxHint "[▲▼] — выбор, [↲ Enter] — продолжить, $EscapeHint"
         Show-WizardSelection
         Write-Host ""
         Write-Host $Description
@@ -276,7 +276,7 @@ function Read-LastIpOctet {
     while ($true) {
         Clear-Host
         Show-ToolHeader -WizardStep "Шаг 4 из 5"
-        Write-Host "[↲ Enter] — подтвердить, [Backspace] — исправить, [Esc] — назад." -ForegroundColor DarkGray
+        Write-ToolboxHint "[↲ Enter] — подтвердить, [Backspace] — исправить, [Esc] — назад."
         Show-WizardSelection
         Write-Host ""
         Write-Host "Введите последний октет IP-адреса ($FirstHostOctet-$LastHostOctet)."
@@ -363,7 +363,7 @@ function Show-ConfigurationSummary {
 
     Clear-Host
     Show-ToolHeader -WizardStep "Шаг 5 из 5"
-    Write-Host "[↲ Enter] — применить настройки, [Esc] — назад." -ForegroundColor DarkGray
+    Write-ToolboxHint "[↲ Enter] — применить настройки, [Esc] — назад."
     Show-WizardSelection
     Write-Host ""
     Write-Host "Будут применены следующие изменения:" -ForegroundColor Yellow

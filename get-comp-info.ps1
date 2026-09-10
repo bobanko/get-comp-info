@@ -43,7 +43,7 @@ $text = @{
 
 function Show-ToolHeader {
     Write-ToolboxHeader -Section $text.Header.Trim()
-    Write-Host $text.Controls -ForegroundColor DarkGray
+    Write-ToolboxHint $text.Controls
     Write-Host ""
 }
 
@@ -256,7 +256,7 @@ function Show-ComputerComparison($previousComputer, $controls = $text.Overwrite)
 
     Clear-Host
     Write-ToolboxHeader -Section $text.ComparisonHeader.Trim()
-    Write-Host $controls -ForegroundColor DarkGray
+    Write-ToolboxHint $controls
     Write-Host ""
     Write-Host ("{0,-15} | {1,-30} | {2}" -f $text.Field, $text.Previous, $text.Current)
     Write-Host ("{0,-15}-+-{1,-30}-+-{2}" -f ("-" * 15), ("-" * 30), ("-" * 30))

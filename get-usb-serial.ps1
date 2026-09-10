@@ -24,14 +24,15 @@ while ($true) {
 
     Clear-Host
     Write-ToolboxHeader -Section " / серийные номера USB-накопителей"
-    Write-Host "[Esc] — выйти, [↲ Enter] — обновить, [C] — копировать серийник." -ForegroundColor DarkGray
+    Write-ToolboxHint "[Esc] — выйти, [↲ Enter] — обновить, [C] — копировать серийник."
     if ($disks.Count -gt 1) {
-        Write-Host "[▲▼] — выбрать накопитель." -ForegroundColor DarkGray
+        Write-ToolboxHint "[▲▼] — выбрать накопитель."
     }
     Write-Host ""
 
     if ($disks.Count -eq 0 -and [string]::IsNullOrEmpty($status)) {
-        Write-Host "USB-накопители не найдены. Подключите флешку и нажмите [↲ Enter]." -ForegroundColor Yellow
+        Write-Host "USB-накопители не найдены." -ForegroundColor Yellow
+        Write-ToolboxHint "Подключите флешку и нажмите [↲ Enter]."
     }
 
     for ($index = 0; $index -lt $disks.Count; $index++) {

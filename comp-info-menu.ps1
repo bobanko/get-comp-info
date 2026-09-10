@@ -22,7 +22,7 @@ function Show-Menu {
 
     Clear-Host
     Write-ToolboxHeader -Section " / главное меню"
-    Write-Host "[▲▼] — выбрать, [↲ Enter] — открыть." -ForegroundColor DarkGray
+    Write-ToolboxHint "[▲▼] — выбрать, [↲ Enter] — открыть."
     Write-Host ""
     Write-Host ""
 
