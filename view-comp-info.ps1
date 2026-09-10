@@ -177,11 +177,23 @@ function Get-InventoryRecords {
                 FilePath = $file.FullName
                 FileName = $file.Name
                 Data     = $computer
+                HasIpConflict = $false
             }
         }
         catch {
             $warnings += "$($file.Name): $($_.Exception.Message)"
         }
+    }
+
+    # Compare full addresses across the inventory before search and pagination.
+    $ipCounts = @{}
+    foreach ($record in $records) {
+        $ip = ([string]$record.Data.ip).Trim()
+        if ($ip) { $ipCounts[$ip]++ }
+    }
+    foreach ($record in $records) {
+        $ip = ([string]$record.Data.ip).Trim()
+        $record.HasIpConflict = $ip -ne "" -and $ipCounts[$ip] -gt 1
     }
 
     return [pscustomobject]@{ Records = @($records); Warnings = @($warnings) }
@@ -262,7 +274,7 @@ function Show-List($records, $selectedIndex, $warningCount) {
         if ($isCurrentComputer) { $marker += "*" }
         $rowColor = if ($isCurrentComputer) { "Green" } elseif ($index -eq $selectedIndex) { "Cyan" } else { "Gray" }
         Write-Host ($marker.PadRight($script:listColumnWidths.Marker) + " " + (Format-ListCell $record.Data.hostname "Hostname")) -NoNewline -ForegroundColor $rowColor
-        $ipColor = if ([string]::IsNullOrWhiteSpace([string]$record.Data.ip)) { "DarkGray" } else { $rowColor }
+        $ipColor = if ($record.HasIpConflict) { "Red" } elseif ([string]::IsNullOrWhiteSpace([string]$record.Data.ip)) { "DarkGray" } else { $rowColor }
         Write-Host (Format-ListCell (Get-ShortIpAddress $record.Data.ip) "IP") -NoNewline -ForegroundColor $ipColor
         $line = @(
             (Format-ListCell $record.Data.serial "Serial")
