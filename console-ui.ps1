@@ -29,3 +29,17 @@ function Write-ToolboxHeader {
         Write-Host ""
     }
 }
+
+function Write-ToolboxHint {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Text
+    )
+
+    foreach ($part in [regex]::Split($Text, '(\[[^\]]+\])')) {
+        if ($part.Length -eq 0) { continue }
+        $color = if ($part -match '^\[[^\]]+\]$') { 'Yellow' } else { 'DarkGray' }
+        Write-Host $part -NoNewline -ForegroundColor $color
+    }
+    Write-Host ''
+}

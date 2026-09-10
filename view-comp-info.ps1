@@ -4,6 +4,7 @@
 
 $dataPath = Join-Path $PSScriptRoot "data"
 $script:sortMode = "Hostname"
+$script:sortDescending = $false
 $script:searchTerm = ""
 $script:notice = ""
 $script:listColumnWidths = @{
@@ -96,6 +97,20 @@ function Get-ShortIpAddress($value) {
     return $text
 }
 
+function Get-IpSortValue($value) {
+    $octets = ([string]$value).Trim() -split '\.'
+    if ($octets.Count -ne 4) { return [long]::MaxValue }
+
+    $number = 0L
+    foreach ($octet in $octets) {
+        if ($octet -notmatch '^\d{1,3}$' -or [int]$octet -gt 255) {
+            return [long]::MaxValue
+        }
+        $number = $number * 256 + [int]$octet
+    }
+    return $number
+}
+
 function Get-DisplayDate($value) {
     $date = [datetime]::MinValue
     if ([datetime]::TryParse([string]$value, [ref]$date)) {
@@ -124,9 +139,25 @@ function Format-ListCell($value, $column) {
 
 function Write-ListHeader($title, $sortMode) {
     $color = if ($script:sortMode -eq $sortMode) { "Cyan" } else { "DarkGray" }
-    Write-Host (Format-ListCell $title $title) -NoNewline -ForegroundColor $color
+    $label = $title
+    if ($script:sortMode -eq $sortMode) {
+        $arrow = if ($script:sortDescending) { [char]0x2193 } else { [char]0x2191 }
+        $label = "$title $arrow"
+    }
+    Write-Host (Format-ListCell $label $title) -NoNewline -ForegroundColor $color
 }
 
+function Switch-ListSort {
+    param([switch]$Reverse)
+
+    $modes = @('Hostname', 'IP', 'Serial', 'Username', 'CollectedAt', 'DB')
+    $stateCount = $modes.Count * 2
+    $state = [array]::IndexOf($modes, $script:sortMode) * 2 + [int]$script:sortDescending
+    $step = if ($Reverse) { -1 } else { 1 }
+    $state = ($state + $step + $stateCount) % $stateCount
+    $script:sortMode = $modes[[int][Math]::Floor($state / 2)]
+    $script:sortDescending = ($state % 2) -eq 1
+}
 function Get-InventoryRecords {
     $records = @()
     $warnings = @()
@@ -171,15 +202,18 @@ function Get-VisibleRecords($records) {
     }
 
     switch ($script:sortMode) {
-        "Serial" { return @($result | Sort-Object { Get-DisplayValue $_.Data.serial }) }
+        "IP" { return @($result | Sort-Object -Descending:$script:sortDescending { Get-IpSortValue $_.Data.ip }, { Get-DisplayValue $_.Data.hostname }) }
+        "Username" { return @($result | Sort-Object -Descending:$script:sortDescending { [string]::IsNullOrWhiteSpace([string]$_.Data.username) }, { [string]$_.Data.username }, { Get-DisplayValue $_.Data.hostname }) }
+        "DB" { return @($result | Sort-Object -Descending:$script:sortDescending { Test-AddedToExternalDatabase $_.Data }, { Get-DisplayValue $_.Data.hostname }) }
+        "Serial" { return @($result | Sort-Object -Descending:$script:sortDescending { Get-DisplayValue $_.Data.serial }) }
         "CollectedAt" {
-            return @($result | Sort-Object {
+            return @($result | Sort-Object -Descending:$script:sortDescending {
                 $date = [datetime]::MinValue
                 [void][datetime]::TryParse([string]$_.Data.collectedAt, [ref]$date)
                 $date
-            } -Descending)
+            })
         }
-        default { return @($result | Sort-Object { Get-DisplayValue $_.Data.hostname }) }
+        default { return @($result | Sort-Object -Descending:$script:sortDescending { Get-DisplayValue $_.Data.hostname }) }
     }
 }
 
@@ -190,7 +224,8 @@ function Clear-Screen {
 function Show-List($records, $selectedIndex, $warningCount) {
     Clear-Screen
     Write-ToolboxHeader -Section "Computer inventory viewer"
-    Write-Host "Records: $($records.Count) | Sort: $script:sortMode" -ForegroundColor DarkGray
+    $direction = if ($script:sortDescending) { "DESC" } else { "ASC" }
+    Write-Host "Records: $($records.Count) | Sort: $script:sortMode $direction" -ForegroundColor DarkGray
     if ($script:searchTerm) {
         Write-Host "Search: $script:searchTerm" -ForegroundColor Yellow
     }
@@ -200,19 +235,19 @@ function Show-List($records, $selectedIndex, $warningCount) {
     Write-Host ""
 
     if ($records.Count -eq 0) {
-        Write-Host "No records found. Press [R] to reload or [Esc] to exit." -ForegroundColor Yellow
+        Write-ToolboxHint "No records found. Press [R] to reload or [Esc] to exit."
         return
     }
 
-    Write-Host "[↑↓]: select  [↲ Enter]: open  [A]: toggle external DB status  [/]: search  [S]: sort  [R]: reload  [Esc]: exit" -ForegroundColor DarkGray
+    Write-ToolboxHint "[↑↓]: select  [↲ Enter]: open  [A]: toggle external DB status  [/]: search  [S]/[Shift+S]: sort next/previous  [R]: reload  [Esc]: exit"
     Write-Host "* — текущий компьютер" -ForegroundColor Green
     Write-Host (" " * ($script:listColumnWidths.Marker + 1)) -NoNewline -ForegroundColor DarkGray
     Write-ListHeader "Hostname" "Hostname"
-    Write-ListHeader "IP" ""
+    Write-ListHeader "IP" "IP"
     Write-ListHeader "Serial" "Serial"
-    Write-ListHeader "User" ""
+    Write-ListHeader "User" "Username"
     Write-ListHeader "Collected" "CollectedAt"
-    Write-ListHeader "DB" ""
+    Write-ListHeader "DB" "DB"
     Write-Host "Comment" -ForegroundColor DarkGray
 
     # Reserve two lines at the bottom for a possible status message.
@@ -257,7 +292,7 @@ function Edit-Comment($initialValue) {
     while ($true) {
         Clear-Screen
         Write-ToolboxHeader -Section "Edit comment"
-        Write-Host "[←→]: move cursor  [Home]/[End]: beginning/end  [↲ Enter]: save  [Esc]: cancel" -ForegroundColor DarkGray
+        Write-ToolboxHint "[←→]: move cursor  [Home]/[End]: beginning/end  [↲ Enter]: save  [Esc]: cancel"
         Write-Host ""
         Write-Host "Comment: $value"
 
@@ -338,7 +373,7 @@ function Show-Details($records, $selectedIndex) {
         $data = $record.Data
         Clear-Screen
         Write-ToolboxHeader -Section "Computer details ($($selectedIndex + 1) of $($records.Count))"
-        Write-Host "[←→]/[↑↓]: previous/next  [E]/[F2]: edit comment  [A]: toggle external DB status  [Esc]: list" -ForegroundColor DarkGray
+        Write-ToolboxHint "[←→]/[↑↓]: previous/next  [E]/[F2]: edit comment  [A]: toggle external DB status  [Esc]: list"
         Write-Host ""
         Write-Host ("{0,-15} {1}" -f "Hostname:", (Get-DisplayValue $data.hostname))
         Write-Host ("{0,-15} {1}" -f "Serial:", (Get-DisplayValue $data.serial))
@@ -447,11 +482,7 @@ while (-not $returnToMenu) {
                 $selectedIndex = 0
             }
             elseif ($key.Key -eq [ConsoleKey]::S) {
-                switch ($script:sortMode) {
-                    "Hostname" { $script:sortMode = "Serial" }
-                    "Serial" { $script:sortMode = "CollectedAt" }
-                    default { $script:sortMode = "Hostname" }
-                }
+                Switch-ListSort -Reverse:(($key.Modifiers -band [ConsoleModifiers]::Shift) -ne 0)
                 $selectedIndex = 0
             }
         }
