@@ -213,26 +213,27 @@ function Read-OptionalComment($initialValue = "") {
     Write-Host $value -NoNewline
 
     while ($true) {
-        $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-        switch ($key.VirtualKeyCode) {
-            13 {
+        # Read the Unicode character directly from the console, preserving the active layout.
+        $key = [Console]::ReadKey($true)
+        switch ($key.Key) {
+            Enter {
                 Write-Host ""
                 return [pscustomobject]@{ Cancelled = $false; Value = $value }
             }
-            27 {
+            Escape {
                 Write-Host ""
                 return [pscustomobject]@{ Cancelled = $true; Value = $null }
             }
-            8 {
+            Backspace {
                 if ($value.Length -gt 0) {
                     $value = $value.Substring(0, $value.Length - 1)
                     Write-Host "`b `b" -NoNewline
                 }
             }
             default {
-                if (-not [char]::IsControl($key.Character)) {
-                    $value += [string]$key.Character
-                    Write-Host ([string]$key.Character) -NoNewline
+                if (-not [char]::IsControl($key.KeyChar)) {
+                    $value += [string]$key.KeyChar
+                    Write-Host ([string]$key.KeyChar) -NoNewline
                 }
             }
         }
