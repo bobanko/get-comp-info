@@ -11,6 +11,7 @@ $menuItems = @(
     [PSCustomObject]@{ Title = "🌐 Настроить LAN-адаптер (IP-адрес, маска подсети, DNS)"; Script = "setup-lan-adapter.ps1" }
     [PSCustomObject]@{ Title = "🗃️ Просмотреть сохранённую информацию"; Script = "view-comp-info.ps1" }
     [PSCustomObject]@{ Title = "🔑 Серийные номера USB-накопителей"; Script = "get-usb-serial.ps1" }
+    [PSCustomObject]@{ Title = "📤 Экспортировать все устройства в CSV"; Script = "export-comp-info.ps1" }
     [PSCustomObject]@{ Title = "🔍 Сканировать IP-адреса"; Script = "scan-ips.ps1"; IsDraft = $true; IsSeparatedBefore = $true }
     [PSCustomObject]@{ Title = "🔄️ Обновить проект из GitHub"; Script = "update-from-github.ps1"; IsDraft = $true }
     [PSCustomObject]@{ Title = "🚪 Выйти"; Script = $null; IsSeparatedBefore = $true }
