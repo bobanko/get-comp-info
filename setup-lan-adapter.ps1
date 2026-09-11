@@ -199,7 +199,7 @@ $locations = @(
     [pscustomobject]@{
         Name             = "Корпус Д"
         ThirdOctet       = 5
-        SubnetOptions    = @(116)
+        SubnetOptions    = @(20)
         PrefixLength     = 25
         SubnetMask       = "255.255.255.128"
         GatewayOctet     = 129
