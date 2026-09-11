@@ -17,6 +17,14 @@ function Copy-Verified {
 }
 
 try {
+    Write-ToolboxHeader -Section 'Синхронизация с USB'
+    if ($ReviewConflicts) {
+        Write-Host 'Загружаю сохранённые конфликты. Подождите...' -ForegroundColor Yellow
+    }
+    else {
+        Write-Host 'Синхронизация началась. Проверяю папки и собираю список файлов...' -ForegroundColor Yellow
+    }
+    Write-Host ''
     if ([string]::IsNullOrWhiteSpace($UsbPath)) {
         $UsbPath = 'E:\COMP-INFO'
     }
@@ -71,6 +79,7 @@ try {
         }
     }
     $seen = @{}
+    Write-Host 'Сравниваю записи и обрабатываю изменения...' -ForegroundColor Yellow
     foreach ($source in $sources) {
         $key = $source.FileName + ':' + (Get-SyncHash (Get-CanonicalJson (Read-SyncRecord $source.Path)))
         if ($seen.ContainsKey($key)) { continue }
@@ -80,6 +89,9 @@ try {
     }
 
     # Update code only after all collected records have been copied successfully.
+    if (-not $ReviewConflicts) {
+        Write-Host 'Проверяю и обновляю файлы программы на флешке...' -ForegroundColor Yellow
+    }
     foreach ($file in $programFiles) {
         $destination = Join-Path $usbRoot $file.Name
         if ((Test-Path -LiteralPath $destination) -and
@@ -88,8 +100,21 @@ try {
         Copy-Verified $file.FullName $destination
         $updated++
     }
-    Write-Host "Готово. Добавлено: $($counts.Added); обновлено: $($counts.Merged); оставлено локальных: $($counts.Kept); без изменений / уже разобрано: $($counts.Unchanged); отложено: $($counts.Deferred)." -ForegroundColor Green
-    if (-not $ReviewConflicts) { Write-Host "Обновлено файлов программы: $updated. Данные на флешке сохранены." }
+    Write-Host ''
+    Write-Host 'Готово. Итоги:' -ForegroundColor Green
+    $statistics = [ordered]@{
+        'Добавлено записей' = $counts.Added
+        'Обновлено записей' = $counts.Merged
+        'Оставлено локальных' = $counts.Kept
+        'Без изменений / уже разобрано' = $counts.Unchanged
+        'Отложено' = $counts.Deferred
+    }
+    if (-not $ReviewConflicts) { $statistics['Обновлено файлов программы'] = $updated }
+    foreach ($entry in $statistics.GetEnumerator()) {
+        Write-Host ('  {0,-30} {1}' -f ($entry.Key + ':'), $entry.Value)
+    }
+    Write-Host ''
+    if (-not $ReviewConflicts) { Write-Host 'Данные на флешке сохранены.' }
     if ($counts.Deferred -gt 0) { Write-Host 'Чтобы продолжить, выберите в главном меню «Разобрать конфликты синхронизации». Флешка не нужна.' -ForegroundColor Yellow }
     if ($counts.Merged -gt 0) { Write-Host 'Предыдущие локальные версии сохранены в sync-backups.' }
     exit 0
