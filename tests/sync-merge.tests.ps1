@@ -110,6 +110,23 @@ try {
     Assert-True ($LASTEXITCODE -eq 0) ($output | Out-String)
     Assert-True (Test-Path (Join-Path $localRoot 'data\fresh.json')) 'Entry point did not import'
     Assert-True (Test-Path (Join-Path $usbRoot 'sync-merge.ps1')) 'Merge helper must be deployed'
+    Assert-True ((Get-RememberedComputerPath $usbRoot) -eq $localRoot) 'Computer path must be remembered on USB'
+    Write-SyncJson (Join-Path $portableData 'from-usb.json') $local
+    $localUi = Join-Path $localRoot 'console-ui.ps1'
+    [IO.File]::AppendAllText($localUi, "`r`n# New release on the computer`r`n")
+    $output = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $usbRoot 'sync-usb.ps1') 2>&1
+    Assert-True ($LASTEXITCODE -eq 0) ($output | Out-String)
+    Assert-True (Test-Path (Join-Path $localRoot 'data\from-usb.json')) 'USB launch must import to the computer'
+    Assert-True ((Get-FileHash $localUi).Hash -eq (Get-FileHash (Join-Path $usbRoot 'console-ui.ps1')).Hash) 'USB launch must deploy code from computer to USB'
+    Assert-True (-not (Test-Path (Join-Path $portableData 'new.json'))) 'Local inventory must not be exported to USB'
+    $explicitRoot = Join-Path $testRoot 'another-usb'
+    New-Item -ItemType Directory -Path $explicitRoot | Out-Null
+    foreach ($name in @('sync-usb.ps1','sync-merge.ps1','console-ui.ps1')) {
+        Copy-Item -LiteralPath (Join-Path $localRoot $name) -Destination $explicitRoot
+    }
+    $output = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $explicitRoot 'sync-usb.ps1') -ComputerPath $localRoot 2>&1
+    Assert-True ($LASTEXITCODE -eq 0) ($output | Out-String)
+    Assert-True ((Get-RememberedComputerPath $explicitRoot) -eq $localRoot) 'Explicit computer path must support first USB launch'
     $offlinePath = Join-Path $testRoot 'unavailable-usb'
     $output = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $localRoot 'sync-usb.ps1') -ReviewConflicts -UsbPath $offlinePath 2>&1
     Assert-True ($LASTEXITCODE -eq 0) ($output | Out-String)

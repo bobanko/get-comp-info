@@ -1,5 +1,5 @@
 ﻿[CmdletBinding()]
-param([string]$UsbPath = 'E:\COMP-INFO', [switch]$ReviewConflicts)
+param([string]$UsbPath = 'E:\COMP-INFO', [switch]$ReviewConflicts, [string]$ComputerPath)
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'console-ui.ps1')
@@ -32,9 +32,36 @@ try {
     if (-not [IO.Path]::IsPathRooted($UsbPath) -or $UsbPath -match '^[A-Za-z]:[^\\/]') {
         throw 'Укажите абсолютный путь к папке.'
     }
-    $localRoot = [IO.Path]::GetFullPath($PSScriptRoot).TrimEnd('\', '/')
+    $launchRoot = [IO.Path]::GetFullPath($PSScriptRoot).TrimEnd('\', '/')
     $usbRoot = [IO.Path]::GetFullPath($UsbPath).TrimEnd('\', '/')
-    if ($usbRoot -eq [IO.Path]::GetPathRoot($UsbPath).TrimEnd('\', '/')) {
+    if ([string]::IsNullOrWhiteSpace($ComputerPath)) {
+        $launchDrive = [IO.DriveInfo]::new([IO.Path]::GetPathRoot($launchRoot))
+        $fromUsb = $launchRoot -eq $usbRoot -or
+            $launchDrive.DriveType -eq [IO.DriveType]::Removable -or
+            (Test-Path -LiteralPath (Join-Path $launchRoot 'sync-targets.json'))
+        if ($fromUsb) {
+            $usbRoot = $launchRoot
+            $ComputerPath = Get-RememberedComputerPath $usbRoot
+            if ([string]::IsNullOrWhiteSpace($ComputerPath) -or
+                -not (Test-Path -LiteralPath (Join-Path $ComputerPath 'sync-usb.ps1') -PathType Leaf)) {
+                Write-Host 'Запуск с флешки. Укажите папку программы на компьютере.' -ForegroundColor Yellow
+                Write-Host 'Из этой папки программа обновится на флешке; в неё будут скопированы данные.'
+                $ComputerPath = Read-Host 'Полный путь'
+            }
+        }
+        else { $ComputerPath = $launchRoot }
+    }
+    if ([string]::IsNullOrWhiteSpace($ComputerPath)) { throw 'Не указан путь к программе на компьютере.' }
+    $ComputerPath = $ComputerPath.Trim().Trim('"')
+    if (-not [IO.Path]::IsPathRooted($ComputerPath) -or $ComputerPath -match '^[A-Za-z]:[^\\/]') {
+        throw 'Укажите абсолютный путь к программе на компьютере.'
+    }
+    $localRoot = [IO.Path]::GetFullPath($ComputerPath).TrimEnd('\', '/')
+    if ($launchRoot -ne $localRoot -and -not $PSBoundParameters.ContainsKey('UsbPath')) {
+        $usbRoot = $launchRoot
+    }
+    if ($usbRoot -eq [IO.Path]::GetPathRoot($usbRoot).TrimEnd('\', '/') -or
+        $localRoot -eq [IO.Path]::GetPathRoot($localRoot).TrimEnd('\', '/')) {
         throw 'Укажите папку программы, а не корень диска.'
     }
     if ($usbRoot -eq $localRoot -or
@@ -44,6 +71,20 @@ try {
     }
     Assert-NoLink $localRoot
     if (-not $ReviewConflicts) { Assert-NoLink $usbRoot }
+    $computerScript = Join-Path $localRoot 'sync-usb.ps1'
+    Assert-NoLink $computerScript
+    if (-not (Test-Path -LiteralPath $computerScript -PathType Leaf)) {
+        throw "В папке компьютера не найден sync-usb.ps1: $localRoot"
+    }
+    Write-Host "Компьютер: $localRoot" -ForegroundColor DarkGray
+    Write-Host "Флешка:    $usbRoot" -ForegroundColor DarkGray
+    if ($launchRoot -ne $localRoot) {
+        Write-Host 'Передаю синхронизацию программе на компьютере...' -ForegroundColor Yellow
+        $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $computerScript, '-UsbPath', $usbRoot, '-ComputerPath', $localRoot)
+        if ($ReviewConflicts) { $arguments += '-ReviewConflicts' }
+        & powershell.exe @arguments
+        exit $LASTEXITCODE
+    }
     $localData = Join-Path $localRoot 'data'
     $usbData = Join-Path $usbRoot 'data'
     $conflictRoot = Join-Path $localRoot 'sync-conflicts'
@@ -100,6 +141,7 @@ try {
         Copy-Verified $file.FullName $destination
         $updated++
     }
+    if (-not $ReviewConflicts) { Save-SyncComputerPath -UsbRoot $usbRoot -ComputerRoot $localRoot }
     Write-Host ''
     Write-Host 'Готово. Итоги:' -ForegroundColor Green
     $statistics = [ordered]@{

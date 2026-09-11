@@ -58,7 +58,9 @@ function Show-Menu {
 function Update-ConflictMenuItem {
     $item = $menuItems | Where-Object Script -eq 'review-sync-conflicts.ps1'
     try {
-        $item.ConflictCount = Get-PendingSyncConflictCount $PSScriptRoot
+        $conflictComputerRoot = Get-RememberedComputerPath $PSScriptRoot
+        if ([string]::IsNullOrWhiteSpace($conflictComputerRoot)) { $conflictComputerRoot = $PSScriptRoot }
+        $item.ConflictCount = Get-PendingSyncConflictCount $conflictComputerRoot
         $item.IsDisabled = $item.ConflictCount -eq 0
     }
     catch {

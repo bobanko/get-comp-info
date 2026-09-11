@@ -6,6 +6,9 @@ catch {
     # Continue with the host defaults if console encoding cannot be configured.
 }
 
+# Release version. Update with tools/update-version.ps1 before distributing a release.
+$script:toolboxVersion = '2026.09.11.2'
+
 function Write-ToolboxHeader {
     param(
         [Parameter(Mandatory)]
@@ -20,7 +23,7 @@ function Write-ToolboxHeader {
         Write-Host $brand[$index] -NoNewline -ForegroundColor $colors[$index % $colors.Count]
     }
 
-    Write-Host ""
+    Write-Host ("  v" + $script:toolboxVersion) -ForegroundColor DarkGray
     Write-Host $Section -NoNewline -ForegroundColor Cyan
     if (-not [string]::IsNullOrWhiteSpace($WizardStep)) {
         Write-Host (" | " + $WizardStep) -ForegroundColor Cyan

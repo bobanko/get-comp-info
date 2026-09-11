@@ -13,6 +13,30 @@ function Assert-NoLink {
     }
 }
 
+function Get-SyncMachineKey {
+    return [Environment]::MachineName + '\' + [Environment]::UserName
+}
+
+function Get-RememberedComputerPath {
+    param([string]$UsbRoot)
+    $path = Join-Path $UsbRoot 'sync-targets.json'
+    Assert-NoLink $path
+    if (-not (Test-Path -LiteralPath $path)) { return $null }
+    $settings = Read-SyncRecord $path
+    $property = $settings.PSObject.Properties[(Get-SyncMachineKey)]
+    if ($null -ne $property) { return [string]$property.Value }
+    return $null
+}
+
+function Save-SyncComputerPath {
+    param([string]$UsbRoot, [string]$ComputerRoot)
+    $path = Join-Path $UsbRoot 'sync-targets.json'
+    Assert-NoLink $path
+    $settings = if (Test-Path -LiteralPath $path) { Read-SyncRecord $path } else { [pscustomobject]@{} }
+    $settings | Add-Member -NotePropertyName (Get-SyncMachineKey) -NotePropertyValue $ComputerRoot -Force
+    Write-SyncJson $path $settings
+}
+
 function Get-PendingSyncConflictCount {
     param([string]$LocalRoot)
     $root = Join-Path $LocalRoot 'sync-conflicts'
