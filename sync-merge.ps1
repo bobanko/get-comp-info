@@ -1,4 +1,48 @@
 ﻿# Shared merge functions. Loading this file never starts synchronization.
+function Assert-NoLink {
+    param([string]$Path)
+    $itemPath = [IO.Path]::GetFullPath($Path)
+    while ($itemPath) {
+        if (Test-Path -LiteralPath $itemPath) {
+            $item = Get-Item -LiteralPath $itemPath -Force
+            if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                throw "Ссылки на файлы и папки не поддерживаются: $itemPath"
+            }
+        }
+        $itemPath = Split-Path -Parent $itemPath
+    }
+}
+
+function Get-PendingSyncConflictCount {
+    param([string]$LocalRoot)
+    $root = Join-Path $LocalRoot 'sync-conflicts'
+    Assert-NoLink $root
+    if (-not (Test-Path -LiteralPath $root)) { return 0 }
+    $seen = @{}
+    $count = 0
+    foreach ($folder in Get-ChildItem -LiteralPath $root -Directory) {
+        Assert-NoLink $folder.FullName
+        $fileName = $folder.Name + '.json'
+        foreach ($file in Get-ChildItem -LiteralPath $folder.FullName -Filter '*.json' -File) {
+            $incoming = Read-SyncRecord $file.FullName
+            $key = Get-SyncHash ($fileName.ToLowerInvariant() + ':' + (Get-SyncHash (Get-CanonicalJson $incoming)))
+            if ($seen.ContainsKey($key)) { continue }
+            $seen[$key] = $true
+            $receipt = Join-Path $LocalRoot "sync-state\$key.json"
+            Assert-NoLink $receipt
+            if (Test-Path -LiteralPath $receipt) { continue }
+            $destination = Join-Path $LocalRoot "data\$fileName"
+            Assert-NoLink $destination
+            if (Test-Path -LiteralPath $destination) {
+                $local = Read-SyncRecord $destination
+                if (@(Get-SyncDifferences $local $incoming).Count -eq 0) { continue }
+            }
+            $count++
+        }
+    }
+    return $count
+}
+
 function Get-CanonicalJson {
     param($Value)
     if ($null -eq $Value) { return 'null' }
@@ -69,6 +113,7 @@ function Get-SyncFieldText {
     if ($null -eq $property) { return '(поле отсутствует)' }
     if ($null -eq $property.Value) { return '(null)' }
     if ($property.Value -is [string] -and $property.Value.Length -eq 0) { return '(пустая строка)' }
+    if ($property.Value -is [string]) { return $property.Value }
     return ConvertTo-Json -InputObject $property.Value -Depth 100
 }
 
@@ -87,8 +132,51 @@ function Get-SyncFieldLabel {
     return $Name
 }
 
+function Get-SyncComparisonLines {
+    param($Local, $Incoming, [string[]]$Fields, [string]$RightLabel = 'С флешки')
+    if (-not $Fields) {
+        $Fields = @(@($Local.PSObject.Properties.Name) + @($Incoming.PSObject.Properties.Name) | Select-Object -Unique)
+    }
+    $changed = @(Get-SyncDifferences $Local $Incoming)
+    $labelWidth = 26
+    $valueWidth = 30
+    try {
+        $width = [Console]::WindowWidth
+        if ($width -gt 40) { $valueWidth = [Math]::Max(8, [int][Math]::Floor(($width - $labelWidth - 7) / 2)) }
+    } catch { }
+    $format = '{0,-' + $labelWidth + '} | {1,-' + $valueWidth + '} | {2}'
+    [pscustomobject]@{ Text = $format -f 'Поле', 'На компьютере', $RightLabel; Color = 'Gray' }
+    [pscustomobject]@{ Text = ('-' * $labelWidth) + '-+-' + ('-' * $valueWidth) + '-+-' + ('-' * $valueWidth); Color = 'DarkGray' }
+    foreach ($name in $Fields) {
+        $columns = @(
+            @(Split-SyncTableCell (Get-SyncFieldLabel $name) $labelWidth),
+            @(Split-SyncTableCell (Get-SyncFieldText $Local $name) $valueWidth),
+            @(Split-SyncTableCell (Get-SyncFieldText $Incoming $name) $valueWidth)
+        )
+        $height = ($columns | ForEach-Object { $_.Count } | Measure-Object -Maximum).Maximum
+        $color = if ($changed -contains $name) { 'Yellow' } else { 'DarkGray' }
+        for ($row = 0; $row -lt $height; $row++) {
+            $cells = foreach ($column in $columns) {
+                if ($row -lt $column.Count) { $column[$row] } else { '' }
+            }
+            [pscustomobject]@{ Text = $format -f $cells[0], $cells[1], $cells[2]; Color = $color }
+        }
+    }
+    [pscustomobject]@{ Text = 'Изменённые значения выделены жёлтым.'; Color = 'Gray' }
+}
+
+function Split-SyncTableCell {
+    param([string]$Text, [int]$Width)
+    foreach ($line in ($Text -replace "`t", '    ' -split '\r?\n')) {
+        if ($line.Length -eq 0) { ''; continue }
+        for ($offset = 0; $offset -lt $line.Length; $offset += $Width) {
+            $line.Substring($offset, [Math]::Min($Width, $line.Length - $offset))
+        }
+    }
+}
+
 function Select-SyncAction {
-    param([string]$Title, [string[]]$Lines, [string[]]$Items, [switch]$AllowBack)
+    param([string]$Title, [object[]]$Lines, [string[]]$Items, [switch]$AllowBack)
     $selected = 0
     while ($true) {
         Clear-Host
@@ -98,7 +186,10 @@ function Select-SyncAction {
         Write-ToolboxHint $hint
         Write-Host $Title -ForegroundColor Cyan
         Write-Host ''
-        foreach ($line in $Lines) { Write-Host $line }
+        foreach ($line in $Lines) {
+            if ($line -is [string]) { Write-Host $line }
+            else { Write-Host $line.Text -ForegroundColor $line.Color }
+        }
         Write-Host ''
         for ($i = 0; $i -lt $Items.Count; $i++) {
             $marker = if ($i -eq $selected) { '>' } else { ' ' }
@@ -118,7 +209,7 @@ function Resolve-SyncRecord {
     param($Local, $Incoming, [string]$FileName)
     $fields = @(Get-SyncDifferences $Local $Incoming)
     $title = "$($Local.hostname) — $FileName"
-    $lines = @("Сбор на компьютере: $($Local.collectedAt)", "Сбор входящей версии: $($Incoming.collectedAt)", 'Отличающиеся поля:') + @($fields | ForEach-Object { '  ' + (Get-SyncFieldLabel $_) })
+    $lines = @(Get-SyncComparisonLines $Local $Incoming)
     while ($true) {
         $action = Select-SyncAction $title $lines @('Выбрать значения по полям', 'Принять запись с флешки', 'Оставить локальную запись', 'Отложить')
         if ($action -eq 3) { return $null }
@@ -129,7 +220,7 @@ function Resolve-SyncRecord {
             $index = 0
             while ($index -lt $fields.Count) {
                 $name = $fields[$index]
-                $detail = @("На компьютере: $(Get-SyncFieldText $Local $name)", "С флешки: $(Get-SyncFieldText $Incoming $name)")
+                $detail = @(Get-SyncComparisonLines $Local $Incoming -Fields @($name))
                 $pick = Select-SyncAction "$title | Поле $($index + 1) из $($fields.Count): $(Get-SyncFieldLabel $name)" $detail @('Оставить локальное значение', 'Принять значение с флешки') -AllowBack
                 if ($pick -eq -1) {
                     if ($index -eq 0) { break }
@@ -143,9 +234,7 @@ function Resolve-SyncRecord {
             $incomingFields = @($fields | Where-Object { $chosen[$_] -eq 1 })
             $result = Merge-SyncFields $Local $Incoming $incomingFields
         }
-        $summary = foreach ($name in $fields) {
-            "$(Get-SyncFieldLabel $name): $(Get-SyncFieldText $result $name)"
-        }
+        $summary = @(Get-SyncComparisonLines $Local $result -RightLabel 'После сохранения')
         $confirm = Select-SyncAction "$title | Итоговые значения" @($summary) @('Сохранить решение', 'Назад к выбору') -AllowBack
         if ($confirm -eq 0) { return $result }
     }

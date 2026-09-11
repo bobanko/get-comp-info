@@ -5,7 +5,7 @@ $tokens = $null
 $errors = $null
 $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $project 'sync-usb.ps1'), [ref]$tokens, [ref]$errors)
 if ($errors.Count) { throw ($errors | Out-String) }
-foreach ($name in @('Assert-NoLink', 'Copy-Verified')) {
+foreach ($name in @('Copy-Verified')) {
     $definition = $ast.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name }, $true)
     . ([scriptblock]::Create($definition.Extent.Text))
 }
@@ -44,6 +44,11 @@ try {
     $source = Join-Path $usbRoot 'pc.json'
     $local = '{"computerId":"id1","hostname":"PC","ip":"old","comment":"local"}' | ConvertFrom-Json
     $incoming = '{"computerId":"id1","hostname":"PC","ip":"new","comment":"usb"}' | ConvertFrom-Json
+    $table = @(Get-SyncComparisonLines $local $incoming)
+    Assert-True (@($table | Where-Object Color -eq 'Yellow').Count -eq 2) 'Only differing rows should be highlighted'
+    Assert-True (@($table | Where-Object { $_.Color -eq 'DarkGray' -and $_.Text -match 'PC' }).Count -eq 1) 'Equal rows should remain visible in gray'
+    $parts = @(Split-SyncTableCell ('A' * 75) 30)
+    Assert-True (($parts -join '') -eq ('A' * 75) -and $parts.Count -eq 3) 'Wrapping must preserve long values'
     Write-SyncJson $destination $local
     Write-SyncJson $source $incoming
     # Per-field choices: retain local comment, take incoming IP, confirm.
@@ -65,10 +70,14 @@ try {
     Assert-True ((Import-SyncRecord $source $destination $localRoot) -eq 'Deferred') 'Expected defer'
     $archive = Join-Path $localRoot ('sync-conflicts\pc\' + (Get-SyncHash (Get-CanonicalJson $incoming)) + '.json')
     Assert-True (Test-Path -LiteralPath $archive) 'Deferred record must be available offline'
+    Assert-True ((Get-PendingSyncConflictCount $localRoot) -eq 1) 'Count must exclude resolved archives'
+    Copy-Item -LiteralPath $archive -Destination (Join-Path (Split-Path -Parent $archive) 'duplicate.json')
+    Assert-True ((Get-PendingSyncConflictCount $localRoot) -eq 1) 'Duplicate archives must count once'
     Set-Choices @(2,0)
     Assert-True ((Import-SyncRecord $archive $destination $localRoot -Archived) -eq 'Kept') 'Expected keep local'
     Set-Choices @()
     Assert-True ((Import-SyncRecord $source $destination $localRoot) -eq 'Unchanged') 'Keep decision should be remembered'
+    Assert-True ((Get-PendingSyncConflictCount $localRoot) -eq 0) 'Resolved conflicts must disappear from count'
 
     $incoming.comment = 'third'
     Write-SyncJson $source $incoming

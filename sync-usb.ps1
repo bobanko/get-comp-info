@@ -5,20 +5,6 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'console-ui.ps1')
 . (Join-Path $PSScriptRoot 'sync-merge.ps1')
 
-function Assert-NoLink {
-    param([string]$Path)
-    $itemPath = [IO.Path]::GetFullPath($Path)
-    while ($itemPath) {
-        if (Test-Path -LiteralPath $itemPath) {
-            $item = Get-Item -LiteralPath $itemPath -Force
-            if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
-                throw "Ссылки на файлы и папки не поддерживаются: $itemPath"
-            }
-        }
-        $itemPath = Split-Path -Parent $itemPath
-    }
-}
-
 function Copy-Verified {
     param([string]$Source, [string]$Destination)
     Assert-NoLink $Source
