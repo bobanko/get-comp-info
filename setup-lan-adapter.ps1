@@ -196,6 +196,17 @@ $locations = @(
         FirstHostOctet   = 66
         LastHostOctet    = 70
     }
+    [pscustomobject]@{
+        Name             = "Корпус Д"
+        ThirdOctet       = 5
+        SubnetOptions    = @(116)
+        PrefixLength     = 25
+        SubnetMask       = "255.255.255.128"
+        GatewayOctet     = 129
+        DnsServers       = @("10.9.0.1", "10.9.0.2")
+        FirstHostOctet   = 130
+        LastHostOctet    = 254
+    }
 )
 
 function Show-ToolHeader {
@@ -400,12 +411,6 @@ $locationMenuItems = foreach ($item in $locations) {
 }
 # 20 is the usual network; 21 and 22 use the same host portion and settings.
 $subnetOptions = @(20, 21, 22)
-$subnetMenuItems = foreach ($subnet in $subnetOptions) {
-    [pscustomobject]@{
-        Label = "$subnet"
-        Value = $subnet
-    }
-}
 
 $adapterMenuItems = $null
 $script:wizardSelection = [ordered]@{
@@ -445,6 +450,14 @@ function Show-WizardSelection {
     $script:wizardSelection.SecondOctet = $null
     $script:wizardSelection.Adapter = $null
     $script:wizardSelection.IpAddress = $null
+
+    $locationSubnets = if ($location.SubnetOptions) { $location.SubnetOptions } else { $subnetOptions }
+    $subnetMenuItems = @(foreach ($subnet in $locationSubnets) {
+        [pscustomobject]@{
+            Label = "$subnet"
+            Value = $subnet
+        }
+    })
 
     :segmentSelection while ($true) {
         $secondOctet = Select-MenuItem -Step "Шаг 2 из 5" -Description "Выберите сегмент сети." -Items $subnetMenuItems
