@@ -1,7 +1,9 @@
-[CmdletBinding()]
-param([string]$UsbPath)
+﻿[CmdletBinding()]
+param([string]$UsbPath = 'E:\COMP-INFO', [switch]$ReviewConflicts)
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'console-ui.ps1')
+. (Join-Path $PSScriptRoot 'sync-merge.ps1')
 
 function Assert-NoLink {
     param([string]$Path)
@@ -10,7 +12,7 @@ function Assert-NoLink {
         if (Test-Path -LiteralPath $itemPath) {
             $item = Get-Item -LiteralPath $itemPath -Force
             if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
-                throw "Links are not supported: $itemPath"
+                throw "Ссылки на файлы и папки не поддерживаются: $itemPath"
             }
         }
         $itemPath = Split-Path -Parent $itemPath
@@ -24,75 +26,71 @@ function Copy-Verified {
     $sourceHash = (Get-FileHash -LiteralPath $Source -Algorithm SHA256).Hash
     Copy-Item -LiteralPath $Source -Destination $Destination -Force
     if ((Get-FileHash -LiteralPath $Destination -Algorithm SHA256).Hash -ne $sourceHash) {
-        throw "Copy verification failed: $Destination"
+        throw "Не удалось проверить копию: $Destination"
     }
 }
 
 try {
     if ([string]::IsNullOrWhiteSpace($UsbPath)) {
-        $UsbPath = Read-Host 'USB project folder (example: E:\get-comp-info)'
+        $UsbPath = 'E:\COMP-INFO'
     }
-    if ([string]::IsNullOrWhiteSpace($UsbPath)) { throw 'USB path is required.' }
     $UsbPath = $UsbPath.Trim().Trim('"')
     if (-not [IO.Path]::IsPathRooted($UsbPath) -or $UsbPath -match '^[A-Za-z]:[^\\/]') {
-        throw 'Enter an absolute folder path.'
+        throw 'Укажите абсолютный путь к папке.'
     }
     $localRoot = [IO.Path]::GetFullPath($PSScriptRoot).TrimEnd('\', '/')
     $usbRoot = [IO.Path]::GetFullPath($UsbPath).TrimEnd('\', '/')
     if ($usbRoot -eq [IO.Path]::GetPathRoot($UsbPath).TrimEnd('\', '/')) {
-        throw 'Choose a project folder, not the drive root.'
+        throw 'Укажите папку программы, а не корень диска.'
     }
     if ($usbRoot -eq $localRoot -or
         $usbRoot.StartsWith($localRoot + '\', [StringComparison]::OrdinalIgnoreCase) -or
         $localRoot.StartsWith($usbRoot + '\', [StringComparison]::OrdinalIgnoreCase)) {
-        throw 'The local and USB folders must be separate and must not contain each other.'
+        throw 'Локальная папка и папка флешки должны быть раздельными и не содержать друг друга.'
     }
     Assert-NoLink $localRoot
-    Assert-NoLink $usbRoot
+    if (-not $ReviewConflicts) { Assert-NoLink $usbRoot }
     $localData = Join-Path $localRoot 'data'
     $usbData = Join-Path $usbRoot 'data'
     $conflictRoot = Join-Path $localRoot 'sync-conflicts'
-    foreach ($path in @($localData, $usbData, $conflictRoot)) { Assert-NoLink $path }
+    foreach ($path in @($localData, $conflictRoot)) { Assert-NoLink $path }
+    if (-not $ReviewConflicts) { Assert-NoLink $usbData }
 
     # Only the portable application's root scripts are deployed.
     $programFiles = @(Get-ChildItem -LiteralPath $localRoot -File | Where-Object {
         $_.Extension -in @('.ps1', '.bat', '.cmd')
     })
+    if ($ReviewConflicts) { $programFiles = @() }
     foreach ($file in $programFiles) {
         Assert-NoLink $file.FullName
         Assert-NoLink (Join-Path $usbRoot $file.Name)
     }
-    New-Item -ItemType Directory -Path $usbRoot -Force | Out-Null
+    if (-not $ReviewConflicts) { New-Item -ItemType Directory -Path $usbRoot -Force | Out-Null }
     New-Item -ItemType Directory -Path $localData -Force | Out-Null
-    $added = 0
-    $unchanged = 0
-    $conflicts = 0
+    $counts = @{ Added = 0; Unchanged = 0; Merged = 0; Kept = 0; Deferred = 0 }
     $updated = 0
 
-    if (Test-Path -LiteralPath $usbData) {
-        foreach ($file in Get-ChildItem -LiteralPath $usbData -Filter '*.json' -File) {
-            Assert-NoLink $file.FullName
-            $destination = Join-Path $localData $file.Name
-            Assert-NoLink $destination
-            if (-not (Test-Path -LiteralPath $destination)) {
-                Copy-Verified $file.FullName $destination
-                $added++
-            } else {
-                $usbHash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
-                if ($usbHash -eq (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash) {
-                    $unchanged++
-                } else {
-                    # Keep conflicts outside data so the viewer does not show duplicates.
-                    $folder = Join-Path $conflictRoot $file.BaseName
-                    Assert-NoLink $folder
-                    New-Item -ItemType Directory -Path $folder -Force | Out-Null
-                    $copy = Join-Path $folder ($usbHash + '.json')
-                    Copy-Verified $file.FullName $copy
-                    Write-Warning "Conflict: $($file.Name). Local record retained; USB version: $copy"
-                    $conflicts++
-                }
-            }
+    $sources = @()
+    if (-not $ReviewConflicts -and (Test-Path -LiteralPath $usbData)) {
+        $sources += @(Get-ChildItem -LiteralPath $usbData -Filter '*.json' -File | Sort-Object Name | ForEach-Object {
+            [pscustomobject]@{ Path = $_.FullName; FileName = $_.Name; Archived = $false }
+        })
+    }
+    if (Test-Path -LiteralPath $conflictRoot) {
+        foreach ($folder in Get-ChildItem -LiteralPath $conflictRoot -Directory | Sort-Object Name) {
+            Assert-NoLink $folder.FullName
+            $sources += @(Get-ChildItem -LiteralPath $folder.FullName -Filter '*.json' -File | Sort-Object LastWriteTime | ForEach-Object {
+                [pscustomobject]@{ Path = $_.FullName; FileName = $folder.Name + '.json'; Archived = $true }
+            })
         }
+    }
+    $seen = @{}
+    foreach ($source in $sources) {
+        $key = $source.FileName + ':' + (Get-SyncHash (Get-CanonicalJson (Read-SyncRecord $source.Path)))
+        if ($seen.ContainsKey($key)) { continue }
+        $seen[$key] = $true
+        $status = Import-SyncRecord -Source $source.Path -Destination (Join-Path $localData $source.FileName) -LocalRoot $localRoot -Archived:$source.Archived
+        $counts[$status]++
     }
 
     # Update code only after all collected records have been copied successfully.
@@ -104,11 +102,12 @@ try {
         Copy-Verified $file.FullName $destination
         $updated++
     }
-    Write-Host "Done. New records: $added; unchanged: $unchanged; conflicts: $conflicts; program files updated: $updated."
-    Write-Host 'USB records were retained. No files were deleted.'
-    if ($conflicts -gt 0) { Write-Host "Review USB versions in: $conflictRoot" }
+    Write-Host "Готово. Добавлено: $($counts.Added); обновлено: $($counts.Merged); оставлено локальных: $($counts.Kept); без изменений / уже разобрано: $($counts.Unchanged); отложено: $($counts.Deferred)." -ForegroundColor Green
+    if (-not $ReviewConflicts) { Write-Host "Обновлено файлов программы: $updated. Данные на флешке сохранены." }
+    if ($counts.Deferred -gt 0) { Write-Host 'Чтобы продолжить, выберите в главном меню «Разобрать конфликты синхронизации». Флешка не нужна.' -ForegroundColor Yellow }
+    if ($counts.Merged -gt 0) { Write-Host 'Предыдущие локальные версии сохранены в sync-backups.' }
     exit 0
 } catch {
-    Write-Error "Sync stopped: $($_.Exception.Message)" -ErrorAction Continue
+    Write-Error "Синхронизация остановлена: $($_.Exception.Message)" -ErrorAction Continue
     exit 1
 }
