@@ -6,6 +6,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "console-ui.ps1")
+. (Join-Path $PSScriptRoot "lan-profiles.ps1")
 
 function Invoke-QuickPing {
     param([string]$Label, [string]$Address)
@@ -86,7 +87,10 @@ function Invoke-QuickPingSequence {
     for ($i = 0; $i -lt $dnsServers.Count; $i++) {
         if (-not (Invoke-QuickPing -Label ("DNS {0}" -f ($i + 1)) -Address $dnsServers[$i])) { return $false }
     }
-    return (Invoke-QuickPing -Label 'Домен' -Address 'dc.example.local')
+    if (Test-ConfiguredLanAddress -Address $localAddress) {
+        return (Invoke-QuickPing -Label 'Домен' -Address 'dc.example.local')
+    }
+    return (Invoke-QuickPing -Label 'Интернет' -Address '1.1.1.1')
 }
 
 Write-ToolboxHeader -Section ' / быстрый ping'
