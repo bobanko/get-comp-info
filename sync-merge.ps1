@@ -169,7 +169,18 @@ function Get-SyncComparisonLines {
         if ($width -gt 40) { $valueWidth = [Math]::Max(8, [int][Math]::Floor(($width - $labelWidth - 7) / 2)) }
     } catch { }
     $format = '{0,-' + $labelWidth + '} | {1,-' + $valueWidth + '} | {2}'
-    [pscustomobject]@{ Text = $format -f 'Поле', 'На компьютере', $RightLabel; Color = 'Gray' }
+    $computerHeader = ([char]::ConvertFromUtf32(0x1F4BB)) + ' На компьютере'
+    $incomingHeader = if ($RightLabel -eq 'С флешки') { ([char]::ConvertFromUtf32(0x1F4BE)) + ' ' + $RightLabel } else { $RightLabel }
+    [pscustomobject]@{
+        Text = $format -f 'Поле', $computerHeader, $incomingHeader
+        Color = 'Gray'
+        Parts = @(
+            [pscustomobject]@{ Text = ('{0,-' + $labelWidth + '} | ') -f 'Поле'; Color = 'Gray' }
+            [pscustomobject]@{ Text = ('{0,-' + $valueWidth + '}') -f $computerHeader; Color = 'Cyan' }
+            [pscustomobject]@{ Text = ' | '; Color = 'Gray' }
+            [pscustomobject]@{ Text = $incomingHeader; Color = if ($RightLabel -eq 'С флешки') { 'Magenta' } else { 'Gray' } }
+        )
+    }
     [pscustomobject]@{ Text = ('-' * $labelWidth) + '-+-' + ('-' * $valueWidth) + '-+-' + ('-' * $valueWidth); Color = 'DarkGray' }
     foreach ($name in $Fields) {
         $columns = @(
@@ -179,14 +190,49 @@ function Get-SyncComparisonLines {
         )
         $height = ($columns | ForEach-Object { $_.Count } | Measure-Object -Maximum).Maximum
         $color = if ($changed -contains $name) { 'Yellow' } else { 'DarkGray' }
+        $localColor = $incomingColor = $color
+        if ($changed -contains $name -and $name -match 'At$') {
+            $localDate = $incomingDate = [DateTimeOffset]::MinValue
+            $culture = [Globalization.CultureInfo]::InvariantCulture
+            $styles = [Globalization.DateTimeStyles]::AssumeUniversal
+            if ([DateTimeOffset]::TryParse([string]$Local.$name, $culture, $styles, [ref]$localDate) -and
+                [DateTimeOffset]::TryParse([string]$Incoming.$name, $culture, $styles, [ref]$incomingDate)) {
+                if ($localDate -gt $incomingDate) { $localColor = 'Green'; $incomingColor = 'Red' }
+                elseif ($incomingDate -gt $localDate) { $localColor = 'Red'; $incomingColor = 'Green' }
+            }
+        }
         for ($row = 0; $row -lt $height; $row++) {
             $cells = foreach ($column in $columns) {
                 if ($row -lt $column.Count) { $column[$row] } else { '' }
             }
-            [pscustomobject]@{ Text = $format -f $cells[0], $cells[1], $cells[2]; Color = $color }
+            [pscustomobject]@{
+                Text = $format -f $cells[0], $cells[1], $cells[2]
+                Color = $color
+                Parts = @(
+                    [pscustomobject]@{ Text = ('{0,-' + $labelWidth + '} | ') -f $cells[0]; Color = $color }
+                    [pscustomobject]@{ Text = ('{0,-' + $valueWidth + '}') -f $cells[1]; Color = $localColor }
+                    [pscustomobject]@{ Text = ' | '; Color = $color }
+                    [pscustomobject]@{ Text = $cells[2]; Color = $incomingColor }
+                )
+            }
         }
     }
     [pscustomobject]@{ Text = 'Изменённые значения выделены жёлтым.'; Color = 'Gray' }
+    [pscustomobject]@{ Text = 'Для разных дат: более новая — зелёным, более старая — красным.'; Color = 'Gray' }
+}
+
+function Write-SyncActionItem {
+    param([string]$Text, [string]$Color)
+    $offset = 0
+    foreach ($match in [regex]::Matches($Text, '(?i)компьютер\w*|флешк\w*')) {
+        Write-Host $Text.Substring($offset, $match.Index - $offset) -NoNewline -ForegroundColor $Color
+        $isComputer = $match.Value -match '^компьютер'
+        $sourceColor = if ($isComputer) { 'Cyan' } else { 'Magenta' }
+        $icon = if ($isComputer) { [char]::ConvertFromUtf32(0x1F4BB) } else { [char]::ConvertFromUtf32(0x1F4BE) }
+        Write-Host "$icon $($match.Value)" -NoNewline -ForegroundColor $sourceColor
+        $offset = $match.Index + $match.Length
+    }
+    Write-Host $Text.Substring($offset) -ForegroundColor $Color
 }
 
 function Split-SyncTableCell {
@@ -212,13 +258,17 @@ function Select-SyncAction {
         Write-Host ''
         foreach ($line in $Lines) {
             if ($line -is [string]) { Write-Host $line }
+            elseif ($line.Parts) {
+                foreach ($part in $line.Parts) { Write-Host $part.Text -NoNewline -ForegroundColor $part.Color }
+                Write-Host ''
+            }
             else { Write-Host $line.Text -ForegroundColor $line.Color }
         }
         Write-Host ''
         for ($i = 0; $i -lt $Items.Count; $i++) {
             $marker = if ($i -eq $selected) { '>' } else { ' ' }
             $color = if ($i -eq $selected) { 'Cyan' } else { 'Gray' }
-            Write-Host "$marker $($Items[$i])" -ForegroundColor $color
+            Write-SyncActionItem -Text "$marker $($Items[$i])" -Color $color
         }
         switch ([Console]::ReadKey($true).Key) {
             'UpArrow' { $selected = ($selected - 1 + $Items.Count) % $Items.Count }
@@ -235,7 +285,7 @@ function Resolve-SyncRecord {
     $title = "$($Local.hostname) — $FileName"
     $lines = @(Get-SyncComparisonLines $Local $Incoming)
     while ($true) {
-        $action = Select-SyncAction $title $lines @('Выбрать значения по полям', 'Принять запись с флешки', 'Оставить локальную запись', 'Отложить')
+        $action = Select-SyncAction $title $lines @('Выбрать значения по полям', 'Принять запись с флешки', 'Оставить запись на компьютере', 'Отложить')
         if ($action -eq 3) { return $null }
         $result = $Local
         if ($action -eq 1) { $result = $Incoming }
@@ -245,7 +295,7 @@ function Resolve-SyncRecord {
             while ($index -lt $fields.Count) {
                 $name = $fields[$index]
                 $detail = @(Get-SyncComparisonLines $Local $Incoming -Fields @($name))
-                $pick = Select-SyncAction "$title | Поле $($index + 1) из $($fields.Count): $(Get-SyncFieldLabel $name)" $detail @('Оставить локальное значение', 'Принять значение с флешки') -AllowBack
+                $pick = Select-SyncAction "$title | Поле $($index + 1) из $($fields.Count): $(Get-SyncFieldLabel $name)" $detail @('Оставить значение на компьютере', 'Принять значение с флешки') -AllowBack
                 if ($pick -eq -1) {
                     if ($index -eq 0) { break }
                     $index--
