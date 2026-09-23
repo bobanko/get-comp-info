@@ -1,6 +1,7 @@
 ﻿[CmdletBinding()]
 param(
     [switch]$ApplyConfiguration,
+    [switch]$ApplyDhcp,
     [int]$ApplyInterfaceIndex,
     [string]$ApplyIpAddress,
     [int]$ApplyPrefixLength,
@@ -37,7 +38,8 @@ function Invoke-NetworkConfiguration {
         [string]$IpAddress,
         [int]$PrefixLength,
         [string]$Gateway,
-        [string[]]$DnsServers
+        [string[]]$DnsServers,
+        [switch]$UseDhcp
     )
 
     try {
@@ -54,6 +56,26 @@ function Invoke-NetworkConfiguration {
         catch {
             throw "Не удалось включить адаптер '$($networkAdapter.Name)': $($_.Exception.Message)"
         }
+    }
+
+    if ($UseDhcp) {
+        try {
+            # Clear saved static settings as well as the currently active ones.
+            foreach ($store in @('PersistentStore', 'ActiveStore')) {
+                Get-NetRoute -PolicyStore $store -ErrorAction Stop |
+                    Where-Object { $_.InterfaceIndex -eq $InterfaceIndex -and $_.AddressFamily -eq 'IPv4' -and $_.DestinationPrefix -eq '0.0.0.0/0' -and $_.Protocol -eq 'NetMgmt' } |
+                    Remove-NetRoute -Confirm:$false -ErrorAction Stop
+                Get-NetIPAddress -PolicyStore $store -ErrorAction Stop |
+                    Where-Object { $_.InterfaceIndex -eq $InterfaceIndex -and $_.AddressFamily -eq 'IPv4' -and $_.PrefixOrigin -eq 'Manual' } |
+                    Remove-NetIPAddress -Confirm:$false -ErrorAction Stop
+            }
+            Set-NetIPInterface -InterfaceIndex $InterfaceIndex -AddressFamily IPv4 -Dhcp Enabled -ErrorAction Stop
+            Set-DnsClientServerAddress -InterfaceIndex $InterfaceIndex -ResetServerAddresses -ErrorAction Stop
+        }
+        catch {
+            throw "Не удалось полностью включить автоматическую настройку адаптера '$($networkAdapter.Name)': $($_.Exception.Message)"
+        }
+        return
     }
 
     try {
@@ -89,7 +111,7 @@ function Invoke-NetworkConfiguration {
 
 if ($ApplyConfiguration) {
     try {
-        Invoke-NetworkConfiguration -InterfaceIndex $ApplyInterfaceIndex -IpAddress $ApplyIpAddress -PrefixLength $ApplyPrefixLength -Gateway $ApplyGateway -DnsServers ($ApplyDnsServers -split ',')
+        Invoke-NetworkConfiguration -InterfaceIndex $ApplyInterfaceIndex -IpAddress $ApplyIpAddress -PrefixLength $ApplyPrefixLength -Gateway $ApplyGateway -DnsServers ($ApplyDnsServers -split ',') -UseDhcp:$ApplyDhcp
         exit 0
     }
     catch {
@@ -112,11 +134,12 @@ function Invoke-SelectedNetworkConfiguration {
         [string]$IpAddress,
         [int]$PrefixLength,
         [string]$Gateway,
-        [string[]]$DnsServers
+        [string[]]$DnsServers,
+        [switch]$UseDhcp
     )
 
     if ($isAdministrator) {
-        Invoke-NetworkConfiguration -InterfaceIndex $Adapter.ifIndex -IpAddress $IpAddress -PrefixLength $PrefixLength -Gateway $Gateway -DnsServers $DnsServers
+        Invoke-NetworkConfiguration -InterfaceIndex $Adapter.ifIndex -IpAddress $IpAddress -PrefixLength $PrefixLength -Gateway $Gateway -DnsServers $DnsServers -UseDhcp:$UseDhcp
         return
     }
 
@@ -128,12 +151,19 @@ function Invoke-SelectedNetworkConfiguration {
         "-File", ('"{0}"' -f $PSCommandPath),
         "-ApplyConfiguration",
         "-ApplyInterfaceIndex", $Adapter.ifIndex,
-        "-ApplyIpAddress", ('"{0}"' -f $IpAddress),
-        "-ApplyPrefixLength", $PrefixLength,
-        "-ApplyGateway", ('"{0}"' -f $Gateway),
-        "-ApplyDnsServers", ('"{0}"' -f ($DnsServers -join ',')),
         "-ApplyErrorFile", ('"{0}"' -f $errorFile)
     )
+    if ($UseDhcp) {
+        $elevatedArguments += '-ApplyDhcp'
+    }
+    else {
+        $elevatedArguments += @(
+            '-ApplyIpAddress', ('"{0}"' -f $IpAddress),
+            '-ApplyPrefixLength', $PrefixLength,
+            '-ApplyGateway', ('"{0}"' -f $Gateway),
+            '-ApplyDnsServers', ('"{0}"' -f ($DnsServers -join ','))
+        )
+    }
 
     try {
         $elevatedProcess = Start-Process -FilePath "powershell.exe" -Verb RunAs -WindowStyle Hidden -ArgumentList $elevatedArguments -Wait -PassThru
@@ -154,60 +184,7 @@ function Invoke-SelectedNetworkConfiguration {
     }
 }
 
-# The gateway belongs to the same subnet; reserve it and only allow usable host IPs.
-$locations = @(
-    [pscustomobject]@{
-        Name             = "Корпус А"
-        ThirdOctet       = 1
-        PrefixLength     = 25
-        SubnetMask       = "255.255.255.128"
-        GatewayOctet     = 129
-        DnsServers       = @("10.9.0.1", "10.9.0.2")
-        FirstHostOctet   = 130
-        LastHostOctet    = 254
-    },
-    [pscustomobject]@{
-        Name             = "Корпус Б"
-        ThirdOctet       = 2
-        PrefixLength     = 27
-        SubnetMask       = "255.255.255.224"
-        GatewayOctet     = 65
-        DnsServers       = @("10.9.0.1", "10.9.0.2")
-        FirstHostOctet   = 66
-        LastHostOctet    = 94
-    },
-    [pscustomobject]@{
-        Name             = "Корпус В"
-        ThirdOctet       = 3
-        PrefixLength     = 28
-        SubnetMask       = "255.255.255.240"
-        GatewayOctet     = 97
-        DnsServers       = @("10.9.0.1", "10.9.0.2")
-        FirstHostOctet   = 98
-        LastHostOctet    = 110
-    }
-    [pscustomobject]@{
-        Name             = "Корпус Г"
-        ThirdOctet       = 4
-        PrefixLength     = 29
-        SubnetMask       = "255.255.255.248"
-        GatewayOctet     = 65
-        DnsServers       = @("10.9.0.1", "10.9.0.2")
-        FirstHostOctet   = 66
-        LastHostOctet    = 70
-    }
-    [pscustomobject]@{
-        Name             = "Корпус Д"
-        ThirdOctet       = 5
-        SubnetOptions    = @(20)
-        PrefixLength     = 25
-        SubnetMask       = "255.255.255.128"
-        GatewayOctet     = 129
-        DnsServers       = @("10.9.0.1", "10.9.0.2")
-        FirstHostOctet   = 130
-        LastHostOctet    = 254
-    }
-)
+. (Join-Path $PSScriptRoot "lan-profiles.ps1")
 
 function Show-ToolHeader {
     param([string]$WizardStep)
@@ -409,8 +386,11 @@ $locationMenuItems = foreach ($item in $locations) {
         Value      = $item
     }
 }
-# 20 is the usual network; 21 and 22 use the same host portion and settings.
-$subnetOptions = @(20, 21, 22)
+$locationMenuItems = @($locationMenuItems) + [pscustomobject]@{
+    Label = 'Интернет — автоматически (DHCP), сброс IP, шлюза и DNS'
+    Value = [pscustomobject]@{ Name = 'Интернет (DHCP)'; UseDhcp = $true }
+}
+
 
 $adapterMenuItems = $null
 $script:wizardSelection = [ordered]@{
@@ -426,7 +406,12 @@ function Show-WizardSelection {
     }
 
     $location = $script:wizardSelection.Location
-    Write-Host "Корпус: $($location.Name) $($location.ThirdOctet)" -ForegroundColor DarkGray
+    if ($location.UseDhcp) {
+        Write-Host 'Режим: IP, шлюз и DNS автоматически от роутера (DHCP)' -ForegroundColor DarkGray
+    }
+    else {
+        Write-Host "Корпус: $($location.Name) $($location.ThirdOctet)" -ForegroundColor DarkGray
+    }
 
     if ($null -ne $script:wizardSelection.SecondOctet) {
         Write-Host "Сегмент сети: $($script:wizardSelection.SecondOctet)" -ForegroundColor DarkGray
@@ -440,7 +425,7 @@ function Show-WizardSelection {
 }
 
 :locationSelection while ($true) {
-    $location = Select-MenuItem -Step "Шаг 1 из 5" -Description "Выберите корпус." -Items $locationMenuItems -EscapeHint "[Esc] — вернуться в главное меню."
+    $location = Select-MenuItem -Step "Выбор сети" -Description "Выберите корпус или автоматическую настройку для интернета." -Items $locationMenuItems -EscapeHint "[Esc] — вернуться в главное меню."
     if ($null -eq $location) {
         # The launcher recognizes this as a normal direct return to its menu.
         exit 42
@@ -450,6 +435,7 @@ function Show-WizardSelection {
     $script:wizardSelection.SecondOctet = $null
     $script:wizardSelection.Adapter = $null
     $script:wizardSelection.IpAddress = $null
+    $useDhcp = [bool]$location.UseDhcp
 
     $locationSubnets = if ($location.SubnetOptions) { $location.SubnetOptions } else { $subnetOptions }
     $subnetMenuItems = @(foreach ($subnet in $locationSubnets) {
@@ -460,8 +446,10 @@ function Show-WizardSelection {
     })
 
     :segmentSelection while ($true) {
-        $secondOctet = Select-MenuItem -Step "Шаг 2 из 5" -Description "Выберите сегмент сети." -Items $subnetMenuItems
-        if ($null -eq $secondOctet) {
+        $secondOctet = if ($useDhcp) { $null } else {
+            Select-MenuItem -Step "Шаг 2 из 5" -Description "Выберите сегмент сети." -Items $subnetMenuItems
+        }
+        if (-not $useDhcp -and $null -eq $secondOctet) {
             $script:wizardSelection.SecondOctet = $null
             $script:wizardSelection.Adapter = $null
             $script:wizardSelection.IpAddress = $null
@@ -499,7 +487,8 @@ function Show-WizardSelection {
         }
 
         Clear-Host
-        Show-ToolHeader -WizardStep "Шаг 3 из 5"
+        $adapterStep = if ($useDhcp) { 'Шаг 2 из 3' } else { 'Шаг 3 из 5' }
+        Show-ToolHeader -WizardStep $adapterStep
         :adapterSelection while ($true) {
             $hasSingleAdapter = $adapterMenuItems.Count -eq 1
             if ($hasSingleAdapter) {
@@ -509,16 +498,31 @@ function Show-WizardSelection {
                 Write-Host (" " + $adapterMenuItems[0].StatusText) -ForegroundColor $adapterMenuItems[0].StatusColor
             }
             else {
-                $adapter = Select-MenuItem -Step "Шаг 3 из 5" -Description "Выберите сетевой адаптер." -Items $adapterMenuItems
+                $adapter = Select-MenuItem -Step $adapterStep -Description "Выберите сетевой адаптер." -Items $adapterMenuItems
                 if ($null -eq $adapter) {
                     $script:wizardSelection.Adapter = $null
                     $script:wizardSelection.IpAddress = $null
+                    if ($useDhcp) { continue locationSelection }
                     continue segmentSelection
                 }
             }
 
             $script:wizardSelection.Adapter = $adapter
             $script:wizardSelection.IpAddress = $null
+
+            if ($useDhcp) {
+                Clear-Host
+                Show-ToolHeader -WizardStep 'Шаг 3 из 3'
+                Write-ToolboxHint '[↲ Enter] — применить настройки, [Esc] — назад.'
+                Write-Host "Адаптер: $($adapter.Name)" -ForegroundColor DarkGray
+                Write-Host 'Статические IPv4-адреса, шлюз и вручную заданные DNS будут сброшены.' -ForegroundColor Yellow
+                Write-Host 'IP-адрес, маска, шлюз и DNS: автоматически от роутера (DHCP).' -ForegroundColor Cyan
+                Write-Host 'Текущее сетевое подключение может временно прерваться.' -ForegroundColor Yellow
+                if (Confirm-Configuration) { break locationSelection }
+                $script:wizardSelection.Adapter = $null
+                if ($hasSingleAdapter) { continue locationSelection }
+                continue adapterSelection
+            }
 
             Clear-Host
             :ipSelection while ($true) {
@@ -546,14 +550,22 @@ function Show-WizardSelection {
 }
 
 try {
-    Invoke-SelectedNetworkConfiguration -Adapter $adapter -IpAddress $ipAddress -PrefixLength $location.PrefixLength -Gateway $gateway -DnsServers $location.DnsServers
+    if ($useDhcp) {
+        Invoke-SelectedNetworkConfiguration -Adapter $adapter -UseDhcp
+    }
+    else {
+        Invoke-SelectedNetworkConfiguration -Adapter $adapter -IpAddress $ipAddress -PrefixLength $location.PrefixLength -Gateway $gateway -DnsServers $location.DnsServers
+    }
 }
 catch {
-    Write-Host "`nНастройки сети не были применены: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "`nНе удалось завершить настройку сети: $($_.Exception.Message)" -ForegroundColor Red
     exit 1
 }
 
 Write-Host "`n$emojiSuccess Настройки сети успешно применены." -ForegroundColor Green
+if ($useDhcp) {
+    Write-Host 'Включено автоматическое получение IP и DNS. Получение настроек от роутера может занять некоторое время.' -ForegroundColor Cyan
+}
 $appliedConfiguration = Get-NetIPConfiguration -InterfaceIndex $adapter.ifIndex
 Write-Host "  Адаптер:  $($appliedConfiguration.InterfaceAlias)"
 Write-Host "  IPv4:     $($appliedConfiguration.IPv4Address.IPAddress)"

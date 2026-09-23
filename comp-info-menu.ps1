@@ -10,7 +10,7 @@
 $menuItems = @(
     [PSCustomObject]@{ Title = "🖥️ Собрать информацию о компьютере"; Script = "get-comp-info.ps1" }
     [PSCustomObject]@{ Title = "🌐 Настроить LAN-адаптер (IP-адрес, маска подсети, DNS)"; Script = "setup-lan-adapter.ps1" }
-    [PSCustomObject]@{ Title = "📡 Быстрый ping (свой IP, шлюз, DNS, домен)"; Script = "quick-ping.ps1" }
+    [PSCustomObject]@{ Title = "📡 Быстрый ping (свой IP, шлюз, DNS, домен/интернет)"; Script = "quick-ping.ps1" }
     [PSCustomObject]@{ Title = "🗃️ Просмотреть сохранённую информацию"; Script = "view-comp-info.ps1" }
     [PSCustomObject]@{ Title = "🔑 Серийные номера USB-накопителей"; Script = "get-usb-serial.ps1" }
     [PSCustomObject]@{ Title = "📤 Экспортировать все устройства в CSV"; Script = "export-comp-info.ps1" }
