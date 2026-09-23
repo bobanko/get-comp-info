@@ -1,9 +1,61 @@
 ﻿[CmdletBinding()]
-param([string]$UsbPath = 'E:\COMP-INFO', [switch]$ReviewConflicts, [string]$ComputerPath)
+param([string]$UsbPath, [switch]$ReviewConflicts, [string]$ComputerPath)
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'console-ui.ps1')
 . (Join-Path $PSScriptRoot 'sync-merge.ps1')
+
+function Get-UsbProgramPaths {
+    param([string]$LaunchRoot)
+
+    # Some USB disks are reported as fixed disks, so include their partitions too.
+    $roots = @([IO.DriveInfo]::GetDrives() | Where-Object {
+        $_.IsReady -and $_.DriveType -eq [IO.DriveType]::Removable
+    } | ForEach-Object { $_.RootDirectory.FullName })
+    try {
+        $roots += @(Get-Disk -ErrorAction Stop | Where-Object { $_.BusType -eq 'USB' } |
+            Get-Partition -ErrorAction Stop | Where-Object { $_.DriveLetter } |
+            ForEach-Object { '{0}:\' -f $_.DriveLetter })
+    }
+    catch { # Removable-drive discovery still works if Storage cmdlets are unavailable.
+    }
+    foreach ($root in @($roots | Sort-Object -Unique)) {
+        if (-not (Test-Path -LiteralPath $root -PathType Container)) { continue }
+        $folders = @(Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue |
+            Where-Object {
+                -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -and
+                ($_.Name -ieq 'COMP-INFO' -or
+                    (Test-Path -LiteralPath (Join-Path $_.FullName 'sync-usb.ps1') -PathType Leaf))
+            } | ForEach-Object { $_.FullName.TrimEnd('\', '/') })
+        if ($folders.Count -eq 0) { $folders = @(Join-Path $root 'COMP-INFO') }
+        $folders | Where-Object { $_ -ne $LaunchRoot }
+    }
+}
+
+function Select-UsbProgramPath {
+    param([string]$LaunchRoot)
+    $candidates = @(Get-UsbProgramPaths -LaunchRoot $LaunchRoot | Sort-Object -Unique)
+    if ($candidates.Count -eq 1) { return $candidates[0] }
+    if ($candidates.Count -gt 1) {
+        Write-Host 'Найдено несколько папок на USB. Выберите нужную:' -ForegroundColor Yellow
+        for ($i = 0; $i -lt $candidates.Count; $i++) {
+            Write-Host ('  {0}. {1}' -f ($i + 1), $candidates[$i])
+        }
+    }
+    else {
+        Write-Host 'Флешка не найдена автоматически. Подключите её и укажите путь к папке программы.' -ForegroundColor Yellow
+    }
+    while ($true) {
+        $answer = (Read-Host 'Номер из списка или полный путь (Enter — отмена)').Trim().Trim('"')
+        if ([string]::IsNullOrWhiteSpace($answer)) { throw 'Выбор папки флешки отменён.' }
+        $number = 0
+        if ([int]::TryParse($answer, [ref]$number)) {
+            if ($number -ge 1 -and $number -le $candidates.Count) { return $candidates[$number - 1] }
+        }
+        elseif ([IO.Path]::IsPathRooted($answer) -and $answer -notmatch '^[A-Za-z]:[^\\/]') { return $answer }
+        Write-Host 'Введите номер из списка или абсолютный путь к папке.' -ForegroundColor Red
+    }
+}
 
 function Copy-Verified {
     param([string]$Source, [string]$Destination)
@@ -25,15 +77,15 @@ try {
         Write-Host 'Синхронизация началась. Проверяю папки и собираю список файлов...' -ForegroundColor Yellow
     }
     Write-Host ''
-    if ([string]::IsNullOrWhiteSpace($UsbPath)) {
-        $UsbPath = 'E:\COMP-INFO'
-    }
-    $UsbPath = $UsbPath.Trim().Trim('"')
-    if (-not [IO.Path]::IsPathRooted($UsbPath) -or $UsbPath -match '^[A-Za-z]:[^\\/]') {
-        throw 'Укажите абсолютный путь к папке.'
-    }
     $launchRoot = [IO.Path]::GetFullPath($PSScriptRoot).TrimEnd('\', '/')
-    $usbRoot = [IO.Path]::GetFullPath($UsbPath).TrimEnd('\', '/')
+    $usbRoot = $null
+    if (-not [string]::IsNullOrWhiteSpace($UsbPath)) {
+        $UsbPath = $UsbPath.Trim().Trim('"')
+        if (-not [IO.Path]::IsPathRooted($UsbPath) -or $UsbPath -match '^[A-Za-z]:[^\\/]') {
+            throw 'Укажите абсолютный путь к папке.'
+        }
+        $usbRoot = [IO.Path]::GetFullPath($UsbPath).TrimEnd('\', '/')
+    }
     if ([string]::IsNullOrWhiteSpace($ComputerPath)) {
         $launchDrive = [IO.DriveInfo]::new([IO.Path]::GetPathRoot($launchRoot))
         $fromUsb = $launchRoot -eq $usbRoot -or
@@ -60,16 +112,22 @@ try {
     if ($launchRoot -ne $localRoot -and -not $PSBoundParameters.ContainsKey('UsbPath')) {
         $usbRoot = $launchRoot
     }
-    if ($usbRoot -eq [IO.Path]::GetPathRoot($usbRoot).TrimEnd('\', '/') -or
+    if (-not $usbRoot -and -not $ReviewConflicts) {
+        $usbRoot = [IO.Path]::GetFullPath((Select-UsbProgramPath -LaunchRoot $launchRoot)).TrimEnd('\', '/')
+    }
+    if (($usbRoot -and $usbRoot -eq [IO.Path]::GetPathRoot($usbRoot).TrimEnd('\', '/')) -or
         $localRoot -eq [IO.Path]::GetPathRoot($localRoot).TrimEnd('\', '/')) {
         throw 'Укажите папку программы, а не корень диска.'
     }
-    if ($usbRoot -eq $localRoot -or
+    if ($usbRoot -and ($usbRoot -eq $localRoot -or
         $usbRoot.StartsWith($localRoot + '\', [StringComparison]::OrdinalIgnoreCase) -or
-        $localRoot.StartsWith($usbRoot + '\', [StringComparison]::OrdinalIgnoreCase)) {
+        $localRoot.StartsWith($usbRoot + '\', [StringComparison]::OrdinalIgnoreCase))) {
         throw 'Локальная папка и папка флешки должны быть раздельными и не содержать друг друга.'
     }
     Assert-NoLink $localRoot
+    if (-not $ReviewConflicts -and -not (Test-Path -LiteralPath ([IO.Path]::GetPathRoot($usbRoot)) -PathType Container)) {
+        throw "Диск флешки недоступен: $usbRoot. Подключите флешку или укажите актуальный путь через -UsbPath."
+    }
     if (-not $ReviewConflicts) { Assert-NoLink $usbRoot }
     $computerScript = Join-Path $localRoot 'sync-usb.ps1'
     Assert-NoLink $computerScript
@@ -77,7 +135,7 @@ try {
         throw "В папке компьютера не найден sync-usb.ps1: $localRoot"
     }
     Write-Host "Компьютер: $localRoot" -ForegroundColor DarkGray
-    Write-Host "Флешка:    $usbRoot" -ForegroundColor DarkGray
+    if (-not $ReviewConflicts) { Write-Host "Флешка:    $usbRoot" -ForegroundColor DarkGray }
     if ($launchRoot -ne $localRoot) {
         Write-Host 'Передаю синхронизацию программе на компьютере...' -ForegroundColor Yellow
         $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $computerScript, '-UsbPath', $usbRoot, '-ComputerPath', $localRoot)
@@ -86,7 +144,7 @@ try {
         exit $LASTEXITCODE
     }
     $localData = Join-Path $localRoot 'data'
-    $usbData = Join-Path $usbRoot 'data'
+    $usbData = if (-not $ReviewConflicts) { Join-Path $usbRoot 'data' } else { $null }
     $conflictRoot = Join-Path $localRoot 'sync-conflicts'
     foreach ($path in @($localData, $conflictRoot)) { Assert-NoLink $path }
     if (-not $ReviewConflicts) { Assert-NoLink $usbData }
