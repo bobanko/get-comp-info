@@ -5,6 +5,7 @@
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "eset-info.ps1")
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
 [Console]::InputEncoding = [System.Text.UTF8Encoding]::new()
 
@@ -25,6 +26,7 @@ try {
             if ($null -eq $record -or $record -isnot [pscustomobject]) {
                 throw "Ожидался JSON-объект устройства."
             }
+            Initialize-EsetInventoryField $record
             $record
         }
         catch {

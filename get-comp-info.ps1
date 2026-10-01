@@ -2,6 +2,7 @@
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
 [Console]::InputEncoding = [System.Text.UTF8Encoding]::new()
 . (Join-Path $PSScriptRoot "console-ui.ps1")
+. (Join-Path $PSScriptRoot "eset-info.ps1")
 
 # Keep Russian text and emoji readable in Windows PowerShell.
 $emojiInfo = [char]::ConvertFromUtf32(0x1F4CB)
@@ -60,6 +61,7 @@ $cs = Get-CimInstance Win32_ComputerSystem
 $bios = Get-CimInstance Win32_BIOS
 $systemProduct = Get-CimInstance Win32_ComputerSystemProduct
 $os = Get-CimInstance Win32_OperatingSystem
+$esetInstalled = Test-EsetInstalled
 
 $hostname = $env:COMPUTERNAME
 $serial = ([string]$bios.SerialNumber).Trim()
@@ -154,6 +156,7 @@ $computer = [ordered]@{
     username    = $username
     comment     = $comment
     windows     = $os.Caption
+    esetInstalled = $esetInstalled
     collectedAt = (Get-Date).ToString("o")
 }
 
@@ -173,6 +176,7 @@ function Show-ComputerInformation {
     Write-Host "Computer:     $manufacturer $model"
     Write-Host "User:         $username"
     Write-Host "OS:           $($os.Caption)"
+    Write-Host "ESET:         $(Get-EsetDisplayValue $esetInstalled)"
     Write-Host ""
 }
 
@@ -251,7 +255,8 @@ function Show-ComputerComparison($previousComputer, $controls = $text.Overwrite)
         [pscustomobject]@{ Label = $text.ComputerLabel; Name = "computer" },
         [pscustomobject]@{ Label = $text.UserLabel; Name = "username" },
         [pscustomobject]@{ Label = $text.CommentLabel; Name = "comment" },
-        [pscustomobject]@{ Label = "Windows"; Name = "windows" }
+        [pscustomobject]@{ Label = "Windows"; Name = "windows" },
+        [pscustomobject]@{ Label = "ESET"; Name = "esetInstalled" }
     )
 
     Clear-Host
@@ -262,7 +267,11 @@ function Show-ComputerComparison($previousComputer, $controls = $text.Overwrite)
     Write-Host ("{0,-15}-+-{1,-30}-+-{2}" -f ("-" * 15), ("-" * 30), ("-" * 30))
 
     foreach ($field in $fields) {
-        if ($field.Name -eq "computer") {
+        if ($field.Name -eq "esetInstalled") {
+            $previousValue = Get-EsetDisplayValue $previousComputer.esetInstalled
+            $currentValue = Get-EsetDisplayValue $computer.esetInstalled
+        }
+        elseif ($field.Name -eq "computer") {
             $previousValue = Get-ComputerDisplayValue $previousComputer
             $currentValue = Get-ComputerDisplayValue $computer
         }

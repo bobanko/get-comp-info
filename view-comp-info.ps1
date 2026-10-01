@@ -1,6 +1,7 @@
 ﻿$ErrorActionPreference = "Stop"
 
 . (Join-Path $PSScriptRoot "console-ui.ps1")
+. (Join-Path $PSScriptRoot "eset-info.ps1")
 
 $dataPath = Join-Path $PSScriptRoot "data"
 $script:sortMode = "Hostname"
@@ -15,6 +16,7 @@ $script:listColumnWidths = @{
     User = 12
     Collected = 16
     DB = 10
+    ESET = 14
     Comment = 40
 }
 
@@ -173,6 +175,7 @@ function Get-InventoryRecords {
                 throw "The JSON file is empty."
             }
 
+            Initialize-EsetInventoryField $computer
             $records += [pscustomobject]@{
                 FilePath = $file.FullName
                 FileName = $file.Name
@@ -260,6 +263,7 @@ function Show-List($records, $selectedIndex, $warningCount) {
     Write-ListHeader "User" "Username"
     Write-ListHeader "Collected" "CollectedAt"
     Write-ListHeader "DB" "DB"
+    Write-Host (Format-ListCell 'ESET' 'ESET') -NoNewline -ForegroundColor DarkGray
     Write-Host "Comment" -ForegroundColor DarkGray
 
     # Reserve two lines at the bottom for a possible status message.
@@ -283,6 +287,7 @@ function Show-List($records, $selectedIndex, $warningCount) {
         ) -join ""
         Write-Host $line -NoNewline -ForegroundColor $rowColor
         Write-Host (Format-ListCell (Get-ExternalDatabaseStatus $record.Data) "DB") -NoNewline -ForegroundColor $(if (Test-AddedToExternalDatabase $record.Data) { "Green" } else { "DarkYellow" })
+        Write-Host (Format-ListCell (Get-EsetDisplayValue $record.Data.esetInstalled) 'ESET') -NoNewline -ForegroundColor $(if ($null -eq $record.Data.esetInstalled) { 'DarkGray' } elseif ($record.Data.esetInstalled) { 'Green' } else { 'Yellow' })
         Write-Host (Get-ShortValue $record.Data.comment $script:listColumnWidths.Comment) -ForegroundColor $rowColor
     }
 
@@ -394,6 +399,7 @@ function Show-Details($records, $selectedIndex) {
         Write-Host ("{0,-15} {1}" -f "User:", (Get-DisplayValue $data.username))
         Write-Host ("{0,-15} {1}" -f "IP:", (Get-DisplayValue $data.ip))
         Write-Host ("{0,-15} {1}" -f "MAC:", (Get-DisplayValue $data.mac))
+        Write-Host ("{0,-15} {1}" -f "ESET:", (Get-EsetDisplayValue $data.esetInstalled))
         Write-Host ("{0,-15} {1}" -f "Created:", (Get-DisplayDate $data.createdAt))
         Write-Host ("{0,-15} {1}" -f "Collected:", (Get-DisplayDate $data.collectedAt))
         Write-Host ""

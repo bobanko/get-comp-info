@@ -148,7 +148,7 @@ function Get-SyncFieldLabel {
         hostname = 'Имя компьютера'; ip = 'IP-адрес'; mac = 'MAC-адрес'
         serial = 'Серийный номер'; smbiosUuid = 'UUID'; manufacturer = 'Производитель'
         model = 'Модель'; username = 'Пользователь'; comment = 'Комментарий'
-        windows = 'Windows'; collectedAt = 'Дата сбора'; createdAt = 'Дата создания'
+        windows = 'Windows'; esetInstalled = 'ESET установлен'; collectedAt = 'Дата сбора'; createdAt = 'Дата создания'
         addedToExternalDatabase = 'Внесён во внешнюю базу'
         addedToExternalDatabaseAt = 'Дата внесения во внешнюю базу'
     }
