@@ -1,6 +1,20 @@
 ﻿$ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "console-ui.ps1")
 
+function Get-UsbDeviceSerialNumber {
+    param([string]$PnpDeviceId)
+
+    # USBSTOR's instance contains the USB serial followed by the LUN suffix.
+    # Windows-generated instance IDs contain '&' and are not device serials.
+    if ($PnpDeviceId -match '^USBSTOR\\[^\\]+\\([^\\]+)$') {
+        $serial = $Matches[1] -replace '&\d+$', ''
+        if ($serial -notmatch '&') {
+            return $serial
+        }
+    }
+    return ""
+}
+
 $disks = @()
 $selectedIndex = 0
 $refresh = $true
@@ -14,6 +28,14 @@ while ($true) {
         $disks = @()
         try {
             $disks = @(Get-Disk -ErrorAction Stop | Where-Object { $_.BusType -eq "USB" } | Sort-Object Number)
+            $deviceIds = @{}
+            foreach ($device in (Get-CimInstance Win32_DiskDrive -ErrorAction Stop)) {
+                $deviceIds[[int]$device.Index] = [string]$device.PNPDeviceID
+            }
+            foreach ($disk in $disks) {
+                $usbSerial = Get-UsbDeviceSerialNumber -PnpDeviceId $deviceIds[[int]$disk.Number]
+                $disk | Add-Member -NotePropertyName UsbSerialNumber -NotePropertyValue $usbSerial -Force
+            }
         }
         catch {
             $status = "Не удалось получить список USB-накопителей: {0}" -f $_.Exception.Message
@@ -42,8 +64,7 @@ while ($true) {
         Write-Host ("{0} Диск {1}: {2}" -f $prefix, $disk.Number, $disk.FriendlyName) -ForegroundColor $color
         Write-Host ("  Объём: {0:N2} ГиБ" -f ($disk.Size / 1GB)) -ForegroundColor DarkGray
 
-        # Use the device serial reported by Windows, not a filesystem volume ID.
-        $serial = ([string]$disk.SerialNumber).Trim()
+        $serial = ([string]$disk.UsbSerialNumber).Trim()
         if ([string]::IsNullOrWhiteSpace($serial)) {
             Write-Host "  Серийный номер: устройство не сообщает номер Windows." -ForegroundColor Yellow
         }
@@ -76,7 +97,7 @@ while ($true) {
         }
         "C" {
             if ($disks.Count -eq 0) { break }
-            $serial = ([string]$disks[$selectedIndex].SerialNumber).Trim()
+            $serial = ([string]$disks[$selectedIndex].UsbSerialNumber).Trim()
             if ([string]::IsNullOrWhiteSpace($serial)) {
                 $status = "У выбранного накопителя нет серийного номера для копирования."
                 $statusColor = "Yellow"
