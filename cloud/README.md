@@ -41,11 +41,11 @@ npm run dev
 1. Войти в Cloudflare: `npx wrangler login`.
 2. Создать базу: `npx wrangler d1 create comp-info`. Полученный `database_id` вписать в `wrangler.jsonc`.
 3. Применить схему: `npm run db:migrate:remote`.
-4. Опубликовать Worker: `npm run deploy`. Он будет доступен по адресу `https://comp-info.<аккаунт>.workers.dev` или на своём домене.
-5. Настроить Cloudflare Access (Zero Trust → Access → Applications → Self-hosted) для адреса Worker'а:
-   - политика **Allow** со списком почтовых адресов команды, метод входа «One-time PIN»;
-   - пути `/api/client/*` и `/api/release` — отдельное приложение или правило с политикой **Bypass**: их защищают личные ключи и токен публикации;
-   - скопировать **Application Audience (AUD) Tag** и домен команды (`<team>.cloudflareaccess.com`).
+4. Опубликовать Worker: `npm run deploy`. Он работает только на своём домене из `routes` (сейчас `comp-info.chagear.top`, домен должен быть подключён к аккаунту Cloudflare). Адреса workers.dev выключены, чтобы Access нельзя было обойти.
+5. Настроить Cloudflare Access (Zero Trust → Access → Applications → Self-hosted) — два приложения:
+   - **Comp Info**: адрес `comp-info.chagear.top` без пути, политика **Allow** со списком почтовых адресов команды, метод входа «One-time PIN»;
+   - **Comp Info console API**: адреса `comp-info.chagear.top/api/client/*` и `comp-info.chagear.top/api/release`, политика **Bypass** (Include → Everyone). Более точный путь главнее, поэтому эти адреса открыты для консоли, а их защищают личные ключи и токен публикации;
+   - скопировать **Application Audience (AUD) Tag** приложения «Comp Info» и домен команды (`<team>.cloudflareaccess.com`).
 6. Вписать в `wrangler.jsonc` значения `ACCESS_TEAM_DOMAIN` и `ACCESS_AUD`, затем снова `npm run deploy`.
 7. Создать первого администратора:
 

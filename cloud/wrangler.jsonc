@@ -3,6 +3,11 @@
   "name": "comp-info",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
+  // Served only on the custom domain, which Cloudflare Access protects. workers.dev and
+  // preview URLs stay off so Access cannot be bypassed through them.
+  "routes": [{ "pattern": "comp-info.chagear.top", "custom_domain": true }],
+  "workers_dev": false,
+  "preview_urls": false,
   "d1_databases": [
     {
       "binding": "DB",
