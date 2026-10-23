@@ -181,22 +181,29 @@ releaseApi.use('*', releaseAuth);
 
 releaseApi.post('/', async (c) => {
   const bytes = new Uint8Array(await c.req.arrayBuffer());
+  return c.json(await storeRelease(c.env.DB, bytes, c.get('releaseTag') ?? null), 201);
+});
+
+// Validates and saves a release archive, making it current. With a tag (GitHub Actions)
+// the tag must name the archive's version; admins publishing with a personal key pass null.
+export async function storeRelease(db: D1Database, bytes: Uint8Array, tag: string | null) {
   const manifest = await validatePackage(bytes);
-  const tag = c.get('releaseTag');
   if (tag !== null && tag !== `v${manifest.version}`) {
     fail(400, 'tag_mismatch', `Тег ${tag} не совпадает с версией ${manifest.version} в manifest.json.`);
   }
-  const existing = await c.env.DB.prepare('SELECT version FROM program_releases WHERE version = ?').bind(manifest.version).first();
+  const existing = await db.prepare('SELECT version FROM program_releases WHERE version = ?').bind(manifest.version).first();
   if (existing) fail(409, 'release_exists', `Версия ${manifest.version} уже опубликована.`);
 
   const sha256 = await sha256Hex(bytes);
   const publishedAt = nowIso();
-  await c.env.DB.batch([
-    c.env.DB.prepare('UPDATE program_releases SET is_current = 0 WHERE is_current = 1'),
-    c.env.DB.prepare(
-      `INSERT INTO program_releases (version, commit_sha, manifest, package, sha256, size, published_at, is_current)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
-    ).bind(manifest.version, manifest.commit, JSON.stringify(manifest), bytes, sha256, bytes.byteLength, publishedAt),
+  await db.batch([
+    db.prepare('UPDATE program_releases SET is_current = 0 WHERE is_current = 1'),
+    db
+      .prepare(
+        `INSERT INTO program_releases (version, commit_sha, manifest, package, sha256, size, published_at, is_current)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+      )
+      .bind(manifest.version, manifest.commit, JSON.stringify(manifest), bytes, sha256, bytes.byteLength, publishedAt),
   ]);
-  return c.json({ version: manifest.version, sha256, size: bytes.byteLength, publishedAt }, 201);
-});
+  return { version: manifest.version, sha256, size: bytes.byteLength, publishedAt };
+}

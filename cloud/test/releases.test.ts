@@ -3,7 +3,7 @@ import { exports } from 'cloudflare:workers';
 import { importJWK, SignJWT, type JWK } from 'jose';
 import { describe, expect, it } from 'vitest';
 import { sha256Hex } from '../src/crypto';
-import { addUser, consoleRequest, harvesterKey, webRequest } from './helpers';
+import { addKey, addUser, consoleRequest, harvesterKey, webRequest } from './helpers';
 import { buildRelease, buildZip } from './zip-builder';
 
 let counter = Math.floor(Math.random() * 5000);
@@ -88,6 +88,43 @@ describe('publishing releases', () => {
     const version = nextVersion();
     const bytes = await buildRelease(version, { 'a.ps1': 'x' });
     expect((await publish(bytes, null, 'http://localhost:8787/api/release')).status).toBe(201);
+  });
+});
+
+describe('publishing with an admin key', () => {
+  async function publishWithKey(key: string, bytes: Uint8Array) {
+    const response = await exports.default.fetch(
+      new Request('https://comp-info.test/api/client/program', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/zip' },
+        body: bytes,
+      }),
+    );
+    return { status: response.status, body: (await response.json()) as any };
+  }
+
+  it('lets admins publish and refuses everyone else', async () => {
+    const version = nextVersion();
+    const bytes = await buildRelease(version, { 'a.ps1': 'x' });
+    const { key: harvester } = await harvesterKey();
+    const editorKey = await addKey(await addUser('editor'));
+    const adminKey = await addKey(await addUser('admin'));
+
+    expect((await publishWithKey(harvester, bytes)).status).toBe(403);
+    expect((await publishWithKey(editorKey, bytes)).status).toBe(403);
+    const published = await publishWithKey(adminKey, bytes);
+    expect(published.status).toBe(201);
+    expect(published.body.version).toBe(version);
+    expect((await consoleRequest(harvester, 'GET', '/program/latest')).body.version).toBe(version);
+    expect((await publishWithKey(adminKey, bytes)).status).toBe(409);
+  });
+
+  it('checks the archive exactly like GitHub publishing', async () => {
+    const adminKey = await addKey(await addUser('admin'));
+    const tampered = await buildRelease(nextVersion(), { 'a.ps1': 'x' }, { extra: [{ name: 'evil.ps1', data: 'x' }] });
+    const result = await publishWithKey(adminKey, tampered);
+    expect(result.status).toBe(400);
+    expect(result.body.error.code).toBe('invalid_package');
   });
 });
 

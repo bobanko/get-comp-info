@@ -57,6 +57,15 @@ GitHub Actions (`.github/workflows/release.yml`) по тегу `v*` на Windows
 
 Облако принимает архив, только если токен подписан GitHub, выдан запуску репозитория `bobanko/get-comp-info` (`RELEASE_REPOSITORY` в `cloud/wrangler.jsonc`) по тегу, и тег совпадает с версией в архиве. Затем проверяет каждый файл по `manifest.json`, сохраняет версию и делает её текущей. Повторно опубликовать ту же версию нельзя. Если выпуск сломан, выпустите следующую версию или сделайте текущей предыдущую на странице «Версии программы».
 
+### Выпуск с компьютера администратора (без GitHub Actions)
+
+Если GitHub Actions недоступен (например, закончились минуты для приватного репозитория), версию публикует администратор со своего компьютера:
+
+1. `tools/update-version.BAT`, коммит (и по желанию тег с push).
+2. `tools/release.BAT` — проверяет, что нет незакоммиченных изменений, прогоняет тесты, собирает архив тем же `tools/build-release.ps1` и отправляет его в `POST /api/client/program` с личным ключом из `cloud-key.txt` (или ключом, введённым в консоли).
+
+Облако принимает такой архив только от ключа пользователя с ролью `admin` и проверяет его точно так же, как архив из GitHub Actions. Тег здесь не проверяется: версию задаёт `console-ui.ps1`.
+
 Собрать архив локально для проверки: `powershell -File tools\build-release.ps1` (результат в `dist\`, папка исключена из Git). Локальный сервер разработки (`npm run dev` в `cloud`) принимает публикацию без токена: `tools\publish-release.ps1 -Package dist\comp-info-<версия>.zip -ApiUrl http://localhost:8787/api/release`.
 
 ## Обновление в консоли
@@ -96,4 +105,5 @@ GitHub Actions (`.github/workflows/release.yml`) по тегу `v*` на Windows
 - архивы версий хранятся в D1, в таблице `program_releases`. Размер архива ограничен 1 МБ, сейчас он около 45 КБ;
 - `GET /api/client/program/latest` и `GET /api/client/program/{version}/package` — для ролей `harvester`, `editor`, `admin`;
 - `POST /api/release` — только с OIDC-токеном GitHub Actions этого репозитория, не с личными ключами;
+- `POST /api/client/program` — тот же архив с личным ключом администратора (`tools/release.BAT`);
 - в веб-интерфейсе `admin` видит список версий и может сделать текущей любую из них (откат).

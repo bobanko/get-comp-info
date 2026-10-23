@@ -1,8 +1,8 @@
 import { Hono, type Context } from 'hono';
 import { consoleAuth } from '../auth';
 import { listChanges, normalizeData, putDevice, validateDeviceId, type WriteResult } from '../devices';
-import { fail, readJsonObject } from '../http';
-import { getCurrentRelease, getReleasePackage } from '../releases';
+import { fail, readJsonObject, requireRole } from '../http';
+import { getCurrentRelease, getReleasePackage, storeRelease } from '../releases';
 import type { AppEnv } from '../types';
 
 const DEFAULT_PAGE = 500;
@@ -46,6 +46,13 @@ consoleApi.get('/program/latest', async (c) => {
   const release = await getCurrentRelease(c.env.DB);
   if (!release) fail(404, 'no_release', 'В облаке ещё нет опубликованных версий программы.');
   return c.json(release);
+});
+
+// Publishing from an admin's computer (tools/release.ps1), for when GitHub Actions is unavailable.
+consoleApi.post('/program', async (c) => {
+  requireRole(c, 'admin');
+  const bytes = new Uint8Array(await c.req.arrayBuffer());
+  return c.json(await storeRelease(c.env.DB, bytes, null), 201);
 });
 
 consoleApi.get('/program/:version/package', async (c) => {

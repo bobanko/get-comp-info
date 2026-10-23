@@ -136,6 +136,7 @@ program_releases (
 | `PUT` | `/devices/{id}` | Создать или изменить запись |
 | `GET` | `/program/latest` | Текущая версия программы: `version`, `sha256`, `size`, `publishedAt`, `notes` |
 | `GET` | `/program/{version}/package` | Архив версии (zip) |
+| `POST` | `/program` | Опубликовать архив версии (только `admin`; см. [PROGRAM_UPDATE.md](PROGRAM_UPDATE.md)) |
 
 `GET /devices` возвращает:
 
