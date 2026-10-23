@@ -14,7 +14,8 @@ $menuItems = @(
     [PSCustomObject]@{ Title = "🔑 Серийные номера USB-накопителей"; Script = "get-usb-serial.ps1" }
     [PSCustomObject]@{ Title = "📤 Экспортировать все устройства в CSV"; Script = "export-comp-info.ps1" }
     [PSCustomObject]@{ Title = "☁️ Синхронизировать с облаком"; Script = "sync-cloud.ps1" }
-    [PSCustomObject]@{ Title = "⬆️ Обновить программу"; Script = "update-program.ps1" }
+    [PSCustomObject]@{ Title = "🆕 Обновить программу"; Script = "update-program.ps1" }
+    [PSCustomObject]@{ Title = "🩺 Диагностика консоли (эмодзи, скорость)"; Script = "console-diagnostics.ps1" }
     [PSCustomObject]@{ Title = "🚪 Выйти"; Script = $null; IsSeparatedBefore = $true }
 )
 

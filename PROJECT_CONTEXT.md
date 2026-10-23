@@ -202,6 +202,7 @@ Cloudflare Workers (API и раздача веб-интерфейса), база
 - [ESET_CHECK.md](ESET_CHECK.md) — проверка ESET.
 - [LAN_ADAPTER_REQUIREMENTS.md](LAN_ADAPTER_REQUIREMENTS.md) — настройка LAN-адаптера.
 - [CONSOLE_UI_GUIDELINES.md](CONSOLE_UI_GUIDELINES.md) — стиль консольных интерфейсов.
+- [CONSOLE_DIAGNOSTICS.md](CONSOLE_DIAGNOSTICS.md) — диагностика консоли: эмодзи и скорость отрисовки.
 
 ---
 
