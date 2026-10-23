@@ -1,0 +1,25 @@
+{
+  "name": "comp-info-cloud",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "types": "wrangler types --strict-vars=false",
+    "db:migrate:local": "wrangler d1 migrations apply comp-info --local",
+    "db:migrate:remote": "wrangler d1 migrations apply comp-info --remote"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.4.7",
+    "@types/node": "^22.20.5",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5",
+    "wrangler": "^4.152.0"
+  },
+  "dependencies": {
+    "hono": "^4.13.13",
+    "jose": "^6.2.13"
+  }
+}
