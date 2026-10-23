@@ -36,7 +36,7 @@ $files = @(Invoke-Git @('ls-files') | Where-Object { $_ -notmatch '/' -and (Test
 $commit = ([string](Invoke-Git @('rev-parse', 'HEAD'))).Trim()
 
 # "Что нового": commit subjects since the previous version tag (or the last 20 commits).
-$previousTag = Invoke-Git @('describe', '--tags', '--abbrev=0', '--match', 'v*', 'HEAD^') -AllowFailure
+$previousTag = Invoke-Git @('describe', '--tags', '--abbrev=0', '--match', 'v*', '--exclude', "v$Version", 'HEAD') -AllowFailure
 $range = if ($previousTag) { @("$(([string]$previousTag).Trim())..HEAD") } else { @('-n', '20', 'HEAD') }
 $notes = @(Invoke-Git (@('log', '--pretty=format:%s') + $range) | Where-Object { $_ -and $_ -notmatch '^chore: version' })
 
