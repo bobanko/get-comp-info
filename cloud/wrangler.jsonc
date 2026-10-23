@@ -17,10 +17,10 @@
     }
   ],
   "vars": {
-    // Cloudflare Access team domain, e.g. "my-team.cloudflareaccess.com".
-    "ACCESS_TEAM_DOMAIN": "",
-    // Application Audience (AUD) tag of the Access application.
-    "ACCESS_AUD": ""
+    // Cloudflare Access team domain.
+    "ACCESS_TEAM_DOMAIN": "chagear.cloudflareaccess.com",
+    // Application Audience (AUD) tag of the "Comp Info" Access application.
+    "ACCESS_AUD": "8a6c4398ef16bc6b7f437a6fbd6d96b08c32570e93171d5d350ffe3a0994fa34"
   },
   "assets": {
     "directory": "./public",
