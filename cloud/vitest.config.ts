@@ -10,6 +10,11 @@ export default defineConfig(async () => {
   const publicJwk = { ...(await exportJWK(publicKey)), kid: 'test', alg: 'RS256', use: 'sig' };
   const privateJwk = { ...(await exportJWK(privateKey)), kid: 'test', alg: 'RS256' };
 
+  // Stand-in for GitHub Actions OIDC tokens used to publish program releases.
+  const github = await generateKeyPair('RS256', { extractable: true });
+  const githubPublicJwk = { ...(await exportJWK(github.publicKey)), kid: 'github-test', alg: 'RS256', use: 'sig' };
+  const githubPrivateJwk = { ...(await exportJWK(github.privateKey)), kid: 'github-test', alg: 'RS256' };
+
   return {
     plugins: [
       cloudflareTest({
@@ -22,6 +27,8 @@ export default defineConfig(async () => {
             ACCESS_AUD: 'test-aud',
             ACCESS_JWKS: JSON.stringify({ keys: [publicJwk] }),
             DEV_AUTH_EMAIL: 'dev@example.com',
+            GITHUB_OIDC_JWKS: JSON.stringify({ keys: [githubPublicJwk] }),
+            TEST_GITHUB_PRIVATE_JWK: JSON.stringify(githubPrivateJwk),
           },
         },
       }),

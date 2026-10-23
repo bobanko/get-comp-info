@@ -309,6 +309,11 @@ table.diff td.after { color: var(--ok); }
 table.diff td { overflow-wrap: anywhere; }
 table.diff td:first-child { white-space: nowrap; overflow-wrap: normal; color: var(--muted); }
 
+/* ---------- Releases ---------- */
+
+details summary { cursor: pointer; }
+.notes { margin: 6px 0 0; padding-left: 18px; color: var(--muted); }
+
 /* ---------- Keys ---------- */
 
 .new-key { border-color: var(--ok); background: var(--ok-soft); }

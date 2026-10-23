@@ -1,0 +1,42 @@
+# Publishes a program release to the cloud when a version tag (v2026.10.24.1) is pushed.
+# See PROGRAM_UPDATE.md. No secrets: the cloud trusts GitHub's OIDC token for this repository.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run tests (Windows PowerShell 5.1)
+        shell: pwsh
+        run: |
+          foreach ($test in Get-ChildItem tests -Filter '*.tests.ps1') {
+            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $test.FullName
+            if ($LASTEXITCODE -ne 0) { throw "$($test.Name) failed" }
+          }
+
+      - name: Build release
+        shell: pwsh
+        # Same Windows PowerShell 5.1 as on the flash drives. Fails when the tag does not match console-ui.ps1.
+        run: |
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/build-release.ps1 -Version $env:GITHUB_REF_NAME.TrimStart('v')
+          if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
+
+      - name: Publish to the cloud
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          $tokenUrl = "$env:ACTIONS_ID_TOKEN_REQUEST_URL&audience=comp-info-release"
+          $token = (Invoke-RestMethod -Uri $tokenUrl -Headers @{ Authorization = "bearer $env:ACTIONS_ID_TOKEN_REQUEST_TOKEN" }).value
+          ./tools/publish-release.ps1 -Package "dist/comp-info-$version.zip" -Token $token

@@ -183,7 +183,7 @@ try {
     $requests = $script:server.Requests
     $counts = Sync $flash
     Assert-True ($counts.PushedNew + $counts.PushedUpdated + $counts.PushedSame -eq 0) 'Unchanged records must not be sent again'
-    Assert-True ($script:server.Requests - $requests -eq 2) 'A quiet sync is one key check and one change feed request'
+    Assert-True ($script:server.Requests - $requests -eq 3) 'A quiet sync is a key check, one change feed request and a version check'
 
     # ---------- The computer downloads everything ----------
     $pc = New-ProgramCopy 'pc'

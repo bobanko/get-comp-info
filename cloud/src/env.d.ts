@@ -7,6 +7,8 @@ interface OptionalEnv {
   // Secret: Cloudflare API token with "Access: Apps and Policies Edit", used to keep the
   // Access allow policy in step with active users. Without it emails are added by hand.
   CF_API_TOKEN?: string;
+  // JSON Web Key Set used instead of GitHub's OIDC public keys (tests only).
+  GITHUB_OIDC_JWKS?: string;
 }
 
 interface Env extends OptionalEnv {}

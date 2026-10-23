@@ -12,6 +12,7 @@ import {
   validateDeviceId,
 } from '../devices';
 import { fail, isPlainObject, nowIso, readJsonObject, requireRole } from '../http';
+import { getCurrentRelease, listReleases, makeCurrent } from '../releases';
 import { hasRole, isRole, toUser, type AppEnv, type UserRow } from '../types';
 import { writeResponse } from './console';
 
@@ -216,6 +217,19 @@ webApi.patch('/users/:email', async (c) => {
   // Only enabling or disabling changes who may pass Cloudflare Access.
   const access = wasActive !== row.active ? await syncAccessPolicy(c.env) : undefined;
   return c.json({ ...toUser(row), access });
+});
+
+// ---------- Program releases ----------
+
+webApi.get('/releases', async (c) => {
+  requireRole(c, 'admin');
+  return c.json({ releases: await listReleases(c.env.DB) });
+});
+
+webApi.post('/releases/:version/make-current', async (c) => {
+  requireRole(c, 'admin');
+  if (!(await makeCurrent(c.env.DB, c.req.param('version')))) fail(404, 'not_found', 'Такой версии программы нет.');
+  return c.json({ current: await getCurrentRelease(c.env.DB) });
 });
 
 function validateName(value: unknown): string {

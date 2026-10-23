@@ -20,6 +20,8 @@ export type AppEnv = {
   Variables: {
     user: User;
     apiKey?: ApiKeyInfo;
+    // Tag of the GitHub Actions run publishing a release; null in local development.
+    releaseTag?: string | null;
   };
 };
 

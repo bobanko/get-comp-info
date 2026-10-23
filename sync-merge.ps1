@@ -79,11 +79,17 @@ function Write-SyncJson {
     New-Item -ItemType Directory -Path $parent -Force | Out-Null
     $temporary = Join-Path $parent ([guid]::NewGuid().ToString('N') + '.tmp')
     [IO.File]::WriteAllText($temporary, ($Record | ConvertTo-Json -Depth 100), [Text.UTF8Encoding]::new($true))
+    Move-FileIntoPlace $temporary $Path -Attempts $Attempts
+}
+
+# Replaces $Path with the already written $Temporary file (same folder) and removes $Temporary.
+function Move-FileIntoPlace {
+    param([string]$Temporary, [string]$Path, [int]$Attempts = 10)
     try {
         for ($attempt = 1; $true; $attempt++) {
             try {
-                if (Test-Path -LiteralPath $Path) { [IO.File]::Replace($temporary, $Path, [NullString]::Value) }
-                else { [IO.File]::Move($temporary, $Path) }
+                if (Test-Path -LiteralPath $Path) { [IO.File]::Replace($Temporary, $Path, [NullString]::Value) }
+                else { [IO.File]::Move($Temporary, $Path) }
                 return
             }
             catch {
@@ -91,7 +97,7 @@ function Write-SyncJson {
                 # allowing deletion, which makes Replace fail. Wait a little and try again;
                 # as a last resort overwrite the file in place, which such handles still allow.
                 if ($attempt -ge $Attempts) {
-                    [IO.File]::Copy($temporary, $Path, $true)
+                    [IO.File]::Copy($Temporary, $Path, $true)
                     return
                 }
                 Start-Sleep -Milliseconds (50 * $attempt)
@@ -99,7 +105,7 @@ function Write-SyncJson {
         }
     }
     finally {
-        if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue }
+        if (Test-Path -LiteralPath $Temporary) { Remove-Item -LiteralPath $Temporary -Force -ErrorAction SilentlyContinue }
     }
 }
 

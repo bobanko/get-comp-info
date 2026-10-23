@@ -2,6 +2,7 @@ import { Hono, type Context } from 'hono';
 import { consoleAuth } from '../auth';
 import { listChanges, normalizeData, putDevice, validateDeviceId, type WriteResult } from '../devices';
 import { fail, readJsonObject } from '../http';
+import { getCurrentRelease, getReleasePackage } from '../releases';
 import type { AppEnv } from '../types';
 
 const DEFAULT_PAGE = 500;
@@ -39,6 +40,24 @@ consoleApi.put('/devices/:id', async (c) => {
     source: 'console',
   });
   return writeResponse(c, result);
+});
+
+consoleApi.get('/program/latest', async (c) => {
+  const release = await getCurrentRelease(c.env.DB);
+  if (!release) fail(404, 'no_release', 'В облаке ещё нет опубликованных версий программы.');
+  return c.json(release);
+});
+
+consoleApi.get('/program/:version/package', async (c) => {
+  const found = await getReleasePackage(c.env.DB, c.req.param('version'));
+  if (!found) fail(404, 'not_found', 'Такой версии программы нет.');
+  return new Response(found.bytes, {
+    headers: {
+      'Content-Type': 'application/zip',
+      'Content-Length': String(found.bytes.byteLength),
+      'X-Content-SHA256': found.sha256,
+    },
+  });
 });
 
 export function writeResponse(c: Context<AppEnv>, result: WriteResult): Response {

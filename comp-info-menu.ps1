@@ -14,6 +14,7 @@ $menuItems = @(
     [PSCustomObject]@{ Title = "🔑 Серийные номера USB-накопителей"; Script = "get-usb-serial.ps1" }
     [PSCustomObject]@{ Title = "📤 Экспортировать все устройства в CSV"; Script = "export-comp-info.ps1" }
     [PSCustomObject]@{ Title = "☁️ Синхронизировать с облаком"; Script = "sync-cloud.ps1" }
+    [PSCustomObject]@{ Title = "⬆️ Обновить программу"; Script = "update-program.ps1" }
     [PSCustomObject]@{ Title = "🚪 Выйти"; Script = $null; IsSeparatedBefore = $true }
 )
 
@@ -74,6 +75,13 @@ function Invoke-MenuScript {
     }
 
     Write-Host ""
+    # Exit code 43: the program was updated, this menu still runs the old code.
+    if ($exitCode -eq 43) {
+        Write-Host "Нажмите любую клавишу, чтобы перезапустить меню с новой версией." -ForegroundColor DarkGray
+        [Console]::ReadKey($true) | Out-Null
+        $script:restartMenu = $true
+        return
+    }
     if ($exitCode -eq 0) {
         Write-Host "Сценарий завершён. Нажмите любую клавишу, чтобы вернуться в меню." -ForegroundColor DarkGray
     }
@@ -82,9 +90,11 @@ function Invoke-MenuScript {
         Write-Host "Нажмите любую клавишу, чтобы вернуться в меню." -ForegroundColor DarkGray
     }
     [Console]::ReadKey($true) | Out-Null
+    return
 }
 
 $selectedIndex = 0
+$script:restartMenu = $false
 $shouldExit = $false
 while (-not $shouldExit) {
     if ($menuItems[$selectedIndex].IsDisabled) { $selectedIndex = 0 }
@@ -106,6 +116,11 @@ while (-not $shouldExit) {
                 continue
             }
             Invoke-MenuScript -ScriptName $item.Script
+            if ($script:restartMenu) {
+                # Run the freshly installed menu in this window, then close this old one.
+                & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "comp-info-menu.ps1")
+                exit $LASTEXITCODE
+            }
         }
     }
 }

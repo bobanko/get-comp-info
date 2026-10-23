@@ -128,13 +128,10 @@ function Enable-CloudTls {
     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 }
 
-# Returns @{ Status; Body }. Throws only when the cloud cannot be reached at all.
-# HttpWebRequest is used instead of Invoke-RestMethod to always decode responses as UTF-8.
-function Invoke-CloudRequest {
-    param([string]$Method, [string]$Url, [string]$Key, $Body)
+function New-CloudWebRequest {
+    param([string]$Method, [string]$Url, [string]$Key)
     $request = [Net.HttpWebRequest]::Create($Url)
     $request.Method = $Method
-    $request.Accept = 'application/json'
     $request.Timeout = 60000
     $request.ReadWriteTimeout = 60000
     $request.UserAgent = "comp-info/$script:toolboxVersion"
@@ -142,36 +139,65 @@ function Invoke-CloudRequest {
     $proxy = [Net.WebRequest]::GetSystemWebProxy()
     $proxy.Credentials = [Net.CredentialCache]::DefaultNetworkCredentials
     $request.Proxy = $proxy
+    return $request
+}
 
-    $response = $null
+# Sends the request; error statuses come back as responses, only an unreachable cloud throws.
+function Get-CloudWebResponse {
+    param($Request, [byte[]]$Body)
     try {
         if ($null -ne $Body) {
-            $bytes = [Text.Encoding]::UTF8.GetBytes((ConvertTo-Json -InputObject $Body -Depth 100 -Compress))
-            $request.ContentType = 'application/json; charset=utf-8'
-            $request.ContentLength = $bytes.Length
-            $stream = $request.GetRequestStream()
-            try { $stream.Write($bytes, 0, $bytes.Length) } finally { $stream.Dispose() }
+            $Request.ContentLength = $Body.Length
+            $stream = $Request.GetRequestStream()
+            try { $stream.Write($Body, 0, $Body.Length) } finally { $stream.Dispose() }
         }
-        $response = $request.GetResponse()
+        return $Request.GetResponse()
     }
     catch {
         $exception = $_.Exception
         while ($null -ne $exception -and $exception -isnot [Net.WebException]) { $exception = $exception.InnerException }
         if ($null -eq $exception -or $null -eq $exception.Response) {
             $reason = if ($null -ne $exception) { $exception.Message } else { $_.Exception.Message }
-            throw "Облако недоступно ($Url): $reason"
+            throw "Облако недоступно ($($Request.RequestUri)): $reason"
         }
-        $response = $exception.Response
+        return $exception.Response
     }
+}
 
+function Read-CloudResponseBody {
+    param($Response)
+    $reader = [IO.StreamReader]::new($Response.GetResponseStream(), [Text.Encoding]::UTF8)
+    try { $text = $reader.ReadToEnd() } finally { $reader.Dispose() }
+    if ([string]::IsNullOrWhiteSpace($text)) { return $null }
+    try { return $text | ConvertFrom-Json } catch { return $null }
+}
+
+# Returns @{ Status; Body }. Throws only when the cloud cannot be reached at all.
+# HttpWebRequest is used instead of Invoke-RestMethod to always decode responses as UTF-8.
+function Invoke-CloudRequest {
+    param([string]$Method, [string]$Url, [string]$Key, $Body)
+    $request = New-CloudWebRequest $Method $Url $Key
+    $request.Accept = 'application/json'
+    $bytes = $null
+    if ($null -ne $Body) {
+        $bytes = [Text.Encoding]::UTF8.GetBytes((ConvertTo-Json -InputObject $Body -Depth 100 -Compress))
+        $request.ContentType = 'application/json; charset=utf-8'
+    }
+    $response = Get-CloudWebResponse $request $bytes
+    try { return [pscustomobject]@{ Status = [int]$response.StatusCode; Body = (Read-CloudResponseBody $response) } }
+    finally { $response.Dispose() }
+}
+
+# Downloads a file; an error status becomes an exception with the cloud's message.
+function Save-CloudDownload {
+    param([string]$Url, [string]$Key, [string]$Path)
+    $response = Get-CloudWebResponse (New-CloudWebRequest 'GET' $Url $Key) $null
     try {
-        $reader = [IO.StreamReader]::new($response.GetResponseStream(), [Text.Encoding]::UTF8)
-        try { $text = $reader.ReadToEnd() } finally { $reader.Dispose() }
-        $parsed = $null
-        if (-not [string]::IsNullOrWhiteSpace($text)) {
-            try { $parsed = $text | ConvertFrom-Json } catch { $parsed = $null }
+        if ([int]$response.StatusCode -ne 200) {
+            throw (Get-CloudErrorMessage ([pscustomobject]@{ Status = [int]$response.StatusCode; Body = (Read-CloudResponseBody $response) }))
         }
-        return [pscustomobject]@{ Status = [int]$response.StatusCode; Body = $parsed }
+        $output = [IO.File]::Create($Path)
+        try { $response.GetResponseStream().CopyTo($output) } finally { $output.Dispose() }
     }
     finally { $response.Dispose() }
 }
@@ -282,6 +308,7 @@ function New-CloudSyncCounts {
         PushedNew = 0; PushedUpdated = 0; PushedSame = 0
         ReceivedNew = 0; ReceivedUpdated = 0; Deleted = 0; Deferred = 0
         Errors = New-Object 'System.Collections.Generic.List[string]'
+        NewVersion = $null
     }
 }
 
@@ -497,6 +524,13 @@ function Invoke-CloudSync {
 
     $context.State.LastSyncAt = (Get-Date).ToString('o')
     Save-CloudState $Root $context.State
+
+    # A newer program version is only a hint: failing to check it must not fail the sync.
+    try {
+        $release = Get-CloudProgramRelease $config.ApiUrl $connection.Key
+        if ($release -and (Test-NewerProgramVersion $release.version $script:toolboxVersion)) { $counts.NewVersion = [string]$release.version }
+    }
+    catch { }
     return $counts
 }
 
@@ -523,4 +557,213 @@ function Show-CloudSyncSummary {
         Write-Host "Ошибки ($($Counts.Errors.Count)):" -ForegroundColor Red
         foreach ($message in $Counts.Errors) { Write-Host "  $message" -ForegroundColor Red }
     }
+    if ($Counts.NewVersion) {
+        Write-Host ''
+        Write-Host "Доступна новая версия программы $($Counts.NewVersion): пункт меню «Обновить программу»." -ForegroundColor Cyan
+    }
+}
+
+# ---------- Program update ----------
+
+# Files that make up the program: scripts and launchers in the root, plus the cloud settings.
+# Must match isProgramFile in cloud/src/releases.ts.
+function Test-ProgramFileName {
+    param([string]$Name)
+    return $Name -ceq 'cloud-config.json' -or $Name -match '^[^\\/:*?"<>|\x00-\x1f]+\.(ps1|bat|cmd)$'
+}
+
+function Get-ProgramFiles {
+    param([string]$Root)
+    return @(Get-ChildItem -LiteralPath $Root -File | Where-Object { Test-ProgramFileName $_.Name })
+}
+
+function Get-FileSha256 {
+    param([string]$Path)
+    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+function ConvertTo-ProgramVersion {
+    param([string]$Text)
+    $version = $null
+    if ([version]::TryParse([string]$Text, [ref]$version)) { return $version }
+    return $null
+}
+
+function Test-NewerProgramVersion {
+    param([string]$Candidate, [string]$Current)
+    $candidateVersion = ConvertTo-ProgramVersion $Candidate
+    $currentVersion = ConvertTo-ProgramVersion $Current
+    return $null -ne $candidateVersion -and $null -ne $currentVersion -and $candidateVersion -gt $currentVersion
+}
+
+# Current release in the cloud, or $null when nothing has been published yet.
+function Get-CloudProgramRelease {
+    param([string]$ApiUrl, [string]$Key)
+    $response = Invoke-CloudRequest 'GET' "$ApiUrl/program/latest" $Key $null
+    if ($response.Status -eq 200) { return $response.Body }
+    if ($response.Status -eq 404) { return $null }
+    throw (Get-CloudErrorMessage $response)
+}
+
+# Puts the backed-up program files back and removes files the failed update added.
+function Restore-ProgramBackup {
+    param([string]$Root, [string]$Backup, [string[]]$NewNames)
+    $backupFiles = @(Get-ChildItem -LiteralPath $Backup -File)
+    $backupNames = @($backupFiles | ForEach-Object { $_.Name })
+    foreach ($name in $NewNames) {
+        $path = Join-Path $Root $name
+        if ($backupNames -notcontains $name -and (Test-Path -LiteralPath $path)) { Remove-Item -LiteralPath $path -Force }
+    }
+    foreach ($file in $backupFiles) {
+        $target = Join-Path $Root $file.Name
+        # A file the update never managed to replace is already the old one.
+        if ((Test-Path -LiteralPath $target) -and (Get-FileSha256 $target) -eq (Get-FileSha256 $file.FullName)) { continue }
+        Copy-Item -LiteralPath $file.FullName -Destination $target -Force
+    }
+}
+
+# Keeps the two most recent backups and downloaded archives in .update.
+function Remove-OldUpdateFiles {
+    param([string]$UpdateRoot, [int]$Keep = 2)
+    @(Get-ChildItem -LiteralPath $UpdateRoot -Directory -Filter 'backup-*' | Sort-Object LastWriteTime -Descending | Select-Object -Skip $Keep) |
+        ForEach-Object { Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue }
+    @(Get-ChildItem -LiteralPath $UpdateRoot -File -Filter '*.zip' | Sort-Object LastWriteTime -Descending | Select-Object -Skip $Keep) |
+        ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue }
+}
+
+# Installs a downloaded, already checksum-verified release archive into $Root.
+# Nothing in $Root changes unless every file matches manifest.json; on a failure while
+# replacing files the previous version is restored from the backup.
+function Install-ProgramRelease {
+    param([string]$Root, [string]$ZipPath, [string]$ExpectedVersion, [string]$CurrentVersion, [int]$Attempts = 10)
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $updateRoot = Join-Path $Root '.update'
+    $extract = Join-Path $updateRoot ('extract-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $updateRoot -Force | Out-Null
+    try {
+        [IO.Compression.ZipFile]::ExtractToDirectory($ZipPath, $extract)
+        $manifestPath = Join-Path $extract 'manifest.json'
+        if (-not (Test-Path -LiteralPath $manifestPath)) { throw 'В архиве нет manifest.json.' }
+        $manifest = Read-SyncRecord $manifestPath
+        if ([string]$manifest.version -ne $ExpectedVersion) { throw "Архив содержит версию $($manifest.version), ожидалась $ExpectedVersion." }
+
+        $files = @($manifest.files)
+        $names = @($files | ForEach-Object { [string]$_.path })
+        if ($files.Count -eq 0) { throw 'В manifest.json нет файлов.' }
+        foreach ($file in $files) {
+            $name = [string]$file.path
+            $source = Join-Path $extract $name
+            if (-not (Test-ProgramFileName $name)) { throw "Недопустимый файл в архиве: $name" }
+            if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "В архиве нет файла $name." }
+            if ((Get-Item -LiteralPath $source).Length -ne [long]$file.size -or (Get-FileSha256 $source) -ne ([string]$file.sha256).ToLowerInvariant()) {
+                throw "Файл $name в архиве не совпадает с manifest.json."
+            }
+        }
+        foreach ($entry in Get-ChildItem -LiteralPath $extract -Recurse -File) {
+            $relative = $entry.FullName.Substring($extract.Length + 1)
+            if ($relative -ne 'manifest.json' -and $names -notcontains $relative) { throw "Лишний файл в архиве: $relative" }
+        }
+
+        $backup = Join-Path $updateRoot ("backup-$CurrentVersion-" + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+        New-Item -ItemType Directory -Path $backup -Force | Out-Null
+        foreach ($existing in Get-ProgramFiles $Root) { Copy-Item -LiteralPath $existing.FullName -Destination $backup }
+
+        try {
+            foreach ($file in $files) {
+                $target = Join-Path $Root $file.path
+                $temporary = Join-Path $Root ([guid]::NewGuid().ToString('N') + '.tmp')
+                Copy-Item -LiteralPath (Join-Path $extract $file.path) -Destination $temporary
+                Move-FileIntoPlace $temporary $target -Attempts $Attempts
+                if ((Get-FileSha256 $target) -ne ([string]$file.sha256).ToLowerInvariant()) { throw "Файл $($file.path) записан с ошибкой." }
+            }
+            $removed = @(foreach ($old in Get-ProgramFiles $Root) {
+                if ($names -notcontains $old.Name) {
+                    Remove-Item -LiteralPath $old.FullName -Force
+                    $old.Name
+                }
+            })
+        }
+        catch {
+            $reason = $_.Exception.Message
+            try { Restore-ProgramBackup $Root $backup $names }
+            catch { throw "Обновление не удалось ($reason), и прежнюю версию восстановить не получилось: $($_.Exception.Message). Файлы прежней версии лежат в $backup" }
+            throw "Обновление не удалось, прежняя версия восстановлена: $reason"
+        }
+
+        Remove-OldUpdateFiles $updateRoot
+        return [pscustomobject]@{ Version = $ExpectedVersion; Installed = $files.Count; Removed = $removed; Backup = $backup }
+    }
+    finally {
+        if (Test-Path -LiteralPath $extract) { Remove-Item -LiteralPath $extract -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+}
+
+# The menu item "Обновить программу". Returns updated | up-to-date | cancelled | no-release | development.
+function Invoke-ProgramUpdate {
+    param([string]$Root, [string]$CurrentVersion = $script:toolboxVersion)
+    if (Test-Path -LiteralPath (Join-Path $Root '.git')) {
+        Write-Host 'Это копия программы для разработки (есть папка .git). Обновляйте её через Git.' -ForegroundColor Yellow
+        return 'development'
+    }
+    Enable-CloudTls
+    $config = Get-CloudConfig $Root
+    $connection = Connect-Cloud $Root $config.ApiUrl
+    if ($null -eq $connection) { return 'cancelled' }
+
+    Clear-Host
+    Write-ToolboxHeader -Section 'Обновление программы'
+    Write-Host 'Проверка версии в облаке...' -ForegroundColor DarkGray
+    $release = Get-CloudProgramRelease $config.ApiUrl $connection.Key
+    if ($null -eq $release) {
+        Write-Host 'В облаке ещё нет опубликованных версий программы.' -ForegroundColor Yellow
+        return 'no-release'
+    }
+    $version = [string]$release.version
+    $current = ConvertTo-ProgramVersion $CurrentVersion
+    $latest = ConvertTo-ProgramVersion $version
+    if ($null -ne $current -and $null -ne $latest -and $current -eq $latest) {
+        Write-Host "Установлена последняя версия: $CurrentVersion" -ForegroundColor Green
+        return 'up-to-date'
+    }
+
+    $isRollback = $null -ne $current -and $null -ne $latest -and $latest -lt $current
+    $lines = New-Object 'System.Collections.Generic.List[object]'
+    $lines.Add("Установлена версия:  $CurrentVersion")
+    $published = if ($release.publishedAt) { ' от ' + ([DateTimeOffset]::Parse([string]$release.publishedAt).LocalDateTime.ToString('yyyy-MM-dd HH:mm')) } else { '' }
+    $lines.Add("Версия в облаке:     $version$published")
+    if ($isRollback) {
+        $lines.Add('')
+        $lines.Add([pscustomobject]@{ Text = 'Администратор сделал текущей более старую версию: установка будет откатом.'; Color = 'Yellow' })
+    }
+    $notes = @($release.notes | Where-Object { $_ })
+    if ($notes.Count -gt 0) {
+        $lines.Add('')
+        $lines.Add([pscustomobject]@{ Text = 'Что нового:'; Color = 'Cyan' })
+        foreach ($note in ($notes | Select-Object -First 15)) { $lines.Add("  • $note") }
+        if ($notes.Count -gt 15) { $lines.Add([pscustomobject]@{ Text = "  и ещё $($notes.Count - 15)"; Color = 'DarkGray' }) }
+    }
+    $title = if ($isRollback) { 'Откат программы' } else { 'Доступна новая версия программы' }
+    $choice = Select-SyncAction $title $lines.ToArray() @("Установить версию $version", 'Отмена') -AllowBack -Section 'Обновление программы'
+    if ($choice -ne 0) { return 'cancelled' }
+
+    Clear-Host
+    Write-ToolboxHeader -Section 'Обновление программы'
+    Write-Host "Загрузка версии $version..." -ForegroundColor Cyan
+    $updateRoot = Join-Path $Root '.update'
+    New-Item -ItemType Directory -Path $updateRoot -Force | Out-Null
+    $zip = Join-Path $updateRoot "comp-info-$version.zip"
+    Save-CloudDownload "$($config.ApiUrl)/program/$version/package" $connection.Key $zip
+    if ((Get-FileSha256 $zip) -ne ([string]$release.sha256).ToLowerInvariant()) {
+        Remove-Item -LiteralPath $zip -Force
+        throw 'Архив повреждён при загрузке: контрольная сумма не совпадает. Запустите обновление ещё раз.'
+    }
+
+    Write-Host 'Установка...' -ForegroundColor Cyan
+    $result = Install-ProgramRelease $Root $zip $version $CurrentVersion
+    Write-Host ''
+    Write-Host "Программа обновлена до версии $version." -ForegroundColor Green
+    Write-Host "Файлов установлено: $($result.Installed)" -ForegroundColor DarkGray
+    if ($result.Removed.Count -gt 0) { Write-Host "Удалены устаревшие файлы: $($result.Removed -join ', ')" -ForegroundColor DarkGray }
+    Write-Host "Прежняя версия сохранена в $($result.Backup)" -ForegroundColor DarkGray
+    return 'updated'
 }

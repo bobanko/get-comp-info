@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { fail } from './http';
+import { releaseApi } from './releases';
 import { consoleApi } from './routes/console';
 import { webApi } from './routes/web';
 import type { AppEnv } from './types';
@@ -9,6 +10,7 @@ const app = new Hono<AppEnv>();
 
 app.route('/api/client', consoleApi);
 app.route('/api/web', webApi);
+app.route('/api/release', releaseApi);
 
 app.all('/api/*', () => fail(404, 'not_found', 'Неизвестный адрес API.'));
 
