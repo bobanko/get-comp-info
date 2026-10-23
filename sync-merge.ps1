@@ -73,14 +73,34 @@ function Merge-SyncFields {
 
 # Writes JSON through a temporary file so a failure never leaves a half-written record.
 function Write-SyncJson {
-    param([string]$Path, $Record)
+    param([string]$Path, $Record, [int]$Attempts = 10)
     Assert-NoLink $Path
     $parent = Split-Path -Parent $Path
     New-Item -ItemType Directory -Path $parent -Force | Out-Null
     $temporary = Join-Path $parent ([guid]::NewGuid().ToString('N') + '.tmp')
     [IO.File]::WriteAllText($temporary, ($Record | ConvertTo-Json -Depth 100), [Text.UTF8Encoding]::new($true))
-    if (Test-Path -LiteralPath $Path) { [IO.File]::Replace($temporary, $Path, [NullString]::Value) }
-    else { [IO.File]::Move($temporary, $Path) }
+    try {
+        for ($attempt = 1; $true; $attempt++) {
+            try {
+                if (Test-Path -LiteralPath $Path) { [IO.File]::Replace($temporary, $Path, [NullString]::Value) }
+                else { [IO.File]::Move($temporary, $Path) }
+                return
+            }
+            catch {
+                # Antivirus and search indexers briefly open a freshly written file without
+                # allowing deletion, which makes Replace fail. Wait a little and try again;
+                # as a last resort overwrite the file in place, which such handles still allow.
+                if ($attempt -ge $Attempts) {
+                    [IO.File]::Copy($temporary, $Path, $true)
+                    return
+                }
+                Start-Sleep -Milliseconds (50 * $attempt)
+            }
+        }
+    }
+    finally {
+        if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue }
+    }
 }
 
 function Get-SyncFieldText {

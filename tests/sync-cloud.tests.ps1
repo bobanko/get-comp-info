@@ -155,6 +155,14 @@ try {
     Assert-True ((Get-SafeRecordFileName 'a/b:c.') -ceq 'a_b_c..json') 'Only forbidden file name characters are replaced'
     $merged = Merge-SyncFields $left ('{}' | ConvertFrom-Json) @('comment')
     Assert-True ($null -eq $merged.PSObject.Properties['comment']) 'Taking a missing field removes it'
+    # A file held open the way antivirus scanners do (no delete sharing) must still be updated.
+    $lockedPath = Join-Path $testRoot 'locked.json'
+    Write-SyncJson $lockedPath ('{"v":1}' | ConvertFrom-Json)
+    $handle = [IO.File]::Open($lockedPath, 'Open', 'Read', [IO.FileShare]::ReadWrite)
+    try { Write-SyncJson $lockedPath ('{"v":2}' | ConvertFrom-Json) -Attempts 2 }
+    finally { $handle.Dispose() }
+    Assert-True ((Read-SyncRecord $lockedPath).v -eq 2) 'A file locked by a scanner must still be written'
+    Assert-True (@(Get-ChildItem $testRoot -Filter '*.tmp').Count -eq 0) 'No temporary files may be left behind'
     $table = @(Get-SyncComparisonLines ('{"hostname":"PC","ip":"1"}' | ConvertFrom-Json) ('{"hostname":"PC","ip":"2"}' | ConvertFrom-Json))
     Assert-True (@($table | Where-Object Color -eq 'Yellow').Count -eq 1) 'Only differing rows are highlighted'
 
