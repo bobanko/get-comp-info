@@ -6,6 +6,8 @@
 
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "eset-info.ps1")
+. (Join-Path $PSScriptRoot "sync-merge.ps1")
+. (Join-Path $PSScriptRoot "cloud-client.ps1")
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
 [Console]::InputEncoding = [System.Text.UTF8Encoding]::new()
 
@@ -19,6 +21,8 @@ try {
         throw "В папке нет JSON-файлов: $DataPath"
     }
 
+    $cloudState = Get-CloudStateForDisplay $PSScriptRoot
+
     # Read everything before writing: an invalid record must not produce a partial export.
     $records = @(foreach ($file in $files) {
         try {
@@ -26,7 +30,11 @@ try {
             if ($null -eq $record -or $record -isnot [pscustomobject]) {
                 throw "Ожидался JSON-объект устройства."
             }
+            # The status is computed from the record as saved, before export-only changes.
+            $cloudStatus = Get-CloudStatus $record $file.Name $cloudState
+            [void](Remove-DeprecatedFields $record)
             Initialize-EsetInventoryField $record
+            $record | Add-Member -NotePropertyName cloudStatus -NotePropertyValue $cloudStatus -Force
             $record
         }
         catch {

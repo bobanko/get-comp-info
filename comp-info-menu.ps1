@@ -5,7 +5,6 @@
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
 [Console]::InputEncoding = [System.Text.UTF8Encoding]::new()
 . (Join-Path $PSScriptRoot "console-ui.ps1")
-. (Join-Path $PSScriptRoot "sync-merge.ps1")
 
 $menuItems = @(
     [PSCustomObject]@{ Title = "🖥️ Собрать информацию о компьютере"; Script = "get-comp-info.ps1" }
@@ -14,8 +13,7 @@ $menuItems = @(
     [PSCustomObject]@{ Title = "🗃️ Просмотреть сохранённую информацию"; Script = "view-comp-info.ps1" }
     [PSCustomObject]@{ Title = "🔑 Серийные номера USB-накопителей"; Script = "get-usb-serial.ps1" }
     [PSCustomObject]@{ Title = "📤 Экспортировать все устройства в CSV"; Script = "export-comp-info.ps1" }
-    [PSCustomObject]@{ Title = "🔄 Синхронизировать с USB"; Script = "sync-usb.ps1" }
-    [PSCustomObject]@{ Title = "😵‍💫 Разобрать конфликты синхронизации"; Script = "review-sync-conflicts.ps1"; IsDisabled = $false; ConflictCount = $null }
+    [PSCustomObject]@{ Title = "☁️ Синхронизировать с облаком"; Script = "sync-cloud.ps1" }
     [PSCustomObject]@{ Title = "🚪 Выйти"; Script = $null; IsSeparatedBefore = $true }
 )
 
@@ -43,29 +41,12 @@ function Show-Menu {
         $prefix = if ($index -eq $SelectedIndex) { ">" } else { " " }
         $color = if ($menuItems[$index].IsDisabled) { "DarkGray" } elseif ($index -eq $SelectedIndex) { "Magenta" } else { "Gray" }
         Write-Host ("{0} {1}" -f $prefix, $menuItems[$index].Title) -NoNewline -ForegroundColor $color
-        if ($menuItems[$index].Script -eq 'review-sync-conflicts.ps1') {
-            Write-Host " ($($menuItems[$index].ConflictCount))" -NoNewline -ForegroundColor $color
-        }
         if ($menuItems[$index].IsDraft) {
             Write-Host " [в разработке]" -ForegroundColor Red
         }
         else {
             Write-Host ""
         }
-    }
-}
-
-function Update-ConflictMenuItem {
-    $item = $menuItems | Where-Object Script -eq 'review-sync-conflicts.ps1'
-    try {
-        $conflictComputerRoot = Get-RememberedComputerPath $PSScriptRoot
-        if ([string]::IsNullOrWhiteSpace($conflictComputerRoot)) { $conflictComputerRoot = $PSScriptRoot }
-        $item.ConflictCount = Get-PendingSyncConflictCount $conflictComputerRoot
-        $item.IsDisabled = $item.ConflictCount -eq 0
-    }
-    catch {
-        $item.ConflictCount = 'не удалось подсчитать'
-        $item.IsDisabled = $false
     }
 }
 
@@ -106,7 +87,6 @@ function Invoke-MenuScript {
 $selectedIndex = 0
 $shouldExit = $false
 while (-not $shouldExit) {
-    Update-ConflictMenuItem
     if ($menuItems[$selectedIndex].IsDisabled) { $selectedIndex = 0 }
     Show-Menu -SelectedIndex $selectedIndex
     $key = [Console]::ReadKey($true)
@@ -119,7 +99,6 @@ while (-not $shouldExit) {
             do { $selectedIndex = ($selectedIndex + 1) % $menuItems.Count } while ($menuItems[$selectedIndex].IsDisabled)
         }
         "Enter" {
-            Update-ConflictMenuItem
             $item = $menuItems[$selectedIndex]
             if ($item.IsDisabled) { continue }
             if ($null -eq $item.Script) {

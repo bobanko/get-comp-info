@@ -2,6 +2,8 @@
 
 . (Join-Path $PSScriptRoot "console-ui.ps1")
 . (Join-Path $PSScriptRoot "eset-info.ps1")
+. (Join-Path $PSScriptRoot "sync-merge.ps1")
+. (Join-Path $PSScriptRoot "cloud-client.ps1")
 
 $dataPath = Join-Path $PSScriptRoot "data"
 $script:sortMode = "Hostname"
@@ -15,7 +17,7 @@ $script:listColumnWidths = @{
     Serial = 22
     User = 12
     Collected = 16
-    DB = 10
+    Cloud = 13
     ESET = 14
     Comment = 40
 }
@@ -122,16 +124,18 @@ function Get-DisplayDate($value) {
     return "(not set)"
 }
 
-function Test-AddedToExternalDatabase($data) {
-    return $null -ne $data.PSObject.Properties["addedToExternalDatabase"] -and [bool]$data.addedToExternalDatabase
+function Get-CloudSortValue($status) {
+    switch ($status) {
+        $script:CloudStatusSynced { return 0 }
+        $script:CloudStatusChanged { return 1 }
+        default { return 2 }
+    }
 }
 
-function Get-ExternalDatabaseStatus($data) {
-    if (Test-AddedToExternalDatabase $data) {
-        return "Added"
-    }
-
-    return "Pending"
+# Status relative to the cloud, computed from the file as saved (before display-only fields are added).
+function Update-RecordCloudStatus($record) {
+    $saved = Read-SyncRecord $record.FilePath
+    $record.CloudStatus = Get-CloudStatus $saved $record.FileName $script:cloudState
 }
 
 function Format-ListCell($value, $column) {
@@ -152,7 +156,7 @@ function Write-ListHeader($title, $sortMode) {
 function Switch-ListSort {
     param([switch]$Reverse)
 
-    $modes = @('Hostname', 'IP', 'Serial', 'Username', 'CollectedAt', 'DB')
+    $modes = @('Hostname', 'IP', 'Serial', 'Username', 'CollectedAt', 'Cloud')
     $stateCount = $modes.Count * 2
     $state = [array]::IndexOf($modes, $script:sortMode) * 2 + [int]$script:sortDescending
     $step = if ($Reverse) { -1 } else { 1 }
@@ -168,6 +172,7 @@ function Get-InventoryRecords {
         return [pscustomobject]@{ Records = @(); Warnings = @("Folder data was not found: $dataPath") }
     }
 
+    $script:cloudState = Get-CloudStateForDisplay $PSScriptRoot
     foreach ($file in Get-ChildItem -LiteralPath $dataPath -Filter "*.json" -File) {
         try {
             $computer = Get-Content -Raw -LiteralPath $file.FullName | ConvertFrom-Json -ErrorAction Stop
@@ -175,12 +180,15 @@ function Get-InventoryRecords {
                 throw "The JSON file is empty."
             }
 
+            # The cloud status must be computed before display-only fields are added.
+            $cloudStatus = Get-CloudStatus $computer $file.Name $script:cloudState
             Initialize-EsetInventoryField $computer
             $records += [pscustomobject]@{
                 FilePath = $file.FullName
                 FileName = $file.Name
                 Data     = $computer
                 HasIpConflict = $false
+                CloudStatus = $cloudStatus
             }
         }
         catch {
@@ -219,7 +227,7 @@ function Get-VisibleRecords($records) {
     switch ($script:sortMode) {
         "IP" { return @($result | Sort-Object -Descending:$script:sortDescending { Get-IpSortValue $_.Data.ip }, { Get-DisplayValue $_.Data.hostname }) }
         "Username" { return @($result | Sort-Object -Descending:$script:sortDescending { [string]::IsNullOrWhiteSpace([string]$_.Data.username) }, { [string]$_.Data.username }, { Get-DisplayValue $_.Data.hostname }) }
-        "DB" { return @($result | Sort-Object -Descending:$script:sortDescending { Test-AddedToExternalDatabase $_.Data }, { Get-DisplayValue $_.Data.hostname }) }
+        "Cloud" { return @($result | Sort-Object -Descending:$script:sortDescending { Get-CloudSortValue $_.CloudStatus }, { Get-DisplayValue $_.Data.hostname }) }
         "Serial" { return @($result | Sort-Object -Descending:$script:sortDescending { Get-DisplayValue $_.Data.serial }) }
         "CollectedAt" {
             return @($result | Sort-Object -Descending:$script:sortDescending {
@@ -254,7 +262,7 @@ function Show-List($records, $selectedIndex, $warningCount) {
         return
     }
 
-    Write-ToolboxHint "[↑↓]: select  [↲ Enter]: open  [A]: toggle external DB status  [/]: search  [S]/[Shift+S]: sort next/previous  [R]: reload  [Esc]: exit"
+    Write-ToolboxHint "[↑↓]: select  [↲ Enter]: open  [/]: search  [S]/[Shift+S]: sort next/previous  [R]: reload  [Esc]: exit"
     Write-Host "* — текущий компьютер" -ForegroundColor Green
     Write-Host (" " * ($script:listColumnWidths.Marker + 1)) -NoNewline -ForegroundColor DarkGray
     Write-ListHeader "Hostname" "Hostname"
@@ -262,7 +270,7 @@ function Show-List($records, $selectedIndex, $warningCount) {
     Write-ListHeader "Serial" "Serial"
     Write-ListHeader "User" "Username"
     Write-ListHeader "Collected" "CollectedAt"
-    Write-ListHeader "DB" "DB"
+    Write-ListHeader "Cloud" "Cloud"
     Write-Host (Format-ListCell 'ESET' 'ESET') -NoNewline -ForegroundColor DarkGray
     Write-Host "Comment" -ForegroundColor DarkGray
 
@@ -286,7 +294,7 @@ function Show-List($records, $selectedIndex, $warningCount) {
             (Format-ListCell (Get-DisplayDate $record.Data.collectedAt) "Collected")
         ) -join ""
         Write-Host $line -NoNewline -ForegroundColor $rowColor
-        Write-Host (Format-ListCell (Get-ExternalDatabaseStatus $record.Data) "DB") -NoNewline -ForegroundColor $(if (Test-AddedToExternalDatabase $record.Data) { "Green" } else { "DarkYellow" })
+        Write-Host (Format-ListCell $record.CloudStatus "Cloud") -NoNewline -ForegroundColor (Get-CloudStatusColor $record.CloudStatus)
         Write-Host (Format-ListCell (Get-EsetDisplayValue $record.Data.esetInstalled) 'ESET') -NoNewline -ForegroundColor $(if ($null -eq $record.Data.esetInstalled) { 'DarkGray' } elseif ($record.Data.esetInstalled) { 'Green' } else { 'Yellow' })
         Write-Host (Get-ShortValue $record.Data.comment $script:listColumnWidths.Comment) -ForegroundColor $rowColor
     }
@@ -359,29 +367,17 @@ function Save-Comment($record, $comment) {
     Set-Content -LiteralPath $record.FilePath -Value $json -Encoding UTF8
 }
 
-function Save-ExternalDatabaseStatus($record, $isAdded) {
-    if ($null -eq $record.Data.PSObject.Properties["addedToExternalDatabase"]) {
-        $record.Data | Add-Member -MemberType NoteProperty -Name "addedToExternalDatabase" -Value $isAdded
+function Edit-RecordComment($record) {
+    $edit = Edit-Comment $record.Data.comment
+    if (-not $edit.Saved) { return }
+    try {
+        Save-Comment $record $edit.Value
+        Update-RecordCloudStatus $record
+        $script:notice = "Comment saved: $($record.FileName)"
     }
-    else {
-        $record.Data.addedToExternalDatabase = $isAdded
+    catch {
+        $script:notice = "Could not save comment: $($_.Exception.Message)"
     }
-
-    if ($isAdded) {
-        $timestamp = (Get-Date).ToString("o")
-        if ($null -eq $record.Data.PSObject.Properties["addedToExternalDatabaseAt"]) {
-            $record.Data | Add-Member -MemberType NoteProperty -Name "addedToExternalDatabaseAt" -Value $timestamp
-        }
-        else {
-            $record.Data.addedToExternalDatabaseAt = $timestamp
-        }
-    }
-    elseif ($null -ne $record.Data.PSObject.Properties["addedToExternalDatabaseAt"]) {
-        $record.Data.addedToExternalDatabaseAt = $null
-    }
-
-    $json = $record.Data | ConvertTo-Json -Depth 10
-    Set-Content -LiteralPath $record.FilePath -Value $json -Encoding UTF8
 }
 
 function Show-Details($records, $selectedIndex) {
@@ -390,7 +386,7 @@ function Show-Details($records, $selectedIndex) {
         $data = $record.Data
         Clear-Screen
         Write-ToolboxHeader -Section "Computer details ($($selectedIndex + 1) of $($records.Count))"
-        Write-ToolboxHint "[←→]/[↑↓]: previous/next  [E]/[F2]: edit comment  [A]: toggle external DB status  [Esc]: list"
+        Write-ToolboxHint "[←→]/[↑↓]: previous/next  [E]/[F2]: edit comment  [Esc]: list"
         Write-Host ""
         Write-Host ("{0,-15} {1}" -f "Hostname:", (Get-DisplayValue $data.hostname))
         Write-Host ("{0,-15} {1}" -f "Serial:", (Get-DisplayValue $data.serial))
@@ -406,11 +402,10 @@ function Show-Details($records, $selectedIndex) {
         Write-Host "Comment:" -ForegroundColor DarkGray
         Write-Host (Get-DisplayValue $data.comment)
         Write-Host ""
-        Write-Host "External database:" -NoNewline -ForegroundColor DarkGray
-        Write-Host (" " + (Get-ExternalDatabaseStatus $data)) -ForegroundColor $(if (Test-AddedToExternalDatabase $data) { "Green" } else { "DarkYellow" })
-        if (Test-AddedToExternalDatabase $data) {
-            Write-Host ("Marked at: " + (Get-DisplayValue $data.addedToExternalDatabaseAt)) -ForegroundColor DarkGray
-        }
+        Write-Host "Cloud:" -NoNewline -ForegroundColor DarkGray
+        Write-Host (" " + $record.CloudStatus) -ForegroundColor (Get-CloudStatusColor $record.CloudStatus)
+        $lastSync = if ($script:cloudState.LastSyncAt) { Get-DisplayDate $script:cloudState.LastSyncAt } else { "never" }
+        Write-Host ("Last sync of this copy: " + $lastSync) -ForegroundColor DarkGray
         Write-Host ""
         Write-Host "File: $($record.FileName)" -ForegroundColor DarkGray
 
@@ -421,42 +416,9 @@ function Show-Details($records, $selectedIndex) {
             "UpArrow" { if ($selectedIndex -gt 0) { $selectedIndex-- }; break }
             "RightArrow" { if ($selectedIndex -lt $records.Count - 1) { $selectedIndex++ }; break }
             "DownArrow" { if ($selectedIndex -lt $records.Count - 1) { $selectedIndex++ }; break }
-            "F2" {
-                $edit = Edit-Comment $data.comment
-                if ($edit.Saved) {
-                    try {
-                        Save-Comment $record $edit.Value
-                        $script:notice = "Comment saved: $($record.FileName)"
-                    }
-                    catch {
-                        $script:notice = "Could not save comment: $($_.Exception.Message)"
-                    }
-                }
-                break
-            }
+            "F2" { Edit-RecordComment $record; break }
             default {
-                if ($key.Key -eq [ConsoleKey]::A) {
-                    $newStatus = -not (Test-AddedToExternalDatabase $data)
-                    try {
-                        Save-ExternalDatabaseStatus $record $newStatus
-                        $script:notice = if ($newStatus) { "Marked as added to external database: $($record.FileName)" } else { "External database mark removed: $($record.FileName)" }
-                    }
-                    catch {
-                        $script:notice = "Could not save external database status: $($_.Exception.Message)"
-                    }
-                }
-                elseif ($key.Key -eq [ConsoleKey]::E) {
-                    $edit = Edit-Comment $data.comment
-                    if ($edit.Saved) {
-                        try {
-                            Save-Comment $record $edit.Value
-                            $script:notice = "Comment saved: $($record.FileName)"
-                        }
-                        catch {
-                            $script:notice = "Could not save comment: $($_.Exception.Message)"
-                        }
-                    }
-                }
+                if ($key.Key -eq [ConsoleKey]::E) { Edit-RecordComment $record }
             }
         }
     }
@@ -482,18 +444,7 @@ while (-not $returnToMenu) {
             continue
         }
         default {
-            if ($key.Key -eq [ConsoleKey]::A -and $records.Count -gt 0) {
-                $record = $records[$selectedIndex]
-                $newStatus = -not (Test-AddedToExternalDatabase $record.Data)
-                try {
-                    Save-ExternalDatabaseStatus $record $newStatus
-                    $script:notice = if ($newStatus) { "Marked as added to external database: $($record.FileName)" } else { "External database mark removed: $($record.FileName)" }
-                }
-                catch {
-                    $script:notice = "Could not save external database status: $($_.Exception.Message)"
-                }
-            }
-            elseif ($key.Key -eq [ConsoleKey]::Oem2) {
+            if ($key.Key -eq [ConsoleKey]::Oem2) {
                 Clear-Screen
                 $current = if ($script:searchTerm) { " (current: $script:searchTerm)" } else { "" }
                 $script:searchTerm = Read-Host "Search hostname, serial, user, model or comment$current (empty clears)"
