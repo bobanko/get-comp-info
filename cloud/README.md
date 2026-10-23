@@ -49,7 +49,7 @@ npm run dev
 5. Настроить Cloudflare Access. Сейчас настроено так (команда `chagear.cloudflareaccess.com`):
    - метод входа **One-time PIN** (код на почту);
    - переиспользуемая политика **Comp Info team**: Allow, Include → Emails — список почт команды. **Нового пользователя добавляют сюда** и в таблицу `users`;
-   - приложение **Comp Info** (self-hosted) для `comp-info.chagear.top` с этой политикой. У адреса есть исключения (overrides) `/api/client/*` и `/api/release` с поведением `public`: консоль и GitHub Actions ходят туда без входа через браузер, а защищают эти пути личные ключи и токен публикации;
+   - приложение **Comp Info** (self-hosted) для `comp-info.chagear.top` с этой политикой. У адреса есть исключения (overrides) `/api/client/*` и `/api/release` с поведением `public`: консоль и GitHub Actions ходят туда без входа через браузер, а защищают эти пути личные ключи и OIDC-токен GitHub Actions (секретов для публикации версий не нужно);
    - **Application Audience (AUD) Tag** приложения и домен команды вписаны в `wrangler.jsonc`.
 6. После изменения `ACCESS_TEAM_DOMAIN` или `ACCESS_AUD` в `wrangler.jsonc` снова выполнить `npm run deploy`.
 7. Создать первого администратора:
