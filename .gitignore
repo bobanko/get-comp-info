@@ -4,3 +4,6 @@
 /sync-backups/
 /sync-state/
 /sync-targets.json
+/cloud-key.txt
+/cloud-state.json
+/.update/
