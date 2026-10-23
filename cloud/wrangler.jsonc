@@ -7,8 +7,7 @@
     {
       "binding": "DB",
       "database_name": "comp-info",
-      // Replace with the id printed by `npx wrangler d1 create comp-info`.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "b3cd8108-feef-4afb-aab9-7329a365495e",
       "migrations_dir": "migrations"
     }
   ],
