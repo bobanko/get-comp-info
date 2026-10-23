@@ -69,11 +69,12 @@ function accessKeys(env: Env): JWTVerifyGetKey {
 
 async function resolveAccessEmail(c: Context<AppEnv>): Promise<string> {
   const env = c.env;
+  // Local `wrangler dev` only: requests to the real domain never use the development identity.
+  const hostname = new URL(c.req.url).hostname;
+  if (env.DEV_AUTH_EMAIL && (hostname === 'localhost' || hostname === '127.0.0.1')) {
+    return env.DEV_AUTH_EMAIL.toLowerCase();
+  }
   if (!env.ACCESS_AUD) {
-    // Local `wrangler dev` only: without an Access audience there is nothing to verify.
-    if (env.DEV_AUTH_EMAIL) {
-      return env.DEV_AUTH_EMAIL.toLowerCase();
-    }
     fail(500, 'access_not_configured', 'Cloudflare Access не настроен (ACCESS_AUD).');
   }
   if (!env.ACCESS_TEAM_DOMAIN) {

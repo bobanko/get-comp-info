@@ -44,6 +44,17 @@ describe('web authentication', () => {
     expect(response.status).toBe(200);
   });
 
+  it('uses the development identity only for requests to localhost', async () => {
+    const { exports } = await import('cloudflare:workers');
+    // DEV_AUTH_EMAIL is set in the test environment, yet the real domain still requires Access.
+    const remote = await exports.default.fetch(new Request('https://comp-info.test/api/web/me'));
+    expect(remote.status).toBe(401);
+    await addUser('viewer', { email: 'dev@example.com' });
+    const local = await exports.default.fetch(new Request('http://localhost:8787/api/web/me'));
+    expect(local.status).toBe(200);
+    expect(await local.json()).toMatchObject({ email: 'dev@example.com' });
+  });
+
   it('rejects unknown and disabled users', async () => {
     expect((await webRequest('stranger@example.com', 'GET', '/me')).status).toBe(403);
     const disabled = await addUser('admin', { active: false });

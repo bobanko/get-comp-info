@@ -1,4 +1,5 @@
 import { Hono, type Context } from 'hono';
+import { syncAccessPolicy } from '../access-policy';
 import { webAuth } from '../auth';
 import { generateApiKey, sha256Hex } from '../crypto';
 import {
@@ -182,7 +183,7 @@ webApi.post('/users', async (c) => {
   await c.env.DB.prepare('INSERT INTO users (email, name, role, active, created_at) VALUES (?, ?, ?, ?, ?)')
     .bind(row.email, row.name, row.role, row.active, row.created_at)
     .run();
-  return c.json(toUser(row), 201);
+  return c.json({ ...toUser(row), access: await syncAccessPolicy(c.env) }, 201);
 });
 
 webApi.patch('/users/:email', async (c) => {
@@ -193,6 +194,7 @@ webApi.patch('/users/:email', async (c) => {
   if (!row) {
     fail(404, 'not_found', 'Пользователь не найден.');
   }
+  const wasActive = row.active;
   if (body.name !== undefined) {
     row.name = validateName(body.name);
   }
@@ -211,7 +213,9 @@ webApi.patch('/users/:email', async (c) => {
   await c.env.DB.prepare('UPDATE users SET name = ?, role = ?, active = ? WHERE email = ?')
     .bind(row.name, row.role, row.active, email)
     .run();
-  return c.json(toUser(row));
+  // Only enabling or disabling changes who may pass Cloudflare Access.
+  const access = wasActive !== row.active ? await syncAccessPolicy(c.env) : undefined;
+  return c.json({ ...toUser(row), access });
 });
 
 function validateName(value: unknown): string {

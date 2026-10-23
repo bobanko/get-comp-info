@@ -1,2 +1,2 @@
-# Copy to .dev.vars for local `npm run dev`. Without ACCESS_AUD every web request is this user.
+# Copy to .dev.vars for local `npm run dev`. Requests to localhost are made as this user.
 DEV_AUTH_EMAIL=admin@example.com

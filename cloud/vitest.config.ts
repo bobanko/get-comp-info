@@ -21,6 +21,7 @@ export default defineConfig(async () => {
             ACCESS_TEAM_DOMAIN: 'test-team.cloudflareaccess.com',
             ACCESS_AUD: 'test-aud',
             ACCESS_JWKS: JSON.stringify({ keys: [publicJwk] }),
+            DEV_AUTH_EMAIL: 'dev@example.com',
           },
         },
       }),

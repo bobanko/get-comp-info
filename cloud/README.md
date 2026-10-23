@@ -34,7 +34,11 @@ npx wrangler d1 execute comp-info --local --command "INSERT INTO users (email, n
 npm run dev
 ```
 
-Пока `ACCESS_AUD` пуст, каждый веб-запрос выполняется от имени `DEV_AUTH_EMAIL` из `.dev.vars`. В рабочем облаке `ACCESS_AUD` обязателен, а `DEV_AUTH_EMAIL` задавать нельзя.
+Откройте http://localhost:8787. Запросы на `localhost` выполняются от имени `DEV_AUTH_EMAIL` из `.dev.vars`, без Cloudflare Access; на настоящем домене эта переменная не действует. Скрипт `dev` передаёт Worker'у адрес `localhost`, иначе wrangler подставил бы боевой домен из `routes`.
+
+Если при автоматической перезагрузке wrangler падает с `SQLITE_BUSY`, остановите его и запустите заново; проверьте, что не остались процессы `workerd` от прошлых запусков.
+
+Веб-интерфейс лежит в `public/`: обычные ES-модули без сборки (`js/app.js` — маршруты, `js/pages/*` — страницы, `js/logic.js` — логика без DOM, она покрыта тестами `test/web-logic.test.ts`).
 
 ## Развёртывание
 
@@ -54,6 +58,12 @@ npm run dev
    npx wrangler d1 execute comp-info --remote --command "INSERT INTO users (email, name, role, active, created_at) VALUES ('you@company.com', 'Имя', 'admin', 1, '2026-10-23T00:00:00Z')"
    ```
 
-   Остальных пользователей добавляет администратор через веб-API (`POST /api/web/users`). Каждого нового пользователя нужно также добавить в политику Access.
+   Остальных пользователей добавляет администратор на странице «Пользователи» веб-интерфейса.
+
+8. (Рекомендуется) Включить автоматическое обновление политики Access, чтобы новый или снова включённый пользователь мог войти сразу:
+   - в панели Cloudflare: My Profile → API Tokens → Create Token → Custom token, разрешение **Account → Access: Apps and Policies → Edit** для этого аккаунта;
+   - сохранить токен как секрет Worker'а: `npx wrangler secret put CF_API_TOKEN` (команда спросит значение, в чат и в файлы его не вставлять).
+
+   Аккаунт и политика уже указаны в `wrangler.jsonc` (`CF_ACCOUNT_ID`, `ACCESS_POLICY_ID`). Без токена страница «Пользователи» напоминает добавить почту в политику «Comp Info team» вручную. Правила политики не по почте (например, по домену) обновление не трогает.
 
 Пользователи, которых нет в таблице `users` или которые отключены, получают 403 даже после успешного входа через Access.
