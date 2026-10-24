@@ -38,6 +38,7 @@ function Reset-Server {
         Change = 0
         Keys = @{ 'good-key' = @{ email = 'h@example.com'; name = 'Tester'; role = 'harvester' } }
         Requests = 0
+        Network = $null
     }
 }
 
@@ -108,6 +109,10 @@ function Invoke-CloudRequest {
         Write-ServerDevice $id $data $false $user.email
         $device = Get-ServerDevice $id
         return New-Response 200 @{ revision = $device.revision; changed = $true; device = $device }
+    }
+    if ($Method -eq 'GET' -and $path -eq '/settings/network') {
+        if ($null -eq $script:server.Network) { return New-Response 404 @{ error = @{ code = 'no_settings'; message = 'Не заданы.' } } }
+        return New-Response 200 $script:server.Network
     }
     return New-Response 404 @{ error = @{ code = 'not_found'; message = 'Неизвестный адрес API.' } }
 }
@@ -183,7 +188,8 @@ try {
     $requests = $script:server.Requests
     $counts = Sync $flash
     Assert-True ($counts.PushedNew + $counts.PushedUpdated + $counts.PushedSame -eq 0) 'Unchanged records must not be sent again'
-    Assert-True ($script:server.Requests - $requests -eq 3) 'A quiet sync is a key check, one change feed request and a version check'
+    Assert-True ($script:server.Requests - $requests -eq 4) 'A quiet sync is a key check, the change feed, network profiles and a version check'
+    Assert-True ($counts.NetworkProfiles -eq 'missing' -and -not (Test-Path (Join-Path $flash 'network-profiles.json'))) 'No profiles in the cloud means no cache'
 
     # ---------- The computer downloads everything ----------
     $pc = New-ProgramCopy 'pc'
@@ -280,6 +286,22 @@ try {
     $url = Get-DeviceUrl ([pscustomobject]@{ ApiUrl = $script:api }) 'A. b/c\d?e%f.'
     Assert-True ([Net.HttpWebRequest]::Create($url).RequestUri.AbsoluteUri -ceq $url) ".NET must keep the device URL as built: $url"
     Write-ServerDevice 'To be filled by O.E.M.' ($script:server.Devices['To be filled by O.E.M.'].data | ConvertFrom-Json) $true 'admin@example.com'
+
+    # ---------- Network profiles are cached for offline LAN setup ----------
+    $script:server.Network = @{ key = 'network'; revision = 1; updatedAt = '2026-10-24T10:00:00Z'; updatedBy = 'admin@example.com'
+        value = @{ firstOctet = 10; segments = @(20); domainCheckHost = $null
+            locations = @(@{ name = 'Корпус'; thirdOctet = 5; prefixLength = 25; gatewayOctet = 129; firstHostOctet = 130; lastHostOctet = 254; dnsServers = @('10.9.0.1') }) } }
+    $counts = Sync $pc
+    $cache = Join-Path $pc 'network-profiles.json'
+    Assert-True ($counts.NetworkProfiles -eq 'updated' -and (Read-SyncRecord $cache).value.locations[0].name -eq 'Корпус') 'Profiles must be saved to the cache'
+    $written = (Get-Item $cache).LastWriteTimeUtc
+    Start-Sleep -Milliseconds 50
+    Assert-True ((Sync $pc).NetworkProfiles -eq 'unchanged' -and (Get-Item $cache).LastWriteTimeUtc -eq $written) 'Unchanged profiles must not be rewritten'
+    $script:server.Network.revision = 2
+    $script:server.Network.value.segments = @(20, 21)
+    Assert-True ((Sync $pc).NetworkProfiles -eq 'updated' -and (@((Read-SyncRecord $cache).value.segments) -join ',') -eq '20,21') 'Changed profiles must replace the cache'
+    $script:server.Network = $null
+    Assert-True ((Sync $pc).NetworkProfiles -eq 'missing' -and (Test-Path $cache)) 'The cache is kept when the cloud has no profiles'
 
     # ---------- Paging ----------
     $script:CloudPageSize = 2

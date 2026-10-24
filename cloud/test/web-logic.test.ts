@@ -12,6 +12,7 @@ import {
   isRecent,
   sortDevices,
 } from '../public/js/logic.js';
+import { describeLocation, parseNumberList, subnetMask, suggestHostRange } from '../public/js/network-logic.js';
 
 function device(id: string, data: Record<string, unknown>, extra: Record<string, unknown> = {}) {
   return { id, revision: 1, deleted: false, createdAt: '', updatedAt: '2026-10-20T10:00:00Z', updatedBy: 'h@example.com', data, ...extra };
@@ -109,6 +110,30 @@ describe('differences', () => {
       hostname: 'PC-2',
       comment: 'новое',
     });
+  });
+});
+
+describe('network settings page', () => {
+  it('parses number lists and marks junk for the server to reject', () => {
+    expect(parseNumberList('111, 112 113;114')).toEqual([111, 112, 113, 114]);
+    expect(parseNumberList('')).toEqual([]);
+    expect(Number.isNaN(parseNumberList('1, x')[1])).toBe(true);
+  });
+
+  it('computes masks and host ranges from the gateway', () => {
+    expect(subnetMask(25)).toBe('255.255.255.128');
+    expect(subnetMask(30)).toBe('255.255.255.252');
+    expect(suggestHostRange(129, 25)).toEqual({ firstHostOctet: 130, lastHostOctet: 254 });
+    expect(suggestHostRange(97, 28)).toEqual({ firstHostOctet: 98, lastHostOctet: 110 });
+    expect(suggestHostRange(110, 28)).toEqual({ firstHostOctet: 97, lastHostOctet: 109 });
+    expect(suggestHostRange(100, 28)).toBeNull();
+    expect(suggestHostRange(129, 16)).toBeNull();
+  });
+
+  it('describes what the console will configure', () => {
+    const location = { thirdOctet: 5, prefixLength: 25, gatewayOctet: 129, firstHostOctet: 130, lastHostOctet: 254 };
+    expect(describeLocation(10, 20, location)).toBe('10.20.5.130–10.20.5.254, шлюз 10.20.5.129, маска 255.255.255.128');
+    expect(describeLocation(10, Number.NaN, { ...location, gatewayOctet: '' })).toContain('шлюз 10.?.5.?');
   });
 });
 

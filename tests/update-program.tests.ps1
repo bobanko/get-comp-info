@@ -42,6 +42,9 @@ $script:downloads = 0
 function Invoke-CloudRequest {
     param([string]$Method, [string]$Url, [string]$Key, $Body)
     if ($Url -eq "$script:api/me") { return [pscustomobject]@{ Status = 200; Body = [pscustomobject]@{ email = 'h@example.com'; name = 'Tester'; role = 'harvester' } } }
+    if ($Url -eq "$script:api/settings/network") {
+        return [pscustomobject]@{ Status = 200; Body = ('{"key":"network","revision":1,"value":{"firstOctet":10,"segments":[20],"domainCheckHost":null,"locations":[]}}' | ConvertFrom-Json) }
+    }
     if ($Url -eq "$script:api/program/latest") {
         if ($null -eq $script:release) { return [pscustomobject]@{ Status = 404; Body = $null } }
         return [pscustomobject]@{ Status = 200; Body = $script:release }
@@ -144,6 +147,7 @@ try {
     Assert-True ((Read-Text "$($backup[0].FullName)\old.ps1") -eq 'obsolete' -and (Read-Text "$($backup[0].FullName)\a.ps1") -eq 'old a') 'Backup must hold the old files'
     Assert-True (@(Get-ChildItem "$copy\.update" -Directory -Filter 'extract-*').Count -eq 0) 'Temporary extraction must be removed'
     Assert-True (@(Get-ChildItem $copy -Filter '*.tmp').Count -eq 0) 'No temporary files may be left behind'
+    Assert-True ((Read-SyncRecord "$copy\network-profiles.json").revision -eq 1) 'An update must refresh the network profiles cache while online'
 
     # ---------- Nothing to do ----------
     $downloads = $script:downloads

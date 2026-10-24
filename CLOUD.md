@@ -76,7 +76,38 @@ program_releases (
   published_at  TEXT NOT NULL,
   is_current    INTEGER NOT NULL   -- ровно одна версия текущая
 )
+
+-- Общие настройки, сейчас одна: 'network' — сетевые профили для настройки LAN в консоли
+settings (
+  key           TEXT PRIMARY KEY,
+  value         TEXT NOT NULL,     -- JSON
+  revision      INTEGER NOT NULL,
+  updated_at    TEXT NOT NULL,
+  updated_by    TEXT NOT NULL
+)
+
+settings_history (                 -- каждая сохранённая версия настройки
+  id, key, revision, value, changed_at, changed_by   -- UNIQUE (key, revision)
+)
 ```
+
+### Сетевые профили
+
+Адреса внутренних сетей хранятся только здесь, чтобы репозиторий можно было открыть. Документ `network`:
+
+```json
+{
+  "firstOctet": 10,
+  "segments": [20, 21],
+  "domainCheckHost": "dc.example.local",
+  "locations": [
+    { "name": "Главный корпус", "thirdOctet": 5, "prefixLength": 25, "gatewayOctet": 129,
+      "firstHostOctet": 130, "lastHostOctet": 254, "dnsServers": ["10.9.0.1"], "segments": [20] }
+  ]
+}
+```
+
+Значения в примере вымышленные. При сохранении Worker проверяет: октеты 0–255, префикс 24–30, шлюз и диапазон адресов внутри одной подсети без адреса сети, широковещательного адреса и самого шлюза, 1–4 DNS-сервера IPv4, уникальные названия корпусов, сегменты без повторов. `segments` у корпуса необязательны (по умолчанию общие). Лишние поля отбрасываются. Смысл полей — в [LAN_ADAPTER_REQUIREMENTS.md](LAN_ADAPTER_REQUIREMENTS.md).
 
 Правила:
 
@@ -137,6 +168,7 @@ program_releases (
 | `GET` | `/program/latest` | Текущая версия программы: `version`, `sha256`, `size`, `publishedAt`, `notes` |
 | `GET` | `/program/{version}/package` | Архив версии (zip) |
 | `POST` | `/program` | Опубликовать архив версии (только `admin`; см. [PROGRAM_UPDATE.md](PROGRAM_UPDATE.md)) |
+| `GET` | `/settings/network` | Сетевые профили для кеша консоли (404, если не заданы) |
 
 `GET /devices` возвращает:
 
@@ -176,6 +208,8 @@ program_releases (
 | `POST` | `/devices/{id}/restore` | admin |
 | `GET` / `POST` / `DELETE` | `/keys` | harvester и выше (свои), admin (все) |
 | `GET` / `POST` / `PATCH` | `/users` | admin |
+| `GET` / `PUT` | `/settings/network` (`PUT`: `baseRevision` + `value`, 409 при устаревшей ревизии) | admin |
+| `GET` | `/settings/network/history` | admin |
 | `GET` | `/releases` | admin |
 | `POST` | `/releases/{version}/make-current` | admin |
 
@@ -214,6 +248,8 @@ program_releases (
 **Мои ключи** (`harvester` и выше): создать ключ с названием (показывается один раз, с кнопкой копирования), видеть дату последнего использования, отозвать. `admin` видит ключи всех пользователей.
 
 **Пользователи** (`admin`): добавление, имя, роль, включение и отключение. Собственную роль и доступ изменить нельзя. Если задан секрет `CF_API_TOKEN`, при добавлении, включении и отключении пользователя Worker сам обновляет список почт в политике Access «Comp Info team»; без него страница напоминает сделать это вручную.
+
+**Сеть** (`admin`): общие параметры (первый октет, сегменты, узел для проверки домена) и карточка на каждый корпус: название, третий октет, маска, шлюз, диапазон адресов, DNS, свои сегменты. Кнопка «Рассчитать диапазон» заполняет адреса по шлюзу и маске, под карточкой — пример настройки. Порядок корпусов задаёт порядок в меню консоли. Ошибки проверки показываются над формой, одновременная правка двумя администраторами не затирает изменения. Внизу — история ревизий.
 
 **Версии программы** (`admin`): опубликованные версии с «Что нового», размером и коммитом; кнопка «Сделать текущей» для отката.
 

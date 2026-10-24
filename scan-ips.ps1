@@ -1,31 +1,39 @@
-﻿$subnet = "10.20.2"
-$start = 65
-$end = 94
+﻿# Draft: shows which addresses of a subnet answer or appear in the ARP table.
+# The subnet is asked at start (or passed as -Subnet 10.20.5 -Start 65 -End 94); no addresses are stored here.
+param(
+    [string]$Subnet,
+    [int]$Start = 1,
+    [int]$End = 254
+)
+
 . (Join-Path $PSScriptRoot "console-ui.ps1")
 
 Write-ToolboxHeader -Section "IP scanner [draft]"
-
-Write-Host "`nСканирование $subnet.$start – $subnet.$end ...`n" -ForegroundColor Cyan
-
-# Быстро пингуем все адреса (чтобы обновить ARP-кэш)
-65..94 | ForEach-Object {
-    $ip = "$subnet.$_"
-    Test-Connection -ComputerName $ip -Count 1 -Quiet -TimeoutSeconds 1 | Out-Null
+while ($Subnet -notmatch '^\d{1,3}\.\d{1,3}\.\d{1,3}$') {
+    Write-Host 'Первые три октета подсети, например 10.20.5:'
+    $Subnet = (Read-Host '>').Trim()
 }
+if ($Start -lt 1 -or $End -gt 254 -or $Start -gt $End) { throw 'Диапазон последнего октета должен быть внутри 1–254.' }
 
-# Смотрим ARP-таблицу
-$arp = arp -a | Select-String "$subnet\."
+Write-Host "`nСканирование $Subnet.$Start – $Subnet.$End ...`n" -ForegroundColor Cyan
 
-$occupied = @{}
-foreach ($line in $arp) {
-    if ($line -match "($subnet\.\d+)\s+([\da-f-]+)") {
-        $occupied[$matches[1]] = $matches[2]
+# Ping every address once to refresh the ARP cache.
+$ping = New-Object System.Net.NetworkInformation.Ping
+try {
+    foreach ($octet in $Start..$End) {
+        try { [void]$ping.Send("$Subnet.$octet", 300) } catch { }
     }
 }
+finally { $ping.Dispose() }
 
-# Выводим результат
-65..94 | ForEach-Object {
-    $ip = "$subnet.$_"
+$pattern = [regex]::Escape($Subnet) + '\.(\d+)\s+([\da-f-]{17})'
+$occupied = @{}
+foreach ($line in (arp -a)) {
+    if ($line -match $pattern) { $occupied["$Subnet.$($matches[1])"] = $matches[2] }
+}
+
+foreach ($octet in $Start..$End) {
+    $ip = "$Subnet.$octet"
     if ($occupied.ContainsKey($ip)) {
         Write-Host ("{0,-18} {1}" -f $ip, "ЗАНЯТ   ($($occupied[$ip]))") -ForegroundColor Red
     } else {

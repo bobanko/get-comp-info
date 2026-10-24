@@ -309,6 +309,22 @@ table.diff td.after { color: var(--ok); }
 table.diff td { overflow-wrap: anywhere; }
 table.diff td:first-child { white-space: nowrap; overflow-wrap: normal; color: var(--muted); }
 
+/* ---------- Network settings ---------- */
+
+.grid-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px 12px; margin-bottom: 10px; }
+.grid-fields .field { align-content: start; }
+.grid-fields .field small { font-size: 11px; }
+.grid-fields input, .grid-fields select { width: 100%; }
+.location .actions p { margin: 0; }
+.sticky-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  padding: 10px 0;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+}
+
 /* ---------- Releases ---------- */
 
 details summary { cursor: pointer; }

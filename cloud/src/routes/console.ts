@@ -3,6 +3,7 @@ import { consoleAuth } from '../auth';
 import { listChanges, normalizeData, putDevice, validateDeviceId, type WriteResult } from '../devices';
 import { fail, readJsonObject, requireRole } from '../http';
 import { getCurrentRelease, getReleasePackage, storeRelease } from '../releases';
+import { getSetting, NETWORK_KEY, type NetworkSettings } from '../settings';
 import type { AppEnv } from '../types';
 
 const DEFAULT_PAGE = 500;
@@ -46,6 +47,13 @@ consoleApi.get('/program/latest', async (c) => {
   const release = await getCurrentRelease(c.env.DB);
   if (!release) fail(404, 'no_release', 'В облаке ещё нет опубликованных версий программы.');
   return c.json(release);
+});
+
+// Network profiles cached by the console for setting up LAN adapters offline.
+consoleApi.get('/settings/network', async (c) => {
+  const record = await getSetting<NetworkSettings>(c.env.DB, NETWORK_KEY);
+  if (!record) fail(404, 'no_settings', 'Настройки сети в облаке ещё не заданы.');
+  return c.json(record);
 });
 
 // Publishing from an admin's computer (tools/release.ps1), for when GitHub Actions is unavailable.

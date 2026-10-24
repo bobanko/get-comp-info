@@ -425,7 +425,10 @@ function Show-WizardSelection {
 }
 
 :locationSelection while ($true) {
-    $location = Select-MenuItem -Step "Выбор сети" -Description "Выберите корпус или автоматическую настройку для интернета." -Items $locationMenuItems -EscapeHint "[Esc] — вернуться в главное меню."
+    $locationDescription = if ($networkProfiles.Missing) {
+        "Профили корпусов не загружены: синхронизируйтесь с облаком, когда будет интернет. Сейчас доступна только автоматическая настройка."
+    } else { "Выберите корпус или автоматическую настройку для интернета." }
+    $location = Select-MenuItem -Step "Выбор сети" -Description $locationDescription -Items $locationMenuItems -EscapeHint "[Esc] — вернуться в главное меню."
     if ($null -eq $location) {
         # The launcher recognizes this as a normal direct return to its menu.
         exit 42
@@ -460,7 +463,7 @@ function Show-WizardSelection {
         $script:wizardSelection.Adapter = $null
         $script:wizardSelection.IpAddress = $null
 
-        $prefix = "10.{0}.{1}" -f $secondOctet, $location.ThirdOctet
+        $prefix = "{0}.{1}.{2}" -f $networkFirstOctet, $secondOctet, $location.ThirdOctet
         $gateway = "{0}.{1}" -f $prefix, $location.GatewayOctet
 
         if ($null -eq $adapterMenuItems) {

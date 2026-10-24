@@ -13,6 +13,7 @@ import {
 } from '../devices';
 import { fail, isPlainObject, nowIso, readJsonObject, requireRole } from '../http';
 import { getCurrentRelease, listReleases, makeCurrent } from '../releases';
+import { getSetting, getSettingHistory, NETWORK_KEY, putSetting, validateNetworkSettings, type NetworkSettings } from '../settings';
 import { hasRole, isRole, toUser, type AppEnv, type UserRow } from '../types';
 import { writeResponse } from './console';
 
@@ -217,6 +218,36 @@ webApi.patch('/users/:email', async (c) => {
   // Only enabling or disabling changes who may pass Cloudflare Access.
   const access = wasActive !== row.active ? await syncAccessPolicy(c.env) : undefined;
   return c.json({ ...toUser(row), access });
+});
+
+// ---------- Network settings ----------
+
+webApi.get('/settings/network', async (c) => {
+  requireRole(c, 'admin');
+  return c.json({ setting: await getSetting<NetworkSettings>(c.env.DB, NETWORK_KEY) });
+});
+
+webApi.get('/settings/network/history', async (c) => {
+  requireRole(c, 'admin');
+  return c.json({ history: await getSettingHistory(c.env.DB, NETWORK_KEY) });
+});
+
+webApi.put('/settings/network', async (c) => {
+  requireRole(c, 'admin');
+  const body = await readJsonObject(c);
+  const baseRevision = body.baseRevision ?? null;
+  if (baseRevision !== null && !(Number.isInteger(baseRevision) && (baseRevision as number) >= 1)) {
+    fail(400, 'invalid_revision', 'baseRevision должен быть null или целым числом от 1.');
+  }
+  const value = validateNetworkSettings(body.value);
+  const result = await putSetting(c.env.DB, NETWORK_KEY, baseRevision as number | null, value, c.get('user'));
+  if (result.status === 'conflict') {
+    return c.json(
+      { error: { code: 'conflict', message: 'Настройки сети уже изменили. Обновите страницу.' }, current: result.current },
+      409,
+    );
+  }
+  return c.json({ setting: result.record });
 });
 
 // ---------- Program releases ----------

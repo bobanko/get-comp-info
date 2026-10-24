@@ -87,8 +87,9 @@ function Invoke-QuickPingSequence {
     for ($i = 0; $i -lt $dnsServers.Count; $i++) {
         if (-not (Invoke-QuickPing -Label ("DNS {0}" -f ($i + 1)) -Address $dnsServers[$i])) { return $false }
     }
-    if (Test-ConfiguredLanAddress -Address $localAddress) {
-        return (Invoke-QuickPing -Label 'Домен' -Address 'dc.example.local')
+    # The domain host comes from the cloud network profiles (cached by synchronization).
+    if ($networkProfiles.DomainCheckHost -and (Test-ConfiguredLanAddress -Address $localAddress)) {
+        return (Invoke-QuickPing -Label 'Домен' -Address $networkProfiles.DomainCheckHost)
     }
     return (Invoke-QuickPing -Label 'Интернет' -Address '1.1.1.1')
 }

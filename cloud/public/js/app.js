@@ -4,6 +4,7 @@ import { hasRole, ROLE_LABELS } from './logic.js';
 import { renderDevice } from './pages/device.js';
 import { renderDevices } from './pages/devices.js';
 import { renderKeys } from './pages/keys.js';
+import { renderNetwork } from './pages/network.js';
 import { renderReleases } from './pages/releases.js';
 import { renderUsers } from './pages/users.js';
 
@@ -15,6 +16,7 @@ const PAGES = [
   { hash: '#/devices', label: 'Устройства', role: 'viewer' },
   { hash: '#/keys', label: 'Мои ключи', role: 'harvester' },
   { hash: '#/users', label: 'Пользователи', role: 'admin' },
+  { hash: '#/network', label: 'Сеть', role: 'admin' },
   { hash: '#/releases', label: 'Версии программы', role: 'admin' },
 ];
 
@@ -58,6 +60,8 @@ async function route() {
     renderKeys(context);
   } else if (hash === '#/users' && hasRole(me, 'admin')) {
     renderUsers(context);
+  } else if (hash === '#/network' && hasRole(me, 'admin')) {
+    renderNetwork(context);
   } else if (hash === '#/releases' && hasRole(me, 'admin')) {
     renderReleases(context);
   } else {

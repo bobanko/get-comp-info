@@ -309,6 +309,7 @@ function New-CloudSyncCounts {
         ReceivedNew = 0; ReceivedUpdated = 0; Deleted = 0; Deferred = 0
         Errors = New-Object 'System.Collections.Generic.List[string]'
         NewVersion = $null
+        NetworkProfiles = $null
     }
 }
 
@@ -525,6 +526,9 @@ function Invoke-CloudSync {
     $context.State.LastSyncAt = (Get-Date).ToString('o')
     Save-CloudState $Root $context.State
 
+    try { $counts.NetworkProfiles = Update-NetworkProfilesCache $Root $config.ApiUrl $connection.Key }
+    catch { $counts.Errors.Add("Профили сети не загружены: $($_.Exception.Message)") }
+
     # A newer program version is only a hint: failing to check it must not fail the sync.
     try {
         $release = Get-CloudProgramRelease $config.ApiUrl $connection.Key
@@ -557,10 +561,34 @@ function Show-CloudSyncSummary {
         Write-Host "Ошибки ($($Counts.Errors.Count)):" -ForegroundColor Red
         foreach ($message in $Counts.Errors) { Write-Host "  $message" -ForegroundColor Red }
     }
+    $profilesText = @{ updated = 'обновлены'; unchanged = 'без изменений'; missing = 'в облаке не заданы' }[[string]$Counts.NetworkProfiles]
+    if ($profilesText) {
+        Write-Host ('{0,-28} {1}' -f 'Профили сети', $profilesText) -ForegroundColor $(if ($Counts.NetworkProfiles -eq 'updated') { 'Cyan' } else { 'DarkGray' })
+    }
     if ($Counts.NewVersion) {
         Write-Host ''
         Write-Host "Доступна новая версия программы $($Counts.NewVersion): пункт меню «Обновить программу»." -ForegroundColor Cyan
     }
+}
+
+# ---------- Network profiles ----------
+
+# Saves the cloud network profiles to network-profiles.json (read by lan-profiles.ps1).
+# Returns updated | unchanged | missing; a cache is kept when the cloud has no profiles.
+function Update-NetworkProfilesCache {
+    param([string]$Root, [string]$ApiUrl, [string]$Key)
+    $response = Invoke-CloudRequest 'GET' "$ApiUrl/settings/network" $Key $null
+    if ($response.Status -eq 404) { return 'missing' }
+    if ($response.Status -ne 200) { throw (Get-CloudErrorMessage $response) }
+    $path = Join-Path $Root 'network-profiles.json'
+    if (Test-Path -LiteralPath $path) {
+        try {
+            if ((Get-RecordHash (Read-SyncRecord $path)) -eq (Get-RecordHash $response.Body)) { return 'unchanged' }
+        }
+        catch { }
+    }
+    Write-SyncJson $path $response.Body
+    return 'updated'
 }
 
 # ---------- Program update ----------
@@ -765,5 +793,16 @@ function Invoke-ProgramUpdate {
     Write-Host "Файлов установлено: $($result.Installed)" -ForegroundColor DarkGray
     if ($result.Removed.Count -gt 0) { Write-Host "Удалены устаревшие файлы: $($result.Removed -join ', ')" -ForegroundColor DarkGray }
     Write-Host "Прежняя версия сохранена в $($result.Backup)" -ForegroundColor DarkGray
+
+    # The program keeps no network addresses itself: refresh their cache while online,
+    # so the LAN setup works on the next offline computer even without a sync.
+    try {
+        if ((Update-NetworkProfilesCache $Root $config.ApiUrl $connection.Key) -eq 'updated') {
+            Write-Host 'Профили сети обновлены.' -ForegroundColor DarkGray
+        }
+    }
+    catch {
+        Write-Host "Профили сети не загружены: $($_.Exception.Message). Они обновятся при синхронизации." -ForegroundColor Yellow
+    }
     return 'updated'
 }
