@@ -167,7 +167,6 @@ settings_history (                 -- каждая сохранённая вер
 | `PUT` | `/devices/{id}` | Создать или изменить запись |
 | `GET` | `/program/latest` | Текущая версия программы: `version`, `sha256`, `size`, `publishedAt`, `notes` |
 | `GET` | `/program/{version}/package` | Архив версии (zip) |
-| `POST` | `/program` | Опубликовать архив версии (только `admin`; см. [PROGRAM_UPDATE.md](PROGRAM_UPDATE.md)) |
 | `GET` | `/settings/network` | Сетевые профили для кеша консоли (404, если не заданы) |
 
 `GET /devices` возвращает:

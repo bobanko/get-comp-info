@@ -143,8 +143,8 @@ function searchText(device) {
 }
 
 // Every word of the query must occur somewhere in the record.
-// duplicatesOf: a DUPLICATE_FIELDS name to keep only devices repeating that field.
-export function filterDevices(devices, { query = '', eset = 'all', duplicatesOf = null } = {}) {
+// duplicatesOf: a DUPLICATE_FIELDS name to keep only devices repeating that field (empty: all).
+export function filterDevices(devices, { query = '', eset = 'all', duplicatesOf = '' } = {}) {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   const duplicates = duplicatesOf ? duplicateValues(devices, duplicatesOf) : null;
   return devices.filter((device) => {

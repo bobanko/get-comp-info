@@ -1,8 +1,8 @@
 import { Hono, type Context } from 'hono';
 import { consoleAuth } from '../auth';
 import { listChanges, normalizeData, putDevice, validateDeviceId, type WriteResult } from '../devices';
-import { fail, readJsonObject, requireRole } from '../http';
-import { getCurrentRelease, getReleasePackage, storeRelease } from '../releases';
+import { fail, readJsonObject } from '../http';
+import { getCurrentRelease, getReleasePackage } from '../releases';
 import { getSetting, NETWORK_KEY, type NetworkSettings } from '../settings';
 import type { AppEnv } from '../types';
 
@@ -54,13 +54,6 @@ consoleApi.get('/settings/network', async (c) => {
   const record = await getSetting<NetworkSettings>(c.env.DB, NETWORK_KEY);
   if (!record) fail(404, 'no_settings', 'Настройки сети в облаке ещё не заданы.');
   return c.json(record);
-});
-
-// Publishing from an admin's computer (tools/release.ps1), for when GitHub Actions is unavailable.
-consoleApi.post('/program', async (c) => {
-  requireRole(c, 'admin');
-  const bytes = new Uint8Array(await c.req.arrayBuffer());
-  return c.json(await storeRelease(c.env.DB, bytes, null), 201);
 });
 
 consoleApi.get('/program/:version/package', async (c) => {

@@ -91,7 +91,7 @@ describe('publishing releases', () => {
   });
 });
 
-describe('publishing with an admin key', () => {
+describe('publishing with a personal key', () => {
   async function publishWithKey(key: string, bytes: Uint8Array) {
     const response = await exports.default.fetch(
       new Request('https://comp-info.test/api/client/program', {
@@ -103,28 +103,16 @@ describe('publishing with an admin key', () => {
     return { status: response.status, body: (await response.json()) as any };
   }
 
-  it('lets admins publish and refuses everyone else', async () => {
+  it('is impossible even for admins: only GitHub Actions publishes', async () => {
     const version = nextVersion();
     const bytes = await buildRelease(version, { 'a.ps1': 'x' });
     const { key: harvester } = await harvesterKey();
-    const editorKey = await addKey(await addUser('editor'));
     const adminKey = await addKey(await addUser('admin'));
 
-    expect((await publishWithKey(harvester, bytes)).status).toBe(403);
-    expect((await publishWithKey(editorKey, bytes)).status).toBe(403);
-    const published = await publishWithKey(adminKey, bytes);
-    expect(published.status).toBe(201);
-    expect(published.body.version).toBe(version);
-    expect((await consoleRequest(harvester, 'GET', '/program/latest')).body.version).toBe(version);
-    expect((await publishWithKey(adminKey, bytes)).status).toBe(409);
-  });
-
-  it('checks the archive exactly like GitHub publishing', async () => {
-    const adminKey = await addKey(await addUser('admin'));
-    const tampered = await buildRelease(nextVersion(), { 'a.ps1': 'x' }, { extra: [{ name: 'evil.ps1', data: 'x' }] });
-    const result = await publishWithKey(adminKey, tampered);
-    expect(result.status).toBe(400);
-    expect(result.body.error.code).toBe('invalid_package');
+    expect((await publishWithKey(adminKey, bytes)).status).toBe(404);
+    expect((await publishWithKey(harvester, bytes)).status).toBe(404);
+    const latest = await consoleRequest(harvester, 'GET', '/program/latest');
+    expect(latest.body?.version).not.toBe(version);
   });
 });
 
