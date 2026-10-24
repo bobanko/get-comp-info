@@ -55,7 +55,7 @@ export async function renderDevices({ me, main }, { reload = false } = {}) {
   }
 
   const count = h('p', { class: 'muted count' });
-  const tableHost = h('div', { class: 'table-wrap' });
+  const tableHost = h('div', { class: 'table-wrap table-scroll' });
   const redraw = () => drawTable(tableHost, count);
 
   const search = h('input', {
