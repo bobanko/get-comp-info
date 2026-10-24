@@ -4,7 +4,7 @@ import {
   csvFileName,
   devicesToCsv,
   diffRecords,
-  duplicateIps,
+  duplicateValues,
   filterDevices,
   formatDate,
   hasRole,
@@ -68,8 +68,24 @@ describe('filtering', () => {
   it('filters by ESET state and duplicate IPs', () => {
     expect(ids(filterDevices(devices, { eset: 'missing' }))).toEqual(['b']);
     expect(ids(filterDevices(devices, { eset: 'unknown' }))).toEqual(['c', 'd']);
-    expect([...duplicateIps(devices)]).toEqual(['10.0.0.10']);
-    expect(ids(filterDevices(devices, { duplicatesOnly: true }))).toEqual(['a', 'c']);
+    expect([...duplicateValues(devices, 'ip')]).toEqual(['10.0.0.10']);
+    expect(ids(filterDevices(devices, { duplicatesOf: 'ip' }))).toEqual(['a', 'c']);
+  });
+
+  it('finds repeated names and serials, ignoring case, placeholders and deleted devices', () => {
+    const list = [
+      device('a', { hostname: 'PC-1', serial: 'abc123' }),
+      device('b', { hostname: 'pc-1 ', serial: 'ABC123' }),
+      device('c', { hostname: 'PC-2', serial: 'To be filled by O.E.M.' }),
+      device('d', { hostname: 'PC-3', serial: 'To Be Filled By O.E.M.' }),
+      device('e', { hostname: 'PC-2', serial: 'XYZ' }, { deleted: true }),
+      device('f', { hostname: '', serial: '' }),
+      device('g', { hostname: '', serial: '' }),
+    ];
+    expect([...duplicateValues(list, 'hostname')]).toEqual(['PC-1']);
+    expect([...duplicateValues(list, 'serial')]).toEqual(['ABC123']);
+    expect(ids(filterDevices(list, { duplicatesOf: 'hostname' }))).toEqual(['a', 'b']);
+    expect(ids(filterDevices(list, { duplicatesOf: 'serial' }))).toEqual(['a', 'b']);
   });
 });
 

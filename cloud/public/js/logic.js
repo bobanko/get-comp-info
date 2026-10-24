@@ -91,14 +91,36 @@ export function isRecent(value, now = new Date(), days = 7) {
   return date !== null && now.getTime() - date.getTime() <= days * 24 * 60 * 60 * 1000 && date.getTime() <= now.getTime() + 60_000;
 }
 
-// IP addresses used by more than one device.
-export function duplicateIps(devices) {
+// Firmware placeholders, not real serial numbers (same list as get-comp-info.ps1).
+const PLACEHOLDER_SERIALS = new Set(['TO BE FILLED BY O.E.M.', 'DEFAULT STRING', 'SYSTEM SERIAL NUMBER', 'NONE', 'UNKNOWN', '0']);
+
+// Fields checked for repeats; the key is compared, empty keys are ignored.
+export const DUPLICATE_FIELDS = {
+  ip: { label: 'IP', key: (device) => String(device.data.ip ?? '').trim() },
+  hostname: { label: 'имена', key: (device) => String(device.data.hostname ?? '').trim().toUpperCase() },
+  serial: {
+    label: 'серийники',
+    key: (device) => {
+      const serial = String(device.data.serial ?? '').trim().toUpperCase();
+      return PLACEHOLDER_SERIALS.has(serial) ? '' : serial;
+    },
+  },
+};
+
+// Keys of the field shared by more than one device; deleted devices do not count.
+export function duplicateValues(devices, field) {
+  const key = DUPLICATE_FIELDS[field].key;
   const counts = new Map();
   for (const device of devices) {
-    const ip = String(device.data.ip ?? '').trim();
-    if (ip) counts.set(ip, (counts.get(ip) ?? 0) + 1);
+    if (device.deleted) continue;
+    const value = key(device);
+    if (value) counts.set(value, (counts.get(value) ?? 0) + 1);
   }
-  return new Set([...counts].filter(([, count]) => count > 1).map(([ip]) => ip));
+  return new Set([...counts].filter(([, count]) => count > 1).map(([value]) => value));
+}
+
+export function isDuplicate(device, field, duplicates) {
+  return !device.deleted && duplicates.has(DUPLICATE_FIELDS[field].key(device));
 }
 
 function searchText(device) {
@@ -108,12 +130,13 @@ function searchText(device) {
 }
 
 // Every word of the query must occur somewhere in the record.
-export function filterDevices(devices, { query = '', eset = 'all', duplicatesOnly = false } = {}) {
+// duplicatesOf: a DUPLICATE_FIELDS name to keep only devices repeating that field.
+export function filterDevices(devices, { query = '', eset = 'all', duplicatesOf = null } = {}) {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-  const duplicates = duplicatesOnly ? duplicateIps(devices) : null;
+  const duplicates = duplicatesOf ? duplicateValues(devices, duplicatesOf) : null;
   return devices.filter((device) => {
     if (eset !== 'all' && esetState(device.data.esetInstalled) !== eset) return false;
-    if (duplicates && !duplicates.has(String(device.data.ip ?? '').trim())) return false;
+    if (duplicates && !isDuplicate(device, duplicatesOf, duplicates)) return false;
     if (words.length === 0) return true;
     const text = searchText(device);
     return words.every((word) => text.includes(word));

@@ -4,13 +4,15 @@ import {
   csvFileName,
   devicesToCsv,
   displayValue,
-  duplicateIps,
+  DUPLICATE_FIELDS,
+  duplicateValues,
   ESET_LABELS,
   esetState,
   filterDevices,
   formatDate,
   hasRole,
   isBlank,
+  isDuplicate,
   isRecent,
   sortDevices,
 } from '../logic.js';
@@ -34,7 +36,7 @@ const state = {
   showDeleted: false,
   query: '',
   eset: 'all',
-  duplicatesOnly: false,
+  duplicatesOf: null, // 'ip' | 'hostname' | 'serial' | null
   sort: readSetting('devices.sort', { key: 'hostname', direction: 'asc' }),
   columns: readSetting(
     'devices.columns',
@@ -88,19 +90,7 @@ export async function renderDevices({ me, main }, { reload = false } = {}) {
     { class: 'toolbar' },
     search,
     esetSelect,
-    h(
-      'label',
-      { class: 'check' },
-      h('input', {
-        type: 'checkbox',
-        checked: state.duplicatesOnly,
-        onchange: (event) => {
-          state.duplicatesOnly = event.target.checked;
-          redraw();
-        },
-      }),
-      'Повторяющиеся IP',
-    ),
+    duplicateFilter(redraw),
     hasRole(me, 'admin') &&
       h(
         'label',
@@ -130,8 +120,39 @@ function visibleColumns() {
   return COLUMNS.filter((column) => column.always || state.columns.includes(column.key));
 }
 
+// Repeated values of every checked field, for highlighting and the filter buttons.
+function allDuplicates() {
+  return Object.fromEntries(Object.keys(DUPLICATE_FIELDS).map((field) => [field, duplicateValues(state.devices, field)]));
+}
+
+// One block: how many values repeat per field, and a toggle to show only those devices.
+function duplicateFilter(redraw) {
+  const duplicates = allDuplicates();
+  if (state.duplicatesOf && duplicates[state.duplicatesOf].size === 0) state.duplicatesOf = null;
+  const buttons = Object.entries(DUPLICATE_FIELDS).map(([field, { label }]) => {
+    const size = duplicates[field].size;
+    return h(
+      'button',
+      {
+        type: 'button',
+        'aria-pressed': String(state.duplicatesOf === field),
+        disabled: size === 0,
+        title: size === 0 ? `Повторов нет: ${label}` : `Показать только устройства с повторами: ${label}`,
+        onclick: () => {
+          state.duplicatesOf = state.duplicatesOf === field ? null : field;
+          buttons.forEach((button, index) => button.setAttribute('aria-pressed', String(Object.keys(DUPLICATE_FIELDS)[index] === state.duplicatesOf)));
+          redraw();
+        },
+      },
+      label,
+      h('span', { class: 'n' }, String(size)),
+    );
+  });
+  return h('div', { class: 'segmented', role: 'group', 'aria-label': 'Повторы' }, h('span', {}, 'Повторы'), buttons);
+}
+
 function currentRows() {
-  const filtered = filterDevices(state.devices, { query: state.query, eset: state.eset, duplicatesOnly: state.duplicatesOnly });
+  const filtered = filterDevices(state.devices, { query: state.query, eset: state.eset, duplicatesOf: state.duplicatesOf });
   return sortDevices(filtered, state.sort.key, state.sort.direction);
 }
 
@@ -177,15 +198,11 @@ function columnPicker(redraw) {
 
 function drawTable(host, count) {
   const rows = currentRows();
-  const duplicates = duplicateIps(state.devices.filter((device) => !device.deleted));
+  const duplicates = allDuplicates();
   const columns = visibleColumns();
   const now = new Date();
 
-  replace(
-    count,
-    `Показано ${rows.length} из ${state.devices.length}`,
-    duplicates.size > 0 && h('span', { class: 'legend legend-dup' }, `повторяющихся IP: ${duplicates.size}`),
-  );
+  replace(count, `Показано ${rows.length} из ${state.devices.length}`);
 
   const header = h(
     'tr',
@@ -242,20 +259,21 @@ function drawTable(host, count) {
 
 function cell(key, device, duplicates, now) {
   const data = device.data;
+  const repeated = (field) => isDuplicate(device, field, duplicates[field]);
   switch (key) {
     case 'hostname':
       return h(
         'td',
-        { class: 'host' },
+        { class: repeated('hostname') ? 'host dup' : 'host', title: repeated('hostname') ? 'Это имя есть у нескольких устройств' : undefined },
         isBlank(data.hostname) ? h('span', { class: 'muted' }, device.id) : data.hostname,
         device.deleted && h('span', { class: 'badge badge-danger' }, 'удалено'),
       );
     case 'ip': {
       const ip = String(data.ip ?? '').trim();
-      return h('td', { class: duplicates.has(ip) ? 'mono dup' : 'mono', title: duplicates.has(ip) ? 'Этот IP есть у нескольких устройств' : undefined }, ip);
+      return h('td', { class: repeated('ip') ? 'mono dup' : 'mono', title: repeated('ip') ? 'Этот IP есть у нескольких устройств' : undefined }, ip);
     }
     case 'serial':
-      return h('td', { class: 'mono' }, displayValue(data.serial));
+      return h('td', { class: repeated('serial') ? 'mono dup' : 'mono', title: repeated('serial') ? 'Этот серийный номер есть у нескольких устройств' : undefined }, displayValue(data.serial));
     case 'model':
       return h('td', {}, [data.manufacturer, data.model].filter((v) => !isBlank(v)).join(' '));
     case 'eset': {
