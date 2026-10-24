@@ -123,6 +123,19 @@ export function isDuplicate(device, field, duplicates) {
   return !device.deleted && duplicates.has(DUPLICATE_FIELDS[field].key(device));
 }
 
+// Naming policy: two letters, three digits, then the rest ("AB-123-..."). The real
+// prefixes and unit number are deliberately not listed here.
+const HOSTNAME_POLICY = /^[A-Z]{2}-\d{3}-./i;
+
+// Why a hostname breaks the naming policy: 'default' (name Windows made up),
+// 'pattern' (does not match), or null when it is fine or empty.
+export function hostnameIssue(hostname) {
+  const name = String(hostname ?? '').trim();
+  if (!name) return null;
+  if (/^(DESKTOP|LAPTOP|WIN)-/i.test(name)) return 'default';
+  return HOSTNAME_POLICY.test(name) ? null : 'pattern';
+}
+
 function searchText(device) {
   const values = [device.id, device.updatedBy];
   for (const value of Object.values(device.data)) values.push(displayValue(value));

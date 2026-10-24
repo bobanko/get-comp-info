@@ -11,6 +11,7 @@ import {
   filterDevices,
   formatDate,
   hasRole,
+  hostnameIssue,
   isBlank,
   isDuplicate,
   isRecent,
@@ -261,13 +262,21 @@ function cell(key, device, duplicates, now) {
   const data = device.data;
   const repeated = (field) => isDuplicate(device, field, duplicates[field]);
   switch (key) {
-    case 'hostname':
+    case 'hostname': {
+      const issue = hostnameIssue(data.hostname);
+      const notes = [
+        repeated('hostname') && 'Это имя есть у нескольких устройств',
+        issue === 'default' && 'Имя по умолчанию от Windows: переименуйте по правилам',
+        issue === 'pattern' && 'Имя не по правилам (ожидается вид АА-000-…)',
+      ].filter(Boolean);
+      const classes = ['host', issue && 'off-policy', repeated('hostname') && 'dup'].filter(Boolean).join(' ');
       return h(
         'td',
-        { class: repeated('hostname') ? 'host dup' : 'host', title: repeated('hostname') ? 'Это имя есть у нескольких устройств' : undefined },
+        { class: classes, title: notes.join('\n') || undefined },
         isBlank(data.hostname) ? h('span', { class: 'muted' }, device.id) : data.hostname,
         device.deleted && h('span', { class: 'badge badge-danger' }, 'удалено'),
       );
+    }
     case 'ip': {
       const ip = String(data.ip ?? '').trim();
       return h('td', { class: repeated('ip') ? 'mono dup' : 'mono', title: repeated('ip') ? 'Этот IP есть у нескольких устройств' : undefined }, ip);

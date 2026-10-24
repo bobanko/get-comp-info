@@ -230,6 +230,8 @@ table.devices tbody tr { cursor: pointer; }
 table.devices tbody tr:hover { background: var(--row-hover); }
 table.devices td.host { font-weight: 600; white-space: nowrap; }
 table.devices td.comment { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+/* Hostname against the naming policy; a repeat (red) wins over it. */
+table.devices td.off-policy { color: var(--warn); }
 table.devices td.dup { color: var(--danger); font-weight: 600; }
 table.devices td.recent { color: var(--ok); font-weight: 600; }
 table.devices tr.deleted td { opacity: 0.6; }

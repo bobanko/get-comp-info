@@ -8,6 +8,7 @@ import {
   filterDevices,
   formatDate,
   hasRole,
+  hostnameIssue,
   ipSortValue,
   isRecent,
   sortDevices,
@@ -86,6 +87,21 @@ describe('filtering', () => {
     expect([...duplicateValues(list, 'serial')]).toEqual(['ABC123']);
     expect(ids(filterDevices(list, { duplicatesOf: 'hostname' }))).toEqual(['a', 'b']);
     expect(ids(filterDevices(list, { duplicatesOf: 'serial' }))).toEqual(['a', 'b']);
+  });
+});
+
+describe('hostname policy', () => {
+  it('flags Windows default names and names off the AA-000-… pattern', () => {
+    expect(hostnameIssue('AB-123-45')).toBeNull();
+    expect(hostnameIssue('ab-123-buh')).toBeNull();
+    expect(hostnameIssue('')).toBeNull();
+    expect(hostnameIssue(null)).toBeNull();
+    expect(hostnameIssue('DESKTOP-7QK2M1L')).toBe('default');
+    expect(hostnameIssue('laptop-abc')).toBe('default');
+    expect(hostnameIssue('AB--123-45')).toBe('pattern');
+    expect(hostnameIssue('AB-12-45')).toBe('pattern');
+    expect(hostnameIssue('AB-123-')).toBe('pattern');
+    expect(hostnameIssue('BUH-PC')).toBe('pattern');
   });
 });
 
