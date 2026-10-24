@@ -14,6 +14,7 @@ import {
   sortDevices,
 } from '../public/js/logic.js';
 import {
+  commonDns,
   generalProblems,
   isAutoRange,
   locationProblems,
@@ -199,16 +200,27 @@ describe('network settings page', () => {
     expect(locationProblems({ ...good, firstHostOctet: '100' }).join()).toContain('внутри подсети');
     expect(locationProblems({ ...good, firstHostOctet: '200', lastHostOctet: '150' })).toContain('Первый адрес больше последнего.');
     expect(locationProblems({ ...good, gatewayOctet: '200' })).toContain('Шлюз попадает в диапазон адресов компьютеров.');
-    expect(locationProblems({ ...good, dnsServers: '' }).join()).toContain('DNS');
-    expect(locationProblems({ ...good, dnsServers: '10.0.0.300' }).join()).toContain('IPv4');
+    // Empty DNS means the shared one.
+    expect(locationProblems({ ...good, dnsServers: '' }, ['Главный'])).toEqual([]);
+    expect(locationProblems({ ...good, dnsServers: '10.0.0.300' }).join()).toContain('Свои DNS');
+    expect(locationProblems({ ...good, dnsServers: '1.1.1.1 2.2.2.2 3.3.3.3 4.4.4.4 5.5.5.5' }).join()).toContain('от 1 до 4');
     expect(locationProblems({ ...good, segments: '30, 30' }).join()).toContain('повторяются');
   });
 
   it('checks the shared part of the address', () => {
-    expect(generalProblems({ firstOctet: '10', segments: '20, 21' })).toEqual([]);
-    expect(generalProblems({ firstOctet: '', segments: '20' })).toHaveLength(1);
-    expect(generalProblems({ firstOctet: '10', segments: '' })).toHaveLength(1);
-    expect(generalProblems({ firstOctet: '10', segments: '20, x' })).toHaveLength(1);
+    const general = { firstOctet: '10', segments: '20, 21', dnsServers: '10.0.0.1' };
+    expect(generalProblems(general)).toEqual([]);
+    expect(generalProblems({ ...general, firstOctet: '' })).toHaveLength(1);
+    expect(generalProblems({ ...general, segments: '' })).toHaveLength(1);
+    expect(generalProblems({ ...general, segments: '20, x' })).toHaveLength(1);
+    expect(generalProblems({ ...general, dnsServers: '' })).toEqual(['DNS: от 1 до 4 адресов.']);
+  });
+
+  it('finds the DNS most locations share', () => {
+    const at = (...dnsServers: string[]) => ({ dnsServers });
+    expect(commonDns([at('10.0.0.1', '10.0.0.2'), at('10.0.0.9'), at('10.0.0.1', '10.0.0.2')])).toBe('10.0.0.1, 10.0.0.2');
+    expect(commonDns([at('10.0.0.9')])).toBe('10.0.0.9');
+    expect(commonDns([])).toBe('');
   });
 });
 

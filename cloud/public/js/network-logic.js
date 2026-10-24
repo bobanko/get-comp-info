@@ -76,6 +76,25 @@ export function isAutoRange(location) {
   );
 }
 
+function dnsProblem(text, where) {
+  const servers = parseAddressList(text);
+  if (servers.length === 0 || servers.length > 4) return `${where}: от 1 до 4 адресов.`;
+  if (servers.some((server) => !IPV4.test(server))) return `${where}: нужны IPv4-адреса вида 10.0.0.1.`;
+  return null;
+}
+
+// DNS shared by most locations: the page shows it once and leaves those locations empty.
+export function commonDns(locations) {
+  const counts = new Map();
+  for (const location of locations) {
+    const key = (location.dnsServers ?? []).join(', ');
+    if (key) counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  let best = '';
+  for (const [key, count] of counts) if (count > (counts.get(best) ?? 0)) best = key;
+  return best;
+}
+
 function segmentProblem(text, where) {
   const segments = parseNumberList(text);
   if (segments.length === 0 || segments.length > 16) return `${where}: от 1 до 16 чисел через запятую.`;
@@ -90,6 +109,8 @@ export function generalProblems(draft) {
   if (parseOctet(draft.firstOctet) === null) problems.push('Первый октет: число от 0 до 255.');
   const segments = segmentProblem(draft.segments, 'Сегменты');
   if (segments) problems.push(segments);
+  const dns = dnsProblem(draft.dnsServers, 'DNS');
+  if (dns) problems.push(dns);
   return problems;
 }
 
@@ -121,9 +142,11 @@ export function locationProblems(location, allNames = []) {
     problems.push('Шлюз попадает в диапазон адресов компьютеров.');
   }
 
-  const dns = parseAddressList(location.dnsServers);
-  if (dns.length === 0 || dns.length > 4) problems.push('DNS: от 1 до 4 адресов.');
-  else if (dns.some((server) => !IPV4.test(server))) problems.push('DNS: нужны IPv4-адреса вида 10.0.0.1.');
+  // Empty means the shared DNS, checked with the shared part of the address.
+  if (String(location.dnsServers ?? '').trim() !== '') {
+    const dns = dnsProblem(location.dnsServers, 'Свои DNS');
+    if (dns) problems.push(dns);
+  }
 
   if (String(location.segments ?? '').trim() !== '') {
     const segments = segmentProblem(location.segments, 'Свои сегменты');

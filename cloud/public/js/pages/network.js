@@ -3,6 +3,7 @@ import { errorBox, h, replace, toast } from '../dom.js';
 import { formatDate } from '../logic.js';
 import {
   autoHostRange,
+  commonDns,
   emptyLocation,
   generalProblems,
   isAutoRange,
@@ -31,14 +32,18 @@ export async function renderNetwork(context) {
 
   // Editable copy: lists are kept as text while typing; autoRange keeps the host range in step
   // with the gateway and mask until the admin chooses to set it by hand.
+  // The saved format keeps DNS in every location (the console reads it there); the page shows
+  // the DNS most locations share once, and only the different ones in their locations.
   const value = setting?.value ?? { firstOctet: 10, segments: [], domainCheckHost: null, locations: [emptyLocation()] };
+  const sharedDns = commonDns(value.locations);
   const draft = {
     firstOctet: String(value.firstOctet),
     segments: value.segments.join(', '),
+    dnsServers: sharedDns,
     domainCheckHost: value.domainCheckHost ?? '',
     locations: value.locations.map((location) => ({
       ...location,
-      dnsServers: location.dnsServers.join(', '),
+      dnsServers: location.dnsServers.join(', ') === sharedDns ? '' : location.dnsServers.join(', '),
       segments: (location.segments ?? []).join(', '),
       autoRange: isAutoRange(location),
     })),
@@ -113,6 +118,13 @@ function draw(context, setting, history, draft, view, errorText) {
         ),
         h('small', { class: 'muted hint' }, 'Второй октет — сегменты через запятую, первый используется по умолчанию.'),
       ),
+      h('span', { class: 'net-label' }, 'DNS'),
+      h(
+        'div',
+        {},
+        input(draft, 'dnsServers', { class: 'mono wide', placeholder: '10.0.0.1, 10.0.0.2', 'aria-label': 'DNS-серверы для всех корпусов' }),
+        h('small', { class: 'muted hint' }, 'Для всех корпусов, через запятую, до 4. Корпус может задать свои.'),
+      ),
       h('span', { class: 'net-label' }, 'Проверка домена'),
       h(
         'div',
@@ -171,7 +183,11 @@ function draw(context, setting, history, draft, view, errorText) {
       ),
       h('td', { class: 'mono' }, liveText(() => '.' + show(location.gatewayOctet))),
       h('td', { class: 'mono' }, liveText(() => `.${show(location.firstHostOctet)}–.${show(location.lastHostOctet)}`)),
-      h('td', { class: 'mono dns' }, liveText(() => parseAddressList(location.dnsServers).join(', '))),
+      h(
+        'td',
+        { class: 'mono dns' },
+        liveText(() => parseAddressList(location.dnsServers).join(', ') || 'общие'),
+      ),
       h(
         'td',
         { class: 'row-actions' },
@@ -274,8 +290,8 @@ function draw(context, setting, history, draft, view, errorText) {
         h(
           'div',
           {},
-          input(location, 'dnsServers', { class: 'mono wide', placeholder: '10.0.0.1, 10.0.0.2', 'aria-label': 'DNS-серверы' }),
-          h('small', { class: 'muted hint' }, 'Через запятую, до 4.'),
+          input(location, 'dnsServers', { class: 'mono wide', placeholder: 'общие', 'aria-label': 'Свои DNS-серверы' }),
+          h('small', { class: 'muted hint' }, 'Пусто — общие DNS. Свои — если в корпусе другие серверы.'),
         ),
 
         h('span', { class: 'net-label' }, 'Сегменты'),
@@ -433,7 +449,8 @@ function toValue(draft) {
         gatewayOctet: number(location.gatewayOctet),
         firstHostOctet: number(location.firstHostOctet),
         lastHostOctet: number(location.lastHostOctet),
-        dnsServers: parseAddressList(location.dnsServers),
+        // Own DNS if set, otherwise the shared one: the console reads DNS from each location.
+        dnsServers: parseAddressList(String(location.dnsServers ?? '').trim() ? location.dnsServers : draft.dnsServers),
       };
       const segments = parseNumberList(location.segments);
       if (segments.length > 0) result.segments = segments;
