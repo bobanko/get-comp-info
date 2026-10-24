@@ -19,7 +19,6 @@
   --shadow: 0 1px 2px rgb(16 24 40 / 6%);
   --mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
   --radius: 8px;
-  --topbar-height: 54px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -207,9 +206,13 @@ textarea { width: 100%; resize: vertical; }
   box-shadow: var(--shadow);
 }
 .panel .table-wrap { box-shadow: none; }
-/* Long tables scroll inside a screen-high frame: the header and the
-   horizontal scrollbar stay visible without JavaScript. */
-.table-scroll { overflow: auto; max-height: calc(100dvh - var(--topbar-height) - 16px); }
+/* Devices page: the page itself does not scroll. The table fills the space under
+   the toolbar and scrolls on its own, so its sticky header and horizontal
+   scrollbar stay visible without JavaScript. */
+body:has(.table-scroll) { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+body:has(.table-scroll) main { flex: 1; min-height: 0; width: 100%; display: flex; flex-direction: column; padding-bottom: 16px; }
+body:has(.table-scroll) main > * { flex-shrink: 0; }
+body:has(.table-scroll) main > .table-scroll { flex: 0 1 auto; min-height: 0; overflow: auto; }
 table { width: 100%; border-collapse: collapse; }
 th, td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
 thead th {
@@ -367,7 +370,10 @@ details summary { cursor: pointer; }
 }
 
 @media (max-width: 640px) {
-  :root { --topbar-height: 148px; }
+  /* Too little height on phones: back to normal page scrolling. */
+  body:has(.table-scroll) { height: auto; display: block; overflow: visible; }
+  body:has(.table-scroll) main { display: block; }
+  body:has(.table-scroll) main > .table-scroll { overflow-x: auto; }
   .topbar { flex-wrap: wrap; gap: 8px 16px; padding: 10px 16px; }
   .whoami { margin-left: 0; width: 100%; }
   main { padding: 16px 16px 40px; }
