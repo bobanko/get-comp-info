@@ -13,7 +13,16 @@ import {
   isRecent,
   sortDevices,
 } from '../public/js/logic.js';
-import { describeLocation, parseNumberList, subnetMask, suggestHostRange } from '../public/js/network-logic.js';
+import {
+  generalProblems,
+  isAutoRange,
+  locationProblems,
+  parseNumberList,
+  parseOctet,
+  subnetInfo,
+  subnetMask,
+  suggestHostRange,
+} from '../public/js/network-logic.js';
 
 function device(id: string, data: Record<string, unknown>, extra: Record<string, unknown> = {}) {
   return { id, revision: 1, deleted: false, createdAt: '', updatedAt: '2026-10-20T10:00:00Z', updatedBy: 'h@example.com', data, ...extra };
@@ -162,10 +171,44 @@ describe('network settings page', () => {
     expect(suggestHostRange(129, 16)).toBeNull();
   });
 
-  it('describes what the console will configure', () => {
-    const location = { thirdOctet: 5, prefixLength: 25, gatewayOctet: 129, firstHostOctet: 130, lastHostOctet: 254 };
-    expect(describeLocation(10, 20, location)).toBe('10.20.5.130–10.20.5.254, шлюз 10.20.5.129, маска 255.255.255.128');
-    expect(describeLocation(10, Number.NaN, { ...location, gatewayOctet: '' })).toContain('шлюз 10.?.5.?');
+  it('reads octets typed in the form and finds the gateway subnet', () => {
+    expect(parseOctet(' 42 ')).toBe(42);
+    expect(parseOctet(7)).toBe(7);
+    expect(parseOctet('256')).toBeNull();
+    expect(parseOctet('')).toBeNull();
+    expect(parseOctet('1a')).toBeNull();
+    expect(subnetInfo('129', 25)).toEqual({ network: 128, broadcast: 255, hosts: 126 });
+    expect(subnetInfo(97, '28')).toEqual({ network: 96, broadcast: 111, hosts: 14 });
+    expect(subnetInfo('', 25)).toBeNull();
+  });
+
+  it('knows when the host range is the automatic one', () => {
+    const location = { prefixLength: 25, gatewayOctet: '129', firstHostOctet: 130, lastHostOctet: '254' };
+    expect(isAutoRange(location)).toBe(true);
+    expect(isAutoRange({ ...location, lastHostOctet: 200 })).toBe(false);
+    expect(isAutoRange({ ...location, gatewayOctet: 140 })).toBe(false);
+  });
+
+  it('checks a location with the same rules as the server', () => {
+    const good = { name: 'Главный', thirdOctet: '5', prefixLength: 25, gatewayOctet: '129', firstHostOctet: '130', lastHostOctet: '254', dnsServers: '10.0.0.1, 10.0.0.2', segments: '' };
+    expect(locationProblems(good, ['Главный'])).toEqual([]);
+    expect(locationProblems({ ...good, name: ' ' })).toContain('Укажите название.');
+    expect(locationProblems(good, ['Главный', 'главный'])).toContain('Такое название уже есть.');
+    expect(locationProblems({ ...good, thirdOctet: '300' }).join()).toContain('Третий октет');
+    expect(locationProblems({ ...good, gatewayOctet: '128' }).join()).toContain('адресом сети');
+    expect(locationProblems({ ...good, firstHostOctet: '100' }).join()).toContain('внутри подсети');
+    expect(locationProblems({ ...good, firstHostOctet: '200', lastHostOctet: '150' })).toContain('Первый адрес больше последнего.');
+    expect(locationProblems({ ...good, gatewayOctet: '200' })).toContain('Шлюз попадает в диапазон адресов компьютеров.');
+    expect(locationProblems({ ...good, dnsServers: '' }).join()).toContain('DNS');
+    expect(locationProblems({ ...good, dnsServers: '10.0.0.300' }).join()).toContain('IPv4');
+    expect(locationProblems({ ...good, segments: '30, 30' }).join()).toContain('повторяются');
+  });
+
+  it('checks the shared part of the address', () => {
+    expect(generalProblems({ firstOctet: '10', segments: '20, 21' })).toEqual([]);
+    expect(generalProblems({ firstOctet: '', segments: '20' })).toHaveLength(1);
+    expect(generalProblems({ firstOctet: '10', segments: '' })).toHaveLength(1);
+    expect(generalProblems({ firstOctet: '10', segments: '20, x' })).toHaveLength(1);
   });
 });
 

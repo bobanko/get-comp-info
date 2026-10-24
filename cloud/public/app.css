@@ -338,16 +338,47 @@ table.diff td:first-child { white-space: nowrap; overflow-wrap: normal; color: v
 
 /* ---------- Network settings ---------- */
 
-.grid-fields { display: flex; flex-wrap: wrap; align-items: start; gap: 10px 12px; margin-bottom: 10px; }
-.grid-fields .field { flex: 1 1 200px; min-width: 0; align-content: start; }
-.grid-fields .field small { font-size: 11px; }
-.grid-fields input, .grid-fields select { width: 100%; }
-/* Octets hold up to 3 digits: size the field by its label, not by the row. */
-.grid-fields .field.narrow { flex: 0 0 auto; }
-.grid-fields .field.narrow span { white-space: nowrap; }
-.grid-fields .field.narrow input { width: calc(3ch + 26px); }
-.grid-fields .field.narrow select { width: auto; }
-.location .actions p { margin: 0; }
+/* Label column + content column. */
+.net-grid { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 12px 16px; align-items: center; }
+.net-label { color: var(--muted); font-size: 13px; }
+.net-grid .hint { display: block; margin-top: 4px; font-size: 11px; }
+.net-inline { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+/* An address with inputs in place of some octets: 10.20.[128].x */
+.ip { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
+input.octet { width: calc(3ch + 18px); padding-left: 6px; padding-right: 6px; text-align: center; }
+.ip .dash { padding: 0 8px; }
+input.segments { width: 14ch; }
+input.host, input.name-input { width: min(320px, 100%); }
+input.wide { width: min(420px, 100%); }
+.problems { margin: 12px 0 0; padding: 8px 12px 8px 28px; color: var(--danger); background: var(--danger-soft); border-radius: 6px; font-size: 13px; }
+.problems[hidden] { display: none; }
+
+table.locations .location-row { cursor: pointer; }
+table.locations .location-row:hover { background: var(--row-hover); }
+table.locations .location-row.open { background: var(--accent-soft); }
+table.locations .location-row.open td { border-bottom: 0; }
+table.locations td { vertical-align: middle; }
+table.locations td.name { font-weight: 600; white-space: nowrap; }
+table.locations td.dns { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+table.locations td.row-actions { white-space: nowrap; text-align: right; }
+table.locations td.row-actions .button { margin-left: 4px; }
+.row-problem:not(:empty) { display: inline-block; margin-left: 8px; padding: 0 6px; border-radius: 999px; background: var(--danger); color: #fff; font-size: 11px; line-height: 16px; }
+.editor-row > td { padding: 4px 16px 16px; background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface)); }
+.location-editor .actions { margin-top: 14px; }
+details.panel summary { font-weight: 600; }
+details.panel ul { margin: 8px 0 0; }
+
+@media (max-width: 640px) {
+  .net-grid { grid-template-columns: 1fr; gap: 4px; }
+  .net-grid .net-label { margin-top: 8px; }
+  .location-editor select { max-width: 100%; }
+  /* Gateway, hosts and DNS are in the editor; the table keeps name and subnet. */
+  table.locations th:nth-child(3), table.locations th:nth-child(4), table.locations th:nth-child(5),
+  table.locations .location-row td:nth-child(3), table.locations .location-row td:nth-child(4), table.locations .location-row td:nth-child(5) { display: none; }
+  table.locations th:last-child, table.locations td.row-actions { display: none; }
+  table.locations td.name { white-space: normal; }
+  .editor-row > td { padding: 4px 12px 14px; }
+}
 .sticky-actions {
   position: sticky;
   bottom: 0;
