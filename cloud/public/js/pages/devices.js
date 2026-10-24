@@ -61,6 +61,29 @@ export async function renderDevices({ me, main }, { reload = false } = {}) {
   const tableHost = h('div', { class: 'table-wrap table-scroll' });
   const redraw = () => drawTable(tableHost, count);
 
+  // Fetches the list again and redraws only the table and the repeat counters: the toolbar
+  // stays in place, so it does not flicker. A newer reload wins over a slower older one.
+  let loads = 0;
+  const reloadList = async () => {
+    const load = ++loads;
+    tableHost.classList.add('loading');
+    try {
+      const devices = (await api(state.showDeleted ? '/devices?deleted=1' : '/devices')).devices;
+      if (load !== loads) return;
+      state.devices = devices;
+    } catch (error) {
+      if (load !== loads) return;
+      tableHost.classList.remove('loading');
+      replace(tableHost, errorBox(error, reloadList));
+      return;
+    }
+    tableHost.classList.remove('loading');
+    const fresh = duplicateFilter(redraw);
+    duplicates.replaceWith(fresh);
+    duplicates = fresh;
+    redraw();
+  };
+
   const search = h('input', {
     type: 'search',
     class: 'search',
@@ -86,12 +109,13 @@ export async function renderDevices({ me, main }, { reload = false } = {}) {
     Object.entries(ESET_LABELS).map(([value, label]) => h('option', { value, selected: state.eset === value }, `ESET: ${label.toLowerCase()}`)),
   );
 
+  let duplicates = duplicateFilter(redraw);
   const toolbar = h(
     'div',
     { class: 'toolbar' },
     search,
     esetSelect,
-    duplicateFilter(redraw),
+    duplicates,
     hasRole(me, 'admin') &&
       h(
         'label',
@@ -101,14 +125,14 @@ export async function renderDevices({ me, main }, { reload = false } = {}) {
           checked: state.showDeleted,
           onchange: (event) => {
             state.showDeleted = event.target.checked;
-            renderDevices({ me, main }, { reload: true });
+            reloadList();
           },
         }),
         'Удалённые',
       ),
     columnPicker(redraw),
     h('span', { class: 'spacer' }),
-    h('button', { class: 'button', onclick: () => renderDevices({ me, main }, { reload: true }) }, 'Обновить'),
+    h('button', { class: 'button', onclick: reloadList }, 'Обновить'),
     h('button', { class: 'button', onclick: () => exportCsv() }, 'Экспорт CSV'),
   );
 

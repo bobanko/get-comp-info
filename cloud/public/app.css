@@ -244,6 +244,7 @@ body:has(.table-scroll) { height: 100dvh; display: flex; flex-direction: column;
 body:has(.table-scroll) main { flex: 1; min-height: 0; width: 100%; display: flex; flex-direction: column; padding-bottom: 16px; }
 body:has(.table-scroll) main > * { flex-shrink: 0; }
 body:has(.table-scroll) main > .table-scroll { flex: 0 1 auto; min-height: 0; overflow: auto; }
+.table-scroll.loading { opacity: 0.55; transition: opacity 0.15s; }
 table { width: 100%; border-collapse: collapse; }
 th, td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
 thead th {
