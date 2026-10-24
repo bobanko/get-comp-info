@@ -38,16 +38,45 @@ export const consoleAuth = createMiddleware<AppEnv>(async (c, next) => {
   await next();
 });
 
+// Pending requests kept at most, so strangers cannot flood the admin's list.
+export const MAX_PENDING_REQUESTS = 100;
+
 // Web requests: the user signed in through Cloudflare Access, the role comes from the users table.
+// Access lets any email in, so this is the real gate: strangers only leave an access request.
 export const webAuth = createMiddleware<AppEnv>(async (c, next) => {
   const email = await resolveAccessEmail(c);
   const row = await c.env.DB.prepare('SELECT * FROM users WHERE email = ?').bind(email).first<UserRow>();
-  if (!row || row.active !== 1) {
-    fail(403, 'not_registered', `Нет доступа для ${email}: пользователь не зарегистрирован или отключён.`);
+  if (!row) {
+    return requestAccess(c.env.DB, email);
+  }
+  if (row.active !== 1) {
+    fail(403, 'user_disabled', `Доступ для ${email} отключён администратором.`);
   }
   c.set('user', toUser(row));
   await next();
 });
+
+// Records (or refreshes) the request of a signed-in stranger, then always refuses.
+async function requestAccess(db: D1Database, email: string): Promise<never> {
+  const now = nowIso();
+  const existing = await db.prepare('SELECT rejected_at FROM access_requests WHERE email = ?').bind(email).first<{ rejected_at: string | null }>();
+  if (existing?.rejected_at) {
+    fail(403, 'access_denied', `Администратор отклонил запрос на доступ для ${email}.`);
+  }
+  if (existing) {
+    await db.prepare('UPDATE access_requests SET last_seen_at = ? WHERE email = ?').bind(now, email).run();
+  } else {
+    const pending = await db.prepare('SELECT COUNT(*) AS count FROM access_requests WHERE rejected_at IS NULL').first<{ count: number }>();
+    if ((pending?.count ?? 0) >= MAX_PENDING_REQUESTS) {
+      fail(403, 'access_requests_full', `Нет доступа для ${email}. Запросов на доступ слишком много: попросите администратора добавить вас вручную.`);
+    }
+    await db
+      .prepare('INSERT INTO access_requests (email, requested_at, last_seen_at) VALUES (?, ?, ?) ON CONFLICT (email) DO NOTHING')
+      .bind(email, now, now)
+      .run();
+  }
+  fail(403, 'access_pending', `Запрос на доступ для ${email} отправлен администратору. Когда он подтвердит, обновите страницу.`);
+}
 
 let remoteJwks: { domain: string; keys: JWTVerifyGetKey } | null = null;
 

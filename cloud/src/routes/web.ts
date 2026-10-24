@@ -1,5 +1,4 @@
 import { Hono, type Context } from 'hono';
-import { syncAccessPolicy } from '../access-policy';
 import { webAuth } from '../auth';
 import { generateApiKey, sha256Hex } from '../crypto';
 import {
@@ -182,10 +181,18 @@ webApi.post('/users', async (c) => {
     fail(409, 'user_exists', 'Пользователь с такой почтой уже есть.');
   }
   const row: UserRow = { email, name, role: body.role, active: 1, created_at: nowIso() };
-  await c.env.DB.prepare('INSERT INTO users (email, name, role, active, created_at) VALUES (?, ?, ?, ?, ?)')
-    .bind(row.email, row.name, row.role, row.active, row.created_at)
-    .run();
-  return c.json({ ...toUser(row), access: await syncAccessPolicy(c.env) }, 201);
+  // Adding a user also approves their access request, if there was one.
+  await c.env.DB.batch([
+    c.env.DB.prepare('INSERT INTO users (email, name, role, active, created_at) VALUES (?, ?, ?, ?, ?)').bind(
+      row.email,
+      row.name,
+      row.role,
+      row.active,
+      row.created_at,
+    ),
+    c.env.DB.prepare('DELETE FROM access_requests WHERE email = ?').bind(row.email),
+  ]);
+  return c.json(toUser(row), 201);
 });
 
 webApi.patch('/users/:email', async (c) => {
@@ -196,7 +203,6 @@ webApi.patch('/users/:email', async (c) => {
   if (!row) {
     fail(404, 'not_found', 'Пользователь не найден.');
   }
-  const wasActive = row.active;
   if (body.name !== undefined) {
     row.name = validateName(body.name);
   }
@@ -215,9 +221,39 @@ webApi.patch('/users/:email', async (c) => {
   await c.env.DB.prepare('UPDATE users SET name = ?, role = ?, active = ? WHERE email = ?')
     .bind(row.name, row.role, row.active, email)
     .run();
-  // Only enabling or disabling changes who may pass Cloudflare Access.
-  const access = wasActive !== row.active ? await syncAccessPolicy(c.env) : undefined;
-  return c.json({ ...toUser(row), access });
+  return c.json(toUser(row));
+});
+
+// ---------- Access requests ----------
+// People who signed in through Cloudflare Access but are not users yet.
+
+interface AccessRequestRow {
+  email: string;
+  requested_at: string;
+  last_seen_at: string;
+}
+
+webApi.get('/access-requests', async (c) => {
+  requireRole(c, 'admin');
+  const { results } = await c.env.DB.prepare(
+    'SELECT email, requested_at, last_seen_at FROM access_requests WHERE rejected_at IS NULL ORDER BY requested_at DESC',
+  ).all<AccessRequestRow>();
+  return c.json({
+    requests: results.map((row) => ({ email: row.email, requestedAt: row.requested_at, lastSeenAt: row.last_seen_at })),
+  });
+});
+
+// Rejects a request: the person keeps seeing "access denied" until an admin adds them as a user.
+webApi.delete('/access-requests/:email', async (c) => {
+  requireRole(c, 'admin');
+  const email = c.req.param('email').toLowerCase();
+  const result = await c.env.DB.prepare(
+    'UPDATE access_requests SET rejected_at = ?, rejected_by = ? WHERE email = ? AND rejected_at IS NULL',
+  )
+    .bind(nowIso(), c.get('user').email, email)
+    .run();
+  if (result.meta.changes === 0) fail(404, 'not_found', 'Такого запроса на доступ нет.');
+  return c.json({ email, rejected: true });
 });
 
 // ---------- Network settings ----------

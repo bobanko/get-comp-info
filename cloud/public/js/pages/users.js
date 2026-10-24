@@ -9,15 +9,13 @@ const ROLE_HINTS = {
   admin: 'плюс пользователи, роли и удаление',
 };
 
-// Shown until the page is left when Cloudflare Access could not be updated automatically.
-let accessWarning = null;
-
 export async function renderUsers(context) {
   const { main } = context;
   replace(main, h('p', { class: 'muted' }, 'Загрузка пользователей…'));
   let users;
+  let requests;
   try {
-    users = (await api('/users')).users;
+    [{ users }, { requests }] = await Promise.all([api('/users'), api('/access-requests')]);
   } catch (error) {
     replace(main, h('h1', {}, 'Пользователи'), errorBox(error, () => renderUsers(context)));
     return;
@@ -26,7 +24,8 @@ export async function renderUsers(context) {
   replace(
     main,
     h('h1', {}, 'Пользователи'),
-    accessWarning && accessNotice(accessWarning),
+    requests.length > 0 &&
+      h('section', { class: 'panel requests' }, h('h2', {}, 'Запросы на доступ (' + requests.length + ')'), requestsTable(context, requests)),
     h('section', { class: 'panel' }, h('h2', {}, 'Добавить пользователя'), addForm(context)),
     h('section', { class: 'panel' }, h('h2', {}, `Все пользователи (${users.length})`), usersTable(context, users)),
     h(
@@ -46,29 +45,71 @@ function roleSelect(value, props = {}) {
   );
 }
 
-// Reports how the Access allow list was updated after a change that affects sign-in.
-function reportAccess(access, email) {
-  if (!access) return;
-  if (access.synced) {
-    accessWarning = null;
-    toast('Список входа в Cloudflare Access обновлён.');
-    return;
-  }
-  accessWarning = { email, reason: access.reason };
-}
-
-function accessNotice(warning) {
-  const manual = warning.reason === 'not_configured';
+// People who signed in with an unknown email: approve with a name and role, or reject.
+function requestsTable(context, requests) {
   return h(
     'div',
-    { class: manual ? 'notice' : 'notice notice-error' },
-    manual
-      ? h(
-          'p',
-          {},
-          `Добавьте или уберите ${warning.email} в политике Cloudflare Access «Comp Info team» (Zero Trust → Access → Policies). Автоматическое обновление списка входа не настроено.`,
-        )
-      : h('p', {}, `Список входа в Cloudflare Access не обновился: ${warning.reason}. Проверьте политику «Comp Info team» вручную.`),
+    { class: 'table-wrap' },
+    h(
+      'table',
+      {},
+      h('thead', {}, h('tr', {}, h('th', {}, 'Почта'), h('th', {}, 'Запрошено'), h('th', {}, 'Имя'), h('th', {}, 'Роль'), h('th', {}))),
+      h('tbody', {}, requests.map((request) => requestRow(context, request))),
+    ),
+  );
+}
+
+function requestRow(context, request) {
+  const name = h('input', { value: request.email.split('@')[0], maxlength: '100', 'aria-label': 'Имя ' + request.email });
+  const role = roleSelect('viewer', { 'aria-label': 'Роль ' + request.email });
+  const buttons = [];
+  // Runs one action with both buttons disabled, then refreshes the page and the nav counter.
+  const act = async (action, done) => {
+    buttons.forEach((button) => (button.disabled = true));
+    try {
+      await action();
+      toast(done);
+    } catch (error) {
+      buttons.forEach((button) => (button.disabled = false));
+      toast(error.message, 'error');
+      return;
+    }
+    await context.onRequestsChanged?.();
+    await renderUsers(context);
+  };
+  buttons.push(
+    h(
+      'button',
+      {
+        class: 'button small primary',
+        onclick: () =>
+          act(
+            () => api('/users', { method: 'POST', body: { email: request.email, name: name.value, role: role.value } }),
+            'Доступ для ' + request.email + ' открыт.',
+          ),
+      },
+      'Пустить',
+    ),
+    h(
+      'button',
+      {
+        class: 'button small danger',
+        onclick: () => {
+          if (!confirm('Отклонить запрос ' + request.email + '? Пустить его можно будет позже, добавив вручную.')) return;
+          act(() => api('/access-requests/' + encodeURIComponent(request.email), { method: 'DELETE' }), 'Запрос отклонён.');
+        },
+      },
+      'Отклонить',
+    ),
+  );
+  return h(
+    'tr',
+    {},
+    h('td', {}, request.email),
+    h('td', { class: 'nowrap', title: 'Последний вход: ' + formatDate(request.lastSeenAt) }, formatDate(request.requestedAt)),
+    h('td', {}, name),
+    h('td', {}, role),
+    h('td', { class: 'nowrap' }, h('div', { class: 'actions' }, buttons)),
   );
 }
 
@@ -87,7 +128,7 @@ function addForm(context) {
         try {
           const created = await api('/users', { method: 'POST', body: { email: email.value, name: name.value, role: role.value } });
           toast(`Пользователь ${created.email} добавлен.`);
-          reportAccess(created.access, created.email);
+          await context.onRequestsChanged?.();
           await renderUsers(context);
         } catch (error) {
           submit.disabled = false;
@@ -104,9 +145,8 @@ function addForm(context) {
 
 async function updateUser(context, user, changes) {
   try {
-    const updated = await api('/users/' + encodeURIComponent(user.email), { method: 'PATCH', body: changes });
+    await api('/users/' + encodeURIComponent(user.email), { method: 'PATCH', body: changes });
     toast('Сохранено.');
-    reportAccess(updated.access, updated.email);
   } catch (error) {
     toast(error.message, 'error');
   }

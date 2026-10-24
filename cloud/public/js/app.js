@@ -22,6 +22,16 @@ const PAGES = [
 
 let me = null;
 let currentHash = null;
+// Access requests waiting for an admin, shown next to "Пользователи".
+let pendingRequests = 0;
+
+// Signed in through Cloudflare Access, but not (yet) let in by the app.
+const NO_ACCESS = {
+  access_pending: 'Запрос отправлен',
+  access_denied: 'Нет доступа',
+  user_disabled: 'Доступ отключён',
+  access_requests_full: 'Нет доступа',
+};
 // Position in the device list, restored when coming back from a device card.
 let listScroll = 0;
 
@@ -30,18 +40,48 @@ async function start() {
   try {
     me = await api('/me');
   } catch (error) {
-    replace(main, errorBox(error, start));
+    replace(main, NO_ACCESS[error.code] ? noAccess(error) : errorBox(error, start));
     return;
   }
   replace(whoami, h('span', {}, me.name), h('span', { class: 'role' }, ROLE_LABELS[me.role] ?? me.role));
+  if (hasRole(me, 'admin')) await refreshPendingRequests();
   route();
+}
+
+function noAccess(error) {
+  return h(
+    'section',
+    { class: 'panel no-access' },
+    h('h1', {}, NO_ACCESS[error.code]),
+    h('p', {}, error.message),
+    h(
+      'div',
+      { class: 'actions' },
+      h('button', { class: 'button primary', onclick: start }, 'Проверить снова'),
+      // Ends the Cloudflare Access session, e.g. to sign in with another email.
+      h('a', { class: 'button', href: '/cdn-cgi/access/logout' }, 'Войти с другой почтой'),
+    ),
+  );
+}
+
+async function refreshPendingRequests() {
+  try {
+    pendingRequests = (await api('/access-requests')).requests.length;
+  } catch {
+    pendingRequests = 0;
+  }
 }
 
 function renderNav(current) {
   replace(
     nav,
     PAGES.filter((page) => hasRole(me, page.role)).map((page) =>
-      h('a', { href: page.hash, class: current.startsWith(page.hash) ? 'active' : undefined }, page.label),
+      h(
+        'a',
+        { href: page.hash, class: current.startsWith(page.hash) ? 'active' : undefined },
+        page.label,
+        page.hash === '#/users' && pendingRequests > 0 && h('span', { class: 'nav-count', title: 'Запросы на доступ' }, String(pendingRequests)),
+      ),
     ),
   );
 }
@@ -52,7 +92,15 @@ async function route() {
   if (currentHash === '#/devices') listScroll = window.scrollY;
   currentHash = hash;
   renderNav(hash);
-  const context = { me, main };
+  const context = {
+    me,
+    main,
+    // Pages call this after approving or rejecting access requests.
+    onRequestsChanged: async () => {
+      await refreshPendingRequests();
+      renderNav(currentHash);
+    },
+  };
   const deviceMatch = /^#\/devices\/(.+)$/.exec(hash);
   if (deviceMatch) {
     renderDevice(context, decodeURIComponent(deviceMatch[1]));

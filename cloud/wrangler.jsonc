@@ -23,8 +23,6 @@
     "ACCESS_AUD": "8a6c4398ef16bc6b7f437a6fbd6d96b08c32570e93171d5d350ffe3a0994fa34",
     // Account and reusable Access policy ("Comp Info team") kept in step with active users.
     // Takes effect only when the CF_API_TOKEN secret is set.
-    "CF_ACCOUNT_ID": "f5b670c0f2a1346c3bb65492495c4452",
-    "ACCESS_POLICY_ID": "d8bf3622-bc8a-4deb-8b0c-48415594dcae",
     // Only GitHub Actions runs of this repository may publish program releases (OIDC).
     "RELEASE_REPOSITORY": "bobanko/get-comp-info"
   },

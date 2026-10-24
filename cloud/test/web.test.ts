@@ -56,9 +56,13 @@ describe('web authentication', () => {
   });
 
   it('rejects unknown and disabled users', async () => {
-    expect((await webRequest('stranger@example.com', 'GET', '/me')).status).toBe(403);
+    const stranger = await webRequest(`${unique('stranger')}@example.com`, 'GET', '/me');
+    expect(stranger.status).toBe(403);
+    expect(stranger.body.error.code).toBe('access_pending');
     const disabled = await addUser('admin', { active: false });
-    expect((await webRequest(disabled, 'GET', '/me')).status).toBe(403);
+    const refused = await webRequest(disabled, 'GET', '/me');
+    expect(refused.status).toBe(403);
+    expect(refused.body.error.code).toBe('user_disabled');
   });
 
   it('matches the email case-insensitively', async () => {
@@ -222,6 +226,41 @@ describe('users', () => {
     await webRequest(admin, 'PATCH', `/users/${encodeURIComponent(email)}`, { active: false });
     expect((await consoleRequest(key, 'GET', '/me')).status).toBe(403);
     expect((await webRequest(email, 'GET', '/me')).status).toBe(403);
+  });
+
+  it('turns a sign-in by a stranger into an access request the admin approves', async () => {
+    const admin = await addUser('admin');
+    const email = `${unique('newcomer')}@example.com`;
+    expect((await webRequest(email, 'GET', '/me')).body.error.code).toBe('access_pending');
+    expect((await webRequest(email, 'GET', '/devices')).status).toBe(403);
+    // Signing in again does not duplicate the request.
+    expect((await webRequest(email, 'GET', '/me')).body.error.code).toBe('access_pending');
+
+    const listed = await webRequest(admin, 'GET', '/access-requests');
+    expect(listed.body.requests.filter((r: { email: string }) => r.email === email)).toHaveLength(1);
+    expect((await webRequest(await addUser('editor'), 'GET', '/access-requests')).status).toBe(403);
+
+    expect((await webRequest(admin, 'POST', '/users', { email, name: 'Новичок', role: 'harvester' })).status).toBe(201);
+    expect((await webRequest(email, 'GET', '/me')).body.role).toBe('harvester');
+    const after = await webRequest(admin, 'GET', '/access-requests');
+    expect(after.body.requests.some((r: { email: string }) => r.email === email)).toBe(false);
+  });
+
+  it('remembers rejected requests until the admin adds the user', async () => {
+    const admin = await addUser('admin');
+    const email = `${unique('unwanted')}@example.com`;
+    await webRequest(email, 'GET', '/me');
+    const path = `/access-requests/${encodeURIComponent(email)}`;
+    expect((await webRequest(await addUser('editor'), 'DELETE', path)).status).toBe(403);
+    expect((await webRequest(admin, 'DELETE', path)).status).toBe(200);
+    expect((await webRequest(admin, 'DELETE', path)).status).toBe(404);
+
+    expect((await webRequest(email, 'GET', '/me')).body.error.code).toBe('access_denied');
+    const listed = await webRequest(admin, 'GET', '/access-requests');
+    expect(listed.body.requests.some((r: { email: string }) => r.email === email)).toBe(false);
+
+    await webRequest(admin, 'POST', '/users', { email, name: 'Всё-таки свой', role: 'viewer' });
+    expect((await webRequest(email, 'GET', '/me')).status).toBe(200);
   });
 
   it('does not let an admin lock themselves out', async () => {
