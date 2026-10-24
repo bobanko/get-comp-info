@@ -36,6 +36,9 @@ function draw(context, setting, history, draft, errorText) {
   const redraw = (message = null) => draw(context, setting, history, draft, message);
 
   const field = (label, input, hint) => h('label', { class: 'field' }, h('span', {}, label), input, hint && h('small', { class: 'muted' }, hint));
+  // Narrow field for a single octet (0-255) or the prefix select.
+  const narrowField = (label, input) => h('label', { class: 'field narrow' }, h('span', {}, label), input);
+  const octetInput = (object, key) => textInput(object, key, { inputmode: 'numeric', maxlength: '3', class: 'mono' });
   const textInput = (object, key, props = {}) =>
     h('input', {
       value: String(object[key] ?? ''),
@@ -105,11 +108,11 @@ function draw(context, setting, history, draft, errorText) {
         'div',
         { class: 'grid-fields' },
         field('Название', textInput(location, 'name', { maxlength: '60' })),
-        field('Третий октет', textInput(location, 'thirdOctet', { inputmode: 'numeric', class: 'mono' })),
-        field('Маска (префикс)', prefix),
-        field('Шлюз, последний октет', textInput(location, 'gatewayOctet', { inputmode: 'numeric', class: 'mono' })),
-        field('Первый адрес', textInput(location, 'firstHostOctet', { inputmode: 'numeric', class: 'mono' })),
-        field('Последний адрес', textInput(location, 'lastHostOctet', { inputmode: 'numeric', class: 'mono' })),
+        narrowField('Третий октет', octetInput(location, 'thirdOctet')),
+        narrowField('Маска', prefix),
+        narrowField('Шлюз, посл. октет', octetInput(location, 'gatewayOctet')),
+        narrowField('Первый адрес', octetInput(location, 'firstHostOctet')),
+        narrowField('Последний адрес', octetInput(location, 'lastHostOctet')),
         field('DNS-серверы', textInput(location, 'dnsServers', { class: 'mono' }), 'Через запятую, до 4.'),
         field('Свои сегменты', textInput(location, 'segments', { class: 'mono' }), 'Пусто — общие сегменты.'),
       ),
@@ -164,7 +167,7 @@ function draw(context, setting, history, draft, errorText) {
       h(
         'div',
         { class: 'grid-fields' },
-        field('Первый октет', textInput(draft, 'firstOctet', { inputmode: 'numeric', class: 'mono' })),
+        narrowField('Первый октет', octetInput(draft, 'firstOctet')),
         field('Сегменты (второй октет)', textInput(draft, 'segments', { class: 'mono' }), 'Через запятую, первый — по умолчанию.'),
         field('Узел для проверки домена', textInput(draft, 'domainCheckHost', { class: 'mono', placeholder: 'не проверять' }), 'Быстрый ping проверяет его, если компьютер в одной из сетей.'),
       ),
