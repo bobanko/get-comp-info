@@ -19,6 +19,12 @@
   --shadow: 0 1px 2px rgb(16 24 40 / 6%);
   --mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
   --radius: 8px;
+  --brand-red: #d92d20;
+  --brand-yellow: #b88700;
+  --brand-green: #15803d;
+  --brand-cyan: #0e8fa3;
+  --brand-blue: #2563eb;
+  --brand-magenta: #b425c4;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -41,6 +47,12 @@
     --danger: #f2837a;
     --danger-soft: #3d1c1a;
     --shadow: none;
+    --brand-red: #ff6b6b;
+    --brand-yellow: #ffd43b;
+    --brand-green: #51cf66;
+    --brand-cyan: #3bc9db;
+    --brand-blue: #6c9bff;
+    --brand-magenta: #e599f7;
   }
 }
 
@@ -63,6 +75,12 @@
   --danger: #f2837a;
   --danger-soft: #3d1c1a;
   --shadow: none;
+  --brand-red: #ff6b6b;
+  --brand-yellow: #ffd43b;
+  --brand-green: #51cf66;
+  --brand-cyan: #3bc9db;
+  --brand-blue: #6c9bff;
+  --brand-magenta: #e599f7;
 }
 
 * { box-sizing: border-box; }
@@ -98,7 +116,15 @@ code, .mono { font-family: var(--mono); font-size: 13px; }
   border-bottom: 1px solid var(--border);
 }
 .brand { font-weight: 700; color: var(--text); text-decoration: none; letter-spacing: 0.02em; }
-.brand span { font-weight: 500; color: var(--muted); margin-left: 4px; }
+.brand .product { font-weight: 500; color: var(--muted); }
+/* Letter colours of the console header (console-ui.ps1): red, yellow, green, cyan, blue, magenta. */
+.rainbow .c0 { color: var(--brand-red); }
+.rainbow .c1 { color: var(--brand-yellow); }
+.rainbow .c2 { color: var(--brand-green); }
+.rainbow .c3 { color: var(--brand-cyan); }
+.rainbow .c4 { color: var(--brand-blue); }
+.rainbow .c5 { color: var(--brand-magenta); }
+.nav-icon { margin-right: 6px; }
 #nav { display: flex; gap: 4px; flex-wrap: wrap; }
 #nav a { padding: 6px 10px; border-radius: 6px; color: var(--muted); text-decoration: none; }
 /* Pending access requests next to "Пользователи". */

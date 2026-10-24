@@ -13,11 +13,11 @@ const nav = document.getElementById('nav');
 const whoami = document.getElementById('whoami');
 
 const PAGES = [
-  { hash: '#/devices', label: 'Устройства', role: 'viewer' },
-  { hash: '#/keys', label: 'Мои ключи', role: 'harvester' },
-  { hash: '#/users', label: 'Пользователи', role: 'admin' },
-  { hash: '#/network', label: 'Сеть', role: 'admin' },
-  { hash: '#/releases', label: 'Версии программы', role: 'admin' },
+  { hash: '#/devices', icon: '💻', label: 'Устройства', role: 'viewer' },
+  { hash: '#/keys', icon: '🔑', label: 'Мои ключи', role: 'harvester' },
+  { hash: '#/users', icon: '👥', label: 'Пользователи', role: 'admin' },
+  { hash: '#/network', icon: '🌐', label: 'Сеть', role: 'admin' },
+  { hash: '#/releases', icon: '📦', label: 'Версии программы', role: 'admin' },
 ];
 
 let me = null;
@@ -79,6 +79,7 @@ function renderNav(current) {
       h(
         'a',
         { href: page.hash, class: current.startsWith(page.hash) ? 'active' : undefined },
+        h('span', { class: 'nav-icon', 'aria-hidden': 'true' }, page.icon),
         page.label,
         page.hash === '#/users' && pendingRequests > 0 && h('span', { class: 'nav-count', title: 'Запросы на доступ' }, String(pendingRequests)),
       ),
