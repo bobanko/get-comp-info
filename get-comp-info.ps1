@@ -3,6 +3,7 @@
 [Console]::InputEncoding = [System.Text.UTF8Encoding]::new()
 . (Join-Path $PSScriptRoot "console-ui.ps1")
 . (Join-Path $PSScriptRoot "eset-info.ps1")
+. (Join-Path $PSScriptRoot "computer-identity.ps1")
 
 # Keep Russian text and emoji readable in Windows PowerShell.
 $emojiInfo = [char]::ConvertFromUtf32(0x1F4CB)
@@ -63,64 +64,33 @@ $systemProduct = Get-CimInstance Win32_ComputerSystemProduct
 $os = Get-CimInstance Win32_OperatingSystem
 $esetInstalled = Test-EsetInstalled
 
-$hostname = $env:COMPUTERNAME
+$hostname = [string]$cs.Name
 $serial = ([string]$bios.SerialNumber).Trim()
 $smbiosUuid = [string]$systemProduct.UUID
 $manufacturer = $cs.Manufacturer.Trim()
 $model = $cs.Model.Trim()
 
-function Test-UsableSerialNumber($value) {
-    if ([string]::IsNullOrWhiteSpace([string]$value)) {
-        return $false
-    }
-
-    $normalized = ([string]$value).Trim()
-    $placeholderValues = @(
-        "To be filled by O.E.M.",
-        "To Be Filled By O.E.M.",
-        "Default string",
-        "System Serial Number",
-        "None",
-        "Unknown",
-        "0"
-    )
-
-    return $normalized -notin $placeholderValues
-}
-
-function Get-NormalizedSmbiosUuid($value) {
-    if ([string]::IsNullOrWhiteSpace([string]$value)) {
-        return $null
-    }
-
-    try {
-        $uuid = [guid]([string]$value).Trim()
-    }
-    catch {
-        return $null
-    }
-
-    $normalized = $uuid.ToString().ToUpperInvariant()
-    if ($uuid -eq [guid]::Empty -or $normalized -eq "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF") {
-        return $null
-    }
-
-    return $normalized
-}
-
 $smbiosUuid = Get-NormalizedSmbiosUuid $smbiosUuid
-if ($smbiosUuid) {
-    $computerId = $smbiosUuid
-    $computerIdSource = "smbiosUuid"
+$installationId = Get-WindowsInstallationId
+$identity = Get-InventoryIdentity -Uuid $smbiosUuid -Serial $serial -InstallationId $installationId -DataPath (Join-Path $PSScriptRoot 'data')
+if (-not $identity.Path) {
+    $legacy = @(Find-UnboundLegacyInventory -DataPath (Join-Path $PSScriptRoot 'data') -Hostname $hostname)
+    if ($legacy.Count -gt 1) { throw 'Несколько старых записей с таким именем. Сначала устраните дубликаты.' }
+    if ($legacy.Count -eq 1) {
+        Write-Host 'Найдена старая запись без UUID и серийного номера:' -ForegroundColor Yellow
+        Write-Host $legacy[0].Path
+        Write-Host ($legacy[0].Record | ConvertTo-Json -Depth 5)
+        Write-Host 'Убедитесь, что это именно этот компьютер. Связать запись с установкой Windows?'
+        Write-ToolboxHint '[↲ Enter] — связать и продолжить, [Esc] — вернуться в меню.'
+        do { $key = [Console]::ReadKey($true).Key } while ($key -notin @('Enter', 'Escape'))
+        if ($key -eq 'Escape') { exit 42 }
+        $identity.Id = $legacy[0].Id
+        $identity.Source = 'legacyId'
+        $identity.Path = $legacy[0].Path
+    }
 }
-elseif (Test-UsableSerialNumber $serial) {
-    $computerId = $serial
-    $computerIdSource = "serial"
-}
-else {
-    $computerId = $hostname
-    $computerIdSource = "hostname"
-}
+$computerId = $identity.Id
+$computerIdSource = $identity.Source
 
 $ip = (Get-NetIPAddress -AddressFamily IPv4 |
     Where-Object {
@@ -151,6 +121,9 @@ $computer = [ordered]@{
     mac         = $mac
     serial      = $serial
     smbiosUuid  = $smbiosUuid
+    windowsMachineGuid = $installationId
+    partOfDomain = [bool]$cs.PartOfDomain
+    domain = [string]$cs.Domain
     manufacturer = $manufacturer
     model       = $model
     username    = $username
@@ -249,6 +222,9 @@ function Show-ComputerComparison($previousComputer, $controls = $text.Overwrite)
     $fields = @(
         [pscustomobject]@{ Label = $text.ComputerIdLabel; Name = "computerId" },
         [pscustomobject]@{ Label = $text.HostnameLabel; Name = "hostname" },
+        [pscustomobject]@{ Label = "ID Windows"; Name = "windowsMachineGuid" },
+        [pscustomobject]@{ Label = "Член домена"; Name = "partOfDomain" },
+        [pscustomobject]@{ Label = "Домен / группа"; Name = "domain" },
         [pscustomobject]@{ Label = "IP"; Name = "ip" },
         [pscustomobject]@{ Label = "MAC"; Name = "mac" },
         [pscustomobject]@{ Label = $text.SerialLabel; Name = "serial" },
@@ -312,19 +288,13 @@ if (-not (Test-Path $dataPath)) {
 $safeComputerId = $computerId -replace '[<>:"/\\|?*]', '_'
 $safeComputerId = $safeComputerId.Trim().TrimEnd('.')
 $filePath = Join-Path $dataPath "$safeComputerId.json"
+if ($identity.Path) { $filePath = $identity.Path }
 
 # ============================================================
 # Проверка существующего файла
 # ============================================================
 
-# Older inventory files were named after the serial number instead of the UUID.
-if (-not (Test-Path -LiteralPath $filePath) -and (Test-UsableSerialNumber $serial)) {
-    $safeSerial = ($serial -replace '[<>:"/\\|?*]', '_').Trim().TrimEnd('.')
-    $legacyFilePath = Join-Path $dataPath "$safeSerial.json"
-    if (Test-Path -LiteralPath $legacyFilePath) {
-        $filePath = $legacyFilePath
-    }
-}
+# Get-InventoryIdentity has already matched legacy records and preserved their cloud keys.
 
 $previousComputer = $null
 if (Test-Path $filePath) {

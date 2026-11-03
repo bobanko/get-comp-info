@@ -125,6 +125,7 @@ function Get-SyncFieldLabel {
         computerId = 'Идентификатор компьютера'; computerIdSource = 'Источник идентификатора'
         hostname = 'Имя компьютера'; ip = 'IP-адрес'; mac = 'MAC-адрес'
         serial = 'Серийный номер'; smbiosUuid = 'UUID'; manufacturer = 'Производитель'
+        windowsMachineGuid = 'ID установки Windows'; partOfDomain = 'Член домена'; domain = 'Домен / рабочая группа'
         model = 'Модель'; username = 'Пользователь'; comment = 'Комментарий'
         windows = 'Windows'; esetInstalled = 'ESET установлен'; collectedAt = 'Дата сбора'; createdAt = 'Дата создания'
     }
