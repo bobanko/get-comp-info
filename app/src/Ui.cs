@@ -249,18 +249,19 @@ namespace CompInfo
             Ask(owner, title, text, Glyph.Info, Theme.Info, "OK");
         }
 
-        static Bitmap appImage;
+        static Bitmap gearImage, faceImage;
 
-        // Program icon (the bearded gear), 96 px, embedded as brand.png (made by tools\make-icon.BAT).
-        public static Bitmap AppImage
+        // Plain gear (96 px) for the small picture in the window header, as in the small icon sizes.
+        public static Bitmap AppImage { get { return gearImage ?? (gearImage = Resource("CompInfo.brand.png")); } }
+
+        // The bearded gear itself (160 px) for «О программе».
+        public static Bitmap FaceImage { get { return faceImage ?? (faceImage = Resource("CompInfo.face.png")); } }
+
+        // Pictures embedded by tools\build.BAT (made by tools\make-icon.BAT).
+        static Bitmap Resource(string name)
         {
-            get
-            {
-                if (appImage != null) return appImage;
-                try { appImage = new Bitmap(typeof(Ui).Assembly.GetManifestResourceStream("CompInfo.brand.png")); }
-                catch (Exception) { appImage = new Bitmap(1, 1); }
-                return appImage;
-            }
+            try { return new Bitmap(typeof(Ui).Assembly.GetManifestResourceStream(name)); }
+            catch (Exception) { return new Bitmap(1, 1); }
         }
 
         public static string Date(string value)

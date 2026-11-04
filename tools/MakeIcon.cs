@@ -13,12 +13,22 @@ using System.Runtime.InteropServices;
 static class MakeIcon
 {
     static bool Cli;
+    static int GearUpTo;        // --gear-small: sizes up to 32 px are a plain gear instead of the picture
+    static string GearPng;      // --gear-png=<file>: the plain gear alone, 96 px (picture in the window header)
+    static string FacePng;      // --face-png=<file>: the picture itself, 160 px (window «О программе»)
     static Bitmap Source;   // background removed, cropped to a square
 
     static int Main(string[] args)
     {
         List<string> pos = new List<string>();
-        foreach (string a in args) { if (a == "--cli") Cli = true; else pos.Add(a); }
+        foreach (string a in args)
+        {
+            if (a == "--cli") Cli = true;
+            else if (a == "--gear-small") GearUpTo = 32;
+            else if (a.StartsWith("--gear-png=")) GearPng = a.Substring(11);
+            else if (a.StartsWith("--face-png=")) FacePng = a.Substring(11);
+            else pos.Add(a);
+        }
         if (pos.Count < 2) { Console.Error.WriteLine("MakeIcon.exe <source.png> <out.ico> [preview.png] [--cli]"); return 2; }
 
         // A picture that already has transparency is used as is; otherwise the white background is cut out.
@@ -36,6 +46,8 @@ static class MakeIcon
             }
         WriteIco(pos[1], sizes, pngs);
         if (pos.Count > 2) SavePreview(pos[2], sizes);
+        if (GearPng != null) using (Bitmap g = DrawGear(96)) g.Save(GearPng, ImageFormat.Png);
+        if (FacePng != null) using (Bitmap f = Scale(Source, 160)) f.Save(FacePng, ImageFormat.Png);
         Console.WriteLine("Icon: " + pos[1]);
         return 0;
     }
@@ -182,6 +194,7 @@ static class MakeIcon
 
     static Bitmap Render(int size)
     {
+        if (size <= GearUpTo) return DrawGear(size);
         Bitmap bmp = Scale(Source, size);
         if (Cli)
             using (Graphics g = Graphics.FromImage(bmp))
@@ -195,6 +208,53 @@ static class MakeIcon
     }
 
     // High-quality downscale in halving steps (keeps small sizes sharp).
+    // Plain grey gear in the style of the picture (dark outline, light top), drawn on a 256 grid:
+    // at 16-32 px a face is unreadable, a gear stays recognisable.
+    static Bitmap DrawGear(int size)
+    {
+        Bitmap b = new Bitmap(size, size, PixelFormat.Format32bppArgb);
+        using (Graphics g = Graphics.FromImage(b))
+        {
+            g.Clear(Color.Transparent);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            g.ScaleTransform(size / 256f, size / 256f);
+            const int teeth = 8;
+            const float rootR = 86, tipR = 116, cx = 128, cy = 128;
+            List<PointF> points = new List<PointF>();
+            double step = 2 * Math.PI / teeth, baseHalf = step * 0.26, tipHalf = step * 0.18;
+            for (int i = 0; i < teeth; i++)
+            {
+                double a = i * step - Math.PI / 2;
+                points.Add(Polar(cx, cy, rootR, a - baseHalf));
+                points.Add(Polar(cx, cy, tipR, a - tipHalf));
+                points.Add(Polar(cx, cy, tipR, a + tipHalf));
+                points.Add(Polar(cx, cy, rootR, a + baseHalf));
+                for (double r = a + baseHalf + 0.05; r < a + step - baseHalf; r += 0.05) points.Add(Polar(cx, cy, rootR, r));
+            }
+            float outline = size <= 20 ? 14 : size <= 24 ? 12 : 10;
+            using (GraphicsPath gear = new GraphicsPath())
+            {
+                gear.AddPolygon(points.ToArray());
+                gear.AddEllipse(cx - 34, cy - 34, 68, 68);          // the hole in the middle
+                gear.FillMode = FillMode.Alternate;
+                using (LinearGradientBrush fill = new LinearGradientBrush(new RectangleF(0, 8, 256, 240), Color.FromArgb(0xC4, 0xC4, 0xC8), Color.FromArgb(0x74, 0x74, 0x7A), 90f))
+                    g.FillPath(fill, gear);
+                using (Pen pen = new Pen(Color.FromArgb(0x1C, 0x1C, 0x1E), outline))
+                {
+                    pen.LineJoin = LineJoin.Round;
+                    g.DrawPath(pen, gear);
+                }
+            }
+        }
+        return b;
+    }
+
+    static PointF Polar(float cx, float cy, float r, double angle)
+    {
+        return new PointF(cx + (float)(r * Math.Cos(angle)), cy + (float)(r * Math.Sin(angle)));
+    }
+
     static Bitmap Scale(Bitmap src, int size)
     {
         Bitmap cur = src;

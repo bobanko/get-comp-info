@@ -44,7 +44,7 @@ namespace CompInfo
 
             int side = em * 4;
             PictureBox pic = new PictureBox();
-            pic.Image = Ui.AppImage;
+            pic.Image = Ui.FaceImage;
             pic.SizeMode = PictureBoxSizeMode.Zoom;
             pic.Size = new Size(side, side);
             pic.Margin = new Padding(0, 0, em, 0);

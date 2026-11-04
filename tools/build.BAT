@@ -31,7 +31,7 @@ set "REFS=/r:System.Management.dll /r:System.Web.Extensions.dll /r:System.IO.Com
 set "CORE=obj\Version.cs app\src\Json.cs app\src\Store.cs app\src\Identity.cs app\src\Machine.cs app\src\Network.cs app\src\Export.cs app\src\Collector.cs app\src\Cloud.cs app\src\Shell.cs app\src\SystemChanges.cs"
 set "UI=app\src\Theme.cs app\src\Ui.cs app\src\MainForm.cs app\src\CollectPage.cs app\src\DatabasePage.cs app\src\ToolPages.cs app\src\CloudPages.cs app\src\SystemPages.cs app\src\AboutPage.cs app\src\Program.cs"
 
-"%CSC%" /nologo /optimize+ /codepage:65001 /target:winexe /out:comp-info.exe /win32manifest:app\app.manifest /win32icon:app\app.ico /resource:app\brand.png,CompInfo.brand.png ^
+"%CSC%" /nologo /optimize+ /codepage:65001 /target:winexe /out:comp-info.exe /win32manifest:app\app.manifest /win32icon:app\app.ico /resource:app\brand.png,CompInfo.brand.png /resource:app\face.png,CompInfo.face.png ^
   %REFS% /r:System.Windows.Forms.dll /r:System.Drawing.dll %CORE% %UI%
 if errorlevel 1 exit /b 1
 
