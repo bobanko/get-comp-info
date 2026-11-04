@@ -5,20 +5,43 @@ function Assert-True($Value, $Message) { if (-not $Value) { throw $Message } }
 $script:admin = $false
 $script:launches = 0
 function Test-ComputerAdministrator { return $script:admin }
+function Get-Command {
+    param($Name, $CommandType, $ErrorAction)
+    if ($script:hasWt -and $Name -eq 'wt.exe') { return [pscustomobject]@{ Source = 'C:\Apps\wt.exe' } }
+}
 function Start-Process {
     param($FilePath, $Verb, $WindowStyle, $ErrorAction, $ArgumentList, [switch]$Wait)
-    Assert-True ($FilePath -eq 'powershell.exe' -and $Verb -eq 'RunAs' -and $WindowStyle -eq 'Normal') 'Wrong elevation command'
+    $arguments = @($ArgumentList)
+    if ($script:expectWt) {
+        # The elevated menu must stay in Windows Terminal: black background and colour emoji.
+        Assert-True ($FilePath -eq 'C:\Apps\wt.exe') 'Elevated menu left Windows Terminal'
+        Assert-True ($arguments[0] -eq '-w' -and $arguments[1] -eq 'new' -and $arguments[2] -eq 'powershell.exe') 'Wrong Windows Terminal command'
+        $arguments = $arguments[3..($arguments.Count - 1)]
+    }
+    else { Assert-True ($FilePath -eq 'powershell.exe') 'Wrong elevation command' }
+    Assert-True ($Verb -eq 'RunAs' -and $WindowStyle -eq 'Normal') 'Wrong elevation options'
     Assert-True (-not $Wait) 'Original menu must not wait for elevated menu to close'
-    Assert-True ($ArgumentList[4] -eq '"C:\test folder\comp-info-menu.ps1"') 'Menu path not quoted'
-    Assert-True ($ArgumentList[5] -eq '-OpenScript' -and $ArgumentList[6] -eq $script:requestedScript) 'Requested wizard was not forwarded'
+    Assert-True ($arguments[4] -eq '"C:\test folder\comp-info-menu.ps1"') 'Menu path not quoted'
+    Assert-True ($arguments[5] -eq '-OpenScript' -and $arguments[6] -eq $script:requestedScript) 'Requested wizard was not forwarded'
     $script:launches++
     if ($script:denyUac) { throw 'UAC cancelled' }
 }
-foreach ($name in @('set-computer-name.ps1', 'manage-computer-domain.ps1')) {
-    $script:requestedScript = $name
-    Assert-True (Request-ComputerMenuElevation -MenuPath 'C:\test folder\comp-info-menu.ps1' -OpenScript $name) 'Menu handoff not reported'
+$savedWtSession = $env:WT_SESSION
+try {
+    foreach ($case in @(
+            @{ Session = $null; HasWt = $true; ExpectWt = $false }
+            @{ Session = 'test'; HasWt = $false; ExpectWt = $false }
+            @{ Session = 'test'; HasWt = $true; ExpectWt = $true })) {
+        $env:WT_SESSION = $case.Session; $script:hasWt = $case.HasWt; $script:expectWt = $case.ExpectWt
+        foreach ($name in @('set-computer-name.ps1', 'manage-computer-domain.ps1')) {
+            $script:requestedScript = $name
+            Assert-True (Request-ComputerMenuElevation -MenuPath 'C:\test folder\comp-info-menu.ps1' -OpenScript $name) 'Menu handoff not reported'
+        }
+    }
 }
-Assert-True ($script:launches -eq 2) 'Unexpected launch count'
+finally { $env:WT_SESSION = $savedWtSession }
+Assert-True ($script:launches -eq 6) 'Unexpected launch count'
+$script:launches = 2; $script:hasWt = $false; $script:expectWt = $false
 $script:admin = $true
 Assert-True (-not (Request-ComputerMenuElevation -MenuPath 'C:\test folder\comp-info-menu.ps1' -OpenScript 'manage-computer-domain.ps1')) 'Elevated menu requested another window'
 Assert-True ($script:launches -eq 2) 'Elevated menu launched another window'

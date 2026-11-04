@@ -70,9 +70,17 @@ function Request-ComputerMenuElevation {
     )
     if (Test-ComputerAdministrator) { return $false }
     # Hand the entire menu to the elevated window. Do not keep the old menu waiting.
-    Start-Process -FilePath 'powershell.exe' -Verb RunAs -WindowStyle Normal -ErrorAction Stop -ArgumentList @(
-        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + $MenuPath + '"'), '-OpenScript', $OpenScript
-    ) | Out-Null
+    $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + $MenuPath + '"'), '-OpenScript', $OpenScript)
+    # An elevated powershell.exe opens in old conhost (blue, monochrome emoji).
+    # Keep Windows Terminal when the menu already runs there.
+    $terminal = if ($env:WT_SESSION) { Get-Command 'wt.exe' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1 }
+    if ($terminal) {
+        Start-Process -FilePath $terminal.Source -Verb RunAs -WindowStyle Normal -ErrorAction Stop -ArgumentList (
+            @('-w', 'new', 'powershell.exe') + $arguments) | Out-Null
+    }
+    else {
+        Start-Process -FilePath 'powershell.exe' -Verb RunAs -WindowStyle Normal -ErrorAction Stop -ArgumentList $arguments | Out-Null
+    }
     return $true
 }
 
