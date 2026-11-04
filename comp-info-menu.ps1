@@ -1,16 +1,22 @@
-﻿$ErrorActionPreference = "Stop"
+﻿param(
+    [ValidateSet('set-computer-name.ps1', 'manage-computer-domain.ps1')]
+    [string]$OpenScript
+)
+
+$ErrorActionPreference = "Stop"
 
 # The menu is kept in a separate PowerShell process so `exit` in a child script
 # returns here instead of closing the launcher.
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
 [Console]::InputEncoding = [System.Text.UTF8Encoding]::new()
 . (Join-Path $PSScriptRoot "console-ui.ps1")
+. (Join-Path $PSScriptRoot "computer-management.ps1")
 
 $menuItems = @(
     [PSCustomObject]@{ Title = "🖥️ Собрать информацию о компьютере"; Script = "get-comp-info.ps1" }
     [PSCustomObject]@{ Title = "🌐 Настроить LAN-адаптер (IP-адрес, маска подсети, DNS)"; Script = "setup-lan-adapter.ps1" }
-    [PSCustomObject]@{ Title = "Имя компьютера (IF / FR)"; Script = "set-computer-name.ps1" }
-    [PSCustomObject]@{ Title = "Домен: ввод / вывод"; Script = "manage-computer-domain.ps1" }
+    [PSCustomObject]@{ Title = "🏷️ Имя компьютера (IF / FR)"; Script = "set-computer-name.ps1" }
+    [PSCustomObject]@{ Title = "🏢 Домен: ввод / вывод"; Script = "manage-computer-domain.ps1" }
     [PSCustomObject]@{ Title = "📡 Быстрый ping (свой IP, шлюз, DNS, домен/интернет)"; Script = "quick-ping.ps1" }
     [PSCustomObject]@{ Title = "🗃️ Просмотреть сохранённую информацию"; Script = "view-comp-info.ps1" }
     [PSCustomObject]@{ Title = "🔑 Серийные номера USB-накопителей"; Script = "get-usb-serial.ps1" }
@@ -68,6 +74,21 @@ function Invoke-MenuScript {
         return
     }
 
+    if ($ScriptName -in @('set-computer-name.ps1', 'manage-computer-domain.ps1')) {
+        try {
+            if (Request-ComputerMenuElevation -MenuPath (Join-Path $PSScriptRoot 'comp-info-menu.ps1') -OpenScript $ScriptName) {
+                $script:shouldExit = $true
+                return
+            }
+        }
+        catch {
+            Write-Host "Не удалось открыть окно администратора: $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host 'Нажмите любую клавишу, чтобы вернуться в меню.' -ForegroundColor DarkGray
+            [void][Console]::ReadKey($true)
+            return
+        }
+    }
+
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $scriptPath
     $exitCode = $LASTEXITCODE
 
@@ -99,6 +120,12 @@ function Invoke-MenuScript {
 $selectedIndex = 0
 $script:restartMenu = $false
 $shouldExit = $false
+if ($OpenScript) {
+    for ($index = 0; $index -lt $menuItems.Count; $index++) {
+        if ($menuItems[$index].Script -eq $OpenScript) { $selectedIndex = $index; break }
+    }
+    Invoke-MenuScript -ScriptName $OpenScript
+}
 while (-not $shouldExit) {
     if ($menuItems[$selectedIndex].IsDisabled) { $selectedIndex = 0 }
     Show-Menu -SelectedIndex $selectedIndex

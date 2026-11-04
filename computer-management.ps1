@@ -63,6 +63,19 @@ function Start-ComputerManagement {
     return $false
 }
 
+function Request-ComputerMenuElevation {
+    param(
+        [Parameter(Mandatory)][string]$MenuPath,
+        [Parameter(Mandatory)][ValidateSet('set-computer-name.ps1', 'manage-computer-domain.ps1')][string]$OpenScript
+    )
+    if (Test-ComputerAdministrator) { return $false }
+    # Hand the entire menu to the elevated window. Do not keep the old menu waiting.
+    Start-Process -FilePath 'powershell.exe' -Verb RunAs -WindowStyle Normal -ErrorAction Stop -ArgumentList @(
+        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + $MenuPath + '"'), '-OpenScript', $OpenScript
+    ) | Out-Null
+    return $true
+}
+
 function Get-ComputerManagementState {
     $system = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
     $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
