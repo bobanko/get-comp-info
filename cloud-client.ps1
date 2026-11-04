@@ -593,11 +593,11 @@ function Update-NetworkProfilesCache {
 
 # ---------- Program update ----------
 
-# Files that make up the program: scripts and launchers in the root, plus the cloud settings.
+# Files that make up the program: scripts and launchers in the root, the window program comp-info.exe and the cloud settings.
 # Must match isProgramFile in cloud/src/releases.ts.
 function Test-ProgramFileName {
     param([string]$Name)
-    return $Name -ceq 'cloud-config.json' -or $Name -match '^[^\\/:*?"<>|\x00-\x1f]+\.(ps1|bat|cmd)$'
+    return $Name -ceq 'cloud-config.json' -or $Name -eq 'comp-info.exe' -or $Name -match '^[^\\/:*?"<>|\x00-\x1f]+\.(ps1|bat|cmd)$'
 }
 
 function Get-ProgramFiles {
@@ -705,7 +705,8 @@ function Install-ProgramRelease {
                 if ((Get-FileSha256 $target) -ne ([string]$file.sha256).ToLowerInvariant()) { throw "Файл $($file.path) записан с ошибкой." }
             }
             $removed = @(foreach ($old in Get-ProgramFiles $Root) {
-                if ($names -notcontains $old.Name) {
+                # comp-info.exe stays even when a release does not contain it (it may be running).
+                if ($names -notcontains $old.Name -and $old.Name -ne 'comp-info.exe') {
                     Remove-Item -LiteralPath $old.FullName -Force
                     $old.Name
                 }

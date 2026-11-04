@@ -55,6 +55,14 @@ describe('publishing releases', () => {
     expect((await publish(bytes, await githubToken({ ref: 'refs/tags/v1999.01.01.1' }))).body.error.code).toBe('tag_mismatch');
   });
 
+  it('accepts the window program comp-info.exe but no other executable', async () => {
+    const version = nextVersion();
+    expect((await publishVersion(version, { 'a.ps1': 'x', 'comp-info.exe': 'MZ' })).status).toBe(201);
+    const second = nextVersion();
+    const other = await publish(await buildRelease(second, { 'a.ps1': 'x', 'evil.exe': 'MZ' }), await githubToken({ ref: `refs/tags/v${second}` }));
+    expect(other.body.error.code).toBe('invalid_manifest');
+  });
+
   it('refuses to publish the same version twice', async () => {
     const version = nextVersion();
     expect((await publishVersion(version)).status).toBe(201);

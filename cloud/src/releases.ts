@@ -11,7 +11,7 @@ export const MAX_PACKAGE_BYTES = 1024 * 1024;
 export const GITHUB_ISSUER = 'https://token.actions.githubusercontent.com';
 export const RELEASE_AUDIENCE = 'comp-info-release';
 const VERSION_PATTERN = /^\d{4}\.\d{2}\.\d{2}\.\d{1,4}$/;
-// Only files from the program root: scripts, launchers and the cloud settings.
+// Only files from the program root: scripts, launchers, the window program and the cloud settings.
 const PROGRAM_FILE = /^[^\\/:*?"<>|\u0000-\u001f]+\.(ps1|bat|cmd)$/i;
 
 export interface ManifestFile {
@@ -39,7 +39,7 @@ interface ReleaseRow {
 }
 
 export function isProgramFile(path: string): boolean {
-  return path === 'cloud-config.json' || PROGRAM_FILE.test(path);
+  return path === 'cloud-config.json' || path.toLowerCase() === 'comp-info.exe' || PROGRAM_FILE.test(path);
 }
 
 function toRelease(row: ReleaseRow) {

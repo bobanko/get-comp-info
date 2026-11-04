@@ -1,39 +1,13 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
-using System.Drawing.Drawing2D;
 using System.Drawing.Text;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace CompInfo
 {
-    public static class Theme
-    {
-        public static readonly Color Accent = Color.FromArgb(0x1E, 0x8C, 0x5A);
-        public static readonly Color AccentHover = Color.FromArgb(0x24, 0xA0, 0x67);
-        public static readonly Color AccentDown = Color.FromArgb(0x17, 0x70, 0x48);
-        public static readonly Color AccentLight = Color.FromArgb(0xE6, 0xF4, 0xEC);
-        public static readonly Color Sidebar = Color.FromArgb(0xF3, 0xF5, 0xF4);
-        public static readonly Color SidebarHover = Color.FromArgb(0xE7, 0xEB, 0xE9);
-        public static readonly Color Border = Color.FromArgb(0xDD, 0xE1, 0xDF);
-        public static readonly Color Text = Color.FromArgb(0x1F, 0x29, 0x37);
-        public static readonly Color Muted = Color.FromArgb(0x6B, 0x72, 0x80);
-        public static readonly Color Good = Color.FromArgb(0x2E, 0x7D, 0x32);
-        public static readonly Color GoodLight = Color.FromArgb(0xE8, 0xF5, 0xE9);
-        public static readonly Color Warn = Color.FromArgb(0xB2, 0x6A, 0x00);
-        public static readonly Color WarnLight = Color.FromArgb(0xFF, 0xF4, 0xCC);
-        public static readonly Color Bad = Color.FromArgb(0xC6, 0x28, 0x28);
-        public static readonly Color BadLight = Color.FromArgb(0xFD, 0xEC, 0xEA);
-        public static readonly Color Info = Color.FromArgb(0x15, 0x65, 0xC0);
-        // Letters of the brand, as in the console header (darker shades for a light background).
-        public static readonly Color[] Rainbow =
-        {
-            Color.FromArgb(0xD3, 0x2F, 0x2F), Color.FromArgb(0xE0, 0x8E, 0x00), Color.FromArgb(0x2E, 0x7D, 0x32),
-            Color.FromArgb(0x00, 0x83, 0x8F), Color.FromArgb(0x15, 0x65, 0xC0), Color.FromArgb(0x8E, 0x24, 0xAA)
-        };
-    }
-
     // Windows icon font (Segoe MDL2 Assets, Windows 10 and 11): crisp monochrome icons in any colour and size.
     public static class Glyph
     {
@@ -41,7 +15,8 @@ namespace CompInfo
             Database = "", Usb = "", Sync = "", Update = "", Refresh = "", Export = "",
             Copy = "", Save = "", Search = "", Check = "", Cross = "", Warning = "",
             Shield = "", Open = "", Back = "", Forward = "", Folder = "", Settings = "",
-            Circle = "", Dash = "", More = "", Info = "";
+            Circle = "", Dash = "", More = "", Info = "", Cloud = "", Upload = "",
+            Power = "", Lock = "", Person = "", Theme = "", Play = "";
 
         static string family;
 
@@ -60,10 +35,7 @@ namespace CompInfo
             }
         }
 
-        public static Font Font(float pixels)
-        {
-            return new Font(Family, pixels, GraphicsUnit.Pixel);
-        }
+        public static Font Font(float pixels) { return new Font(Family, pixels, GraphicsUnit.Pixel); }
 
         public static Bitmap Image(string glyph, int size, Color color)
         {
@@ -72,7 +44,7 @@ namespace CompInfo
             using (Font f = Font(size * 0.86f))
             {
                 g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-                TextRenderer.DrawText(g, glyph, f, new Rectangle(0, 0, size, size), color,
+                TextRenderer.DrawText(g, glyph, f, new Rectangle(0, 0, size, size), color, Color.Transparent,
                     TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
             }
             return b;
@@ -87,24 +59,24 @@ namespace CompInfo
 
     public static class Ui
     {
-        public static int Em(Control c) { return c.Font.Height; }
+        public static readonly Font BaseFont = new Font("Segoe UI", 10f);
 
         public static Button Primary(string text, string glyph, Font font)
         {
-            Button b = Plain(text, glyph, font, Color.White);
+            Button b = Plain(text, glyph, font, Theme.OnAccent);
             b.BackColor = Theme.Accent;
-            b.ForeColor = Color.White;
+            b.ForeColor = Theme.OnAccent;
             b.FlatAppearance.BorderSize = 0;
             b.FlatAppearance.MouseOverBackColor = Theme.AccentHover;
             b.FlatAppearance.MouseDownBackColor = Theme.AccentDown;
-            b.EnabledChanged += delegate { b.BackColor = b.Enabled ? Theme.Accent : Color.FromArgb(0xB8, 0xC9, 0xC0); };
+            b.EnabledChanged += delegate { b.BackColor = b.Enabled ? Theme.Accent : Theme.AccentDisabled; };
             return b;
         }
 
         public static Button Secondary(string text, string glyph, Font font)
         {
             Button b = Plain(text, glyph, font, Theme.Text);
-            b.BackColor = Color.White;
+            b.BackColor = Theme.Surface;
             b.ForeColor = Theme.Text;
             b.FlatAppearance.BorderColor = Theme.Border;
             b.FlatAppearance.BorderSize = 1;
@@ -122,7 +94,7 @@ namespace CompInfo
             b.FlatStyle = FlatStyle.Flat;
             b.AutoSize = true;
             b.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            b.Padding = new Padding(em / 2, em / 5, em / 2, em / 5);
+            b.Padding = new Padding(em / 2, em / 6, em / 2, em / 6);
             b.Margin = new Padding(0, 0, em / 2, 0);
             b.Cursor = Cursors.Hand;
             b.UseVisualStyleBackColor = false;
@@ -144,6 +116,13 @@ namespace CompInfo
             l.ForeColor = color;
             l.AutoSize = true;
             l.Margin = new Padding(0);
+            return l;
+        }
+
+        public static Label Heading(string text, Font font)
+        {
+            Label l = Text(text, new Font("Segoe UI Semibold", font.SizeInPoints + 1), Theme.Text);
+            l.Margin = new Padding(0, font.Height / 2, 0, font.Height / 4);
             return l;
         }
 
@@ -178,6 +157,63 @@ namespace CompInfo
             return p;
         }
 
+        public static TextBox Input(TextBox box)
+        {
+            box.BackColor = Theme.Surface;
+            box.ForeColor = Theme.Text;
+            box.BorderStyle = BorderStyle.FixedSingle;
+            Theme.Native(box);
+            return box;
+        }
+
+        public static ComboBox Combo()
+        {
+            ComboBox c = new ComboBox();
+            c.DropDownStyle = ComboBoxStyle.DropDownList;
+            c.FlatStyle = FlatStyle.Flat;
+            c.BackColor = Theme.Surface;
+            c.ForeColor = Theme.Text;
+            Theme.Native(c);
+            return c;
+        }
+
+        // Read-only table in the colours of the theme.
+        public static DataGridView Grid(Font font)
+        {
+            int em = font.Height;
+            DataGridView grid = new DataGridView();
+            grid.Font = font;
+            grid.ReadOnly = true;
+            grid.AllowUserToAddRows = false;
+            grid.AllowUserToDeleteRows = false;
+            grid.AllowUserToResizeRows = false;
+            grid.RowHeadersVisible = false;
+            grid.MultiSelect = false;
+            grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            grid.BackgroundColor = Theme.Surface;
+            grid.BorderStyle = BorderStyle.FixedSingle;
+            grid.GridColor = Theme.Border;
+            grid.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
+            grid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
+            grid.EnableHeadersVisualStyles = false;
+            grid.ColumnHeadersDefaultCellStyle.BackColor = Theme.HeaderBack;
+            grid.ColumnHeadersDefaultCellStyle.ForeColor = Theme.Muted;
+            grid.ColumnHeadersDefaultCellStyle.SelectionBackColor = Theme.HeaderBack;
+            grid.ColumnHeadersDefaultCellStyle.SelectionForeColor = Theme.Muted;
+            grid.ColumnHeadersDefaultCellStyle.WrapMode = DataGridViewTriState.False;
+            grid.ColumnHeadersHeight = em * 2;
+            grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+            grid.RowTemplate.Height = em + em / 2;
+            grid.DefaultCellStyle.BackColor = Theme.Surface;
+            grid.DefaultCellStyle.ForeColor = Theme.Text;
+            grid.DefaultCellStyle.SelectionBackColor = Theme.Selection;
+            grid.DefaultCellStyle.SelectionForeColor = Theme.Text;
+            grid.DefaultCellStyle.WrapMode = DataGridViewTriState.False;
+            DoubleBuffer(grid);
+            Theme.Native(grid);
+            return grid;
+        }
+
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, string lParam);
 
@@ -193,9 +229,38 @@ namespace CompInfo
             try { Process.Start("explorer.exe", "/select,\"" + path + "\""); } catch (Exception) { }
         }
 
+        // Question in the colours of the program; returns the index of the pressed button, or -1 when closed.
+        public static int Ask(IWin32Window owner, string title, string text, string glyph, Color glyphColor, params string[] buttons)
+        {
+            using (AskDialog d = new AskDialog(title, text, glyph, glyphColor, buttons))
+            {
+                d.ShowDialog(owner);
+                return d.Answer;
+            }
+        }
+
         public static void Error(IWin32Window owner, string text)
         {
-            MessageBox.Show(owner, text, "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            Ask(owner, "Ошибка", text, Glyph.Warning, Theme.Bad, "OK");
+        }
+
+        public static void Info(IWin32Window owner, string title, string text)
+        {
+            Ask(owner, title, text, Glyph.Info, Theme.Info, "OK");
+        }
+
+        static Bitmap appImage;
+
+        // Program icon (the bearded gear), 96 px, embedded as brand.png (made by tools\make-icon.BAT).
+        public static Bitmap AppImage
+        {
+            get
+            {
+                if (appImage != null) return appImage;
+                try { appImage = new Bitmap(typeof(Ui).Assembly.GetManifestResourceStream("CompInfo.brand.png")); }
+                catch (Exception) { appImage = new Bitmap(1, 1); }
+                return appImage;
+            }
         }
 
         public static string Date(string value)
@@ -205,38 +270,75 @@ namespace CompInfo
             return "";
         }
 
-        // Every column as wide as its widest value or its header; the last one takes the rest.
-        static bool fitting;
-
-        public static void FitColumns(ListView list)
-        {
-            // Changing widths can show or hide the scroll bar, which resizes the list and calls this again.
-            if (fitting || list.Columns.Count == 0) return;
-            fitting = true;
-            try { FitColumnsOnce(list); }
-            finally { fitting = false; }
-        }
-
-        static void FitColumnsOnce(ListView list)
-        {
-            int total = 0;
-            for (int i = 0; i < list.Columns.Count; i++)
-            {
-                list.AutoResizeColumn(i, ColumnHeaderAutoResizeStyle.ColumnContent);
-                int content = list.Columns[i].Width;
-                int header = TextRenderer.MeasureText(list.Columns[i].Text, list.Font).Width + list.Font.Height;
-                list.Columns[i].Width = Math.Max(content + list.Font.Height / 2, header);
-                total += list.Columns[i].Width;
-            }
-            int last = list.Columns.Count - 1;
-            // A little less than the full width, so the horizontal scroll bar never appears.
-            int rest = list.ClientSize.Width - (total - list.Columns[last].Width) - 4;
-            if (rest > list.Columns[last].Width) list.Columns[last].Width = rest;
-        }
-
         public static void DoubleBuffer(Control c)
         {
             typeof(Control).GetProperty("DoubleBuffered", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).SetValue(c, true, null);
+        }
+
+        // Form in the colours of the theme.
+        public static void Dialog(Form f)
+        {
+            f.Font = BaseFont;
+            f.BackColor = Theme.Back;
+            f.ForeColor = Theme.Text;
+            f.StartPosition = FormStartPosition.CenterParent;
+            f.ShowInTaskbar = false;
+            f.MinimizeBox = false;
+            try { f.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch (Exception) { }
+            Theme.TitleBar(f);
+        }
+    }
+
+    // Message with an icon and buttons; replaces MessageBox, which ignores the dark theme.
+    public class AskDialog : Form
+    {
+        public int Answer = -1;
+
+        public AskDialog(string title, string text, string glyph, Color glyphColor, string[] buttons)
+        {
+            Ui.Dialog(this);
+            Text = title;
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox = false;
+            int em = Font.Height;
+            Padding = new Padding(em);
+
+            PictureBox icon = new PictureBox();
+            icon.Image = Glyph.Image(glyph, em * 2, glyphColor);
+            icon.Size = new Size(em * 2, em * 2);
+            icon.Margin = new Padding(0, 0, em, 0);
+            Label message = Ui.Text(text, Font, Theme.Text);
+            message.MaximumSize = new Size(em * 28, 0);
+            message.Margin = new Padding(0, em / 4, 0, em);
+
+            FlowLayoutPanel actions = Ui.Row();
+            actions.FlowDirection = FlowDirection.RightToLeft;
+            actions.Anchor = AnchorStyles.Right;
+            for (int i = buttons.Length - 1; i >= 0; i--)
+            {
+                int index = i;
+                Button b = i == 0 ? Ui.Primary(buttons[i], null, Font) : Ui.Secondary(buttons[i], null, Font);
+                b.Margin = new Padding(em / 2, 0, 0, 0);
+                b.MinimumSize = new Size(em * 5, 0);
+                b.Click += delegate { Answer = index; Close(); };
+                actions.Controls.Add(b);
+                if (i == 0) AcceptButton = b;
+            }
+
+            TableLayoutPanel t = new TableLayoutPanel();
+            t.AutoSize = true;
+            t.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            t.ColumnCount = 2;
+            t.Controls.Add(icon, 0, 0);
+            t.Controls.Add(message, 1, 0);
+            t.Controls.Add(actions, 0, 1);
+            t.SetColumnSpan(actions, 2);
+            t.Location = new Point(em, em);
+            Controls.Add(t);
+            AutoSize = true;
+            AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            KeyPreview = true;
+            KeyDown += delegate (object o, KeyEventArgs k) { if (k.KeyCode == Keys.Escape) Close(); };
         }
     }
 
@@ -251,6 +353,7 @@ namespace CompInfo
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw | ControlStyles.SupportsTransparentBackColor, true);
             BackColor = Color.Transparent;
             Margin = new Padding(0);
+            Visible = false;
         }
 
         public void Set(string glyph, string text, Color color)
@@ -272,16 +375,17 @@ namespace CompInfo
         void FitHeight()
         {
             if (Width <= TextLeft) return;
-            Size s = TextRenderer.MeasureText(Text.Length == 0 ? " " : Text, Font, new Size(Width - TextLeft, int.MaxValue), TextFormatFlags.WordBreak);
-            int h = Math.Max(s.Height, Font.Height) + 2;
+            Size s = TextRenderer.MeasureText(Text.Length == 0 ? " " : Text, Font, new Size(Width - TextLeft - Padding.Horizontal, int.MaxValue), TextFormatFlags.WordBreak);
+            int h = Math.Max(s.Height, Font.Height) + 2 + Padding.Vertical;
             if (Height != h) Height = h;
         }
 
         protected override void OnPaint(PaintEventArgs e)
         {
             int em = Font.Height;
-            if (glyph != null) Glyph.Draw(e.Graphics, glyph, new Rectangle(0, 1, em, em), color, em * 0.8f);
-            TextRenderer.DrawText(e.Graphics, Text, Font, new Rectangle(TextLeft, 1, Width - TextLeft, Height), color == Theme.Muted ? Theme.Muted : color,
+            int top = Padding.Top + 1;
+            if (glyph != null) Glyph.Draw(e.Graphics, glyph, new Rectangle(Padding.Left, top, em, em), color, em * 0.8f);
+            TextRenderer.DrawText(e.Graphics, Text, Font, new Rectangle(Padding.Left + TextLeft, top, Width - TextLeft - Padding.Horizontal, Height - top), color,
                 TextFormatFlags.WordBreak | TextFormatFlags.Left | TextFormatFlags.Top);
         }
     }

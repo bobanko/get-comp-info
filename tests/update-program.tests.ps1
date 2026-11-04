@@ -127,8 +127,8 @@ try {
     Assert-True (-not (Test-NewerProgramVersion '2026.10.24.10' '2026.10.24.10')) 'Same version is not newer'
     Assert-True (Test-NewerProgramVersion '2026.10.24.10' '2026.10.24.9') 'Release numbers compare as numbers'
     Assert-True (-not (Test-NewerProgramVersion 'garbage' '2026.10.24.1')) 'Invalid versions are never newer'
-    Assert-True ((Test-ProgramFileName 'a.ps1') -and (Test-ProgramFileName 'RUN.BAT') -and (Test-ProgramFileName 'cloud-config.json')) 'Program files'
-    Assert-True (-not (Test-ProgramFileName 'notes.txt') -and -not (Test-ProgramFileName 'cloud-key.txt') -and -not (Test-ProgramFileName 'sub\a.ps1')) 'Not program files'
+    Assert-True ((Test-ProgramFileName 'a.ps1') -and (Test-ProgramFileName 'RUN.BAT') -and (Test-ProgramFileName 'cloud-config.json') -and (Test-ProgramFileName 'comp-info.exe')) 'Program files'
+    Assert-True (-not (Test-ProgramFileName 'notes.txt') -and -not (Test-ProgramFileName 'cloud-key.txt') -and -not (Test-ProgramFileName 'sub\a.ps1') -and -not (Test-ProgramFileName 'other.exe')) 'Not program files'
 
     # ---------- A normal update ----------
     Set-Release '2026.11.01.1' $newFiles

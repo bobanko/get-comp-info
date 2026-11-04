@@ -273,3 +273,21 @@ namespace CompInfo
         }
     }
 }
+
+namespace CompInfo
+{
+    public static class Fmt
+    {
+        public static string Date(string value)
+        {
+            DateTime d;
+            if (DateTime.TryParse(value ?? "", out d)) return d.ToString("yyyy-MM-dd HH:mm");
+            return "";
+        }
+
+        public static string ExePath
+        {
+            get { return System.Reflection.Assembly.GetEntryAssembly().Location; }
+        }
+    }
+}

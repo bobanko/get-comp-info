@@ -9,11 +9,11 @@ namespace CompInfo
     // «База устройств»: the local copy of the records (view-comp-info.ps1) and the CSV export.
     public class DatabasePage : Page
     {
-        readonly TextBox search = new TextBox();
+        readonly TextBox search = Ui.Input(new TextBox());
         readonly Label count = new Label();
         readonly StatusLine notes = new StatusLine();
-        readonly DataGridView grid = new DataGridView();
-        readonly Label footer = new Label();
+        readonly DataGridView grid;
+        readonly Label footer;
         List<RecordFile> all = new List<RecordFile>();
         List<RecordFile> shown = new List<RecordFile>();
         Dictionary<string, int> ipCounts = new Dictionary<string, int>();
@@ -33,7 +33,7 @@ namespace CompInfo
             Icon = Glyph.Database;
             int em = Font.Height;
 
-            search.Width = em * 22;
+            search.Width = em * 16;
             search.Margin = new Padding(0, em / 6, em / 2, 0);
             Ui.SetCue(search, "Поиск: имя, серийный номер, пользователь…");
             search.TextChanged += delegate { Fill(); };
@@ -54,29 +54,8 @@ namespace CompInfo
 
             notes.Dock = DockStyle.Top;
 
+            grid = Ui.Grid(Font);
             grid.Dock = DockStyle.Fill;
-            grid.ReadOnly = true;
-            grid.AllowUserToAddRows = false;
-            grid.AllowUserToDeleteRows = false;
-            grid.AllowUserToResizeRows = false;
-            grid.RowHeadersVisible = false;
-            grid.MultiSelect = false;
-            grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-            grid.BackgroundColor = Color.White;
-            grid.BorderStyle = BorderStyle.FixedSingle;
-            grid.GridColor = Theme.Border;
-            grid.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
-            grid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
-            grid.EnableHeadersVisualStyles = false;
-            grid.ColumnHeadersDefaultCellStyle.BackColor = Theme.Sidebar;
-            grid.ColumnHeadersDefaultCellStyle.ForeColor = Theme.Muted;
-            grid.ColumnHeadersDefaultCellStyle.SelectionBackColor = Theme.Sidebar;
-            grid.ColumnHeadersDefaultCellStyle.WrapMode = DataGridViewTriState.False;
-            grid.ColumnHeadersHeight = em * 2;
-            grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
-            grid.RowTemplate.Height = em + em / 2;
-            grid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(0xCC, 0xE4, 0xF7);
-            grid.DefaultCellStyle.SelectionForeColor = Theme.Text;
             for (int i = 0; i < Columns.Length; i++)
             {
                 int index = grid.Columns.Add("c" + i, Columns[i]);
@@ -95,15 +74,10 @@ namespace CompInfo
             {
                 if (k.KeyCode == Keys.Enter && grid.CurrentRow != null) { k.SuppressKeyPress = true; OpenCard(grid.CurrentRow.Index); }
             };
-            Ui.DoubleBuffer(grid);
             grid.Resize += delegate { FitColumns(); };
 
+            footer = Ui.Paragraph("Подсвечен этот компьютер. Красный IP-адрес — такой же адрес есть у другой записи.", Font, Theme.Muted);
             footer.Dock = DockStyle.Bottom;
-            footer.AutoSize = false;
-            footer.Height = em + em / 2;
-            footer.ForeColor = Theme.Muted;
-            footer.TextAlign = ContentAlignment.TopLeft;
-            footer.Text = "Зелёный фон — этот компьютер. Красный IP-адрес — такой же адрес есть у другой записи.";
 
             Controls.Add(grid);
             Controls.Add(notes);
@@ -137,7 +111,7 @@ namespace CompInfo
             if (warnings.Count > 0)
                 notes.Set(Glyph.Warning, "Пропущены файлы, которые не удалось прочитать (" + warnings.Count + "): " + string.Join("; ", warnings), Theme.Warn);
             else notes.Clear();
-            lastSync = string.IsNullOrEmpty(cloud.LastSyncAt) ? "не было" : Ui.Date(cloud.LastSyncAt);
+            lastSync = string.IsNullOrEmpty(cloud.LastSyncAt) ? "не было" : Fmt.Date(cloud.LastSyncAt);
             Fill();
             if (selected != null)
             {
@@ -231,8 +205,13 @@ namespace CompInfo
             {
                 JsonObject d = r.Data;
                 string ip = (d.Text("ip") ?? "").Trim();
-                int index = grid.Rows.Add(d.Text("hostname"), ip, d.Text("serial"), d.Text("username"), Ui.Date(d.Text("collectedAt")),
-                    r.CloudStatus, EsetShort(d["esetInstalled"]), d.Text("comment"));
+                // Short values keep the table readable in a small window; the full ones are in tooltips and the card.
+                string collected = Fmt.Date(d.Text("collectedAt"));
+                string cloudShort = r.CloudStatus == CloudState.Synced ? "да" : r.CloudStatus == CloudState.Changed ? "изменено" : "нет";
+                int index = grid.Rows.Add(d.Text("hostname"), ip, d.Text("serial"), d.Text("username"), collected.Length > 10 ? collected.Substring(0, 10) : collected,
+                    cloudShort, EsetShort(d["esetInstalled"]), d.Text("comment"));
+                grid.Rows[index].Cells[4].ToolTipText = collected;
+                grid.Rows[index].Cells[5].ToolTipText = r.CloudStatus;
                 DataGridViewRow row = grid.Rows[index];
                 if (me != null && me.Matches(d))
                 {
@@ -278,14 +257,23 @@ namespace CompInfo
                     sum += wanted[i];
                 }
                 int available = grid.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 2;
-                bool roomy = sum + em * 8 <= available;
-                for (int i = 0; i <= last; i++)
+                // Not enough room: serial number, then user, then the computer name give way;
+                // IP, date and statuses always stay whole.
+                int deficit = sum + em * 5 - available;
+                foreach (int[] shrink in new[] { new[] { 2, em * 5 }, new[] { 3, em * 4 }, new[] { 0, em * 6 } })
                 {
-                    DataGridViewColumn c = grid.Columns[i];
-                    c.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
-                    // Fill weights: real widths when everything fits (the comment gets the rest), proportions otherwise.
-                    c.FillWeight = i == last ? (roomy ? Math.Max(1, available - sum) : em * 8) : wanted[i];
+                    if (deficit <= 0) break;
+                    int cut = Math.Min(deficit, Math.Max(0, wanted[shrink[0]] - shrink[1]));
+                    wanted[shrink[0]] -= cut;
+                    deficit -= cut;
                 }
+                for (int i = 0; i < last; i++)
+                {
+                    grid.Columns[i].AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
+                    grid.Columns[i].Width = wanted[i];
+                }
+                grid.Columns[last].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+                grid.Columns[last].MinimumWidth = em * 4;
             }
             finally { fitting = false; }
         }
@@ -337,8 +325,7 @@ namespace CompInfo
             try
             {
                 int n = CsvExport.Write(AppPaths.Data, path, CloudState.ForDisplay(AppPaths.Root), ';');
-                if (MessageBox.Show(FindForm(), "Экспортировано устройств: " + n + "\n\n" + path + "\n\nОткрыть папку с файлом?", "Экспорт в CSV",
-                    MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
+                if (Ui.Ask(FindForm(), "Экспорт в CSV", "Экспортировано устройств: " + n + "\n\n" + path, Glyph.Check, Theme.Good, "Открыть папку", "Закрыть") == 0)
                     Ui.ShowInExplorer(path);
             }
             catch (Exception e) { Ui.Error(FindForm(), "Экспорт не выполнен: " + e.Message); }
@@ -351,7 +338,7 @@ namespace CompInfo
         readonly List<RecordFile> records;
         readonly CloudState cloud;
         readonly TableLayoutPanel table = new TableLayoutPanel();
-        readonly TextBox comment = new TextBox();
+        readonly TextBox comment = Ui.Input(new TextBox());
         readonly Button saveComment;
         readonly Button previous, next;
         readonly StatusLine status = new StatusLine();
@@ -372,17 +359,12 @@ namespace CompInfo
             this.records = records;
             this.cloud = cloud;
             Index = index;
-            Font = new Font("Segoe UI", 10f);
+            Ui.Dialog(this);
             int em = Font.Height;
             Text = "Карточка компьютера";
-            try { Icon = System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch (Exception) { }
-            BackColor = Color.White;
-            StartPosition = FormStartPosition.CenterParent;
             FormBorderStyle = FormBorderStyle.Sizable;
-            MinimizeBox = false;
-            ShowInTaskbar = false;
             KeyPreview = true;
-            ClientSize = new Size(em * 40, em * 36);
+            ClientSize = new Size(em * 38, em * 34);
             MinimumSize = new Size(em * 30, em * 24);
             Padding = new Padding(em);
 
@@ -450,8 +432,8 @@ namespace CompInfo
         {
             int target = Index + step;
             if (target < 0 || target >= records.Count) return;
-            if (saveComment.Enabled && MessageBox.Show(this, "Комментарий изменён, но не сохранён. Перейти без сохранения?", "Карточка компьютера",
-                MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            if (saveComment.Enabled && Ui.Ask(this, "Карточка компьютера", "Комментарий изменён, но не сохранён. Перейти без сохранения?", Glyph.Warning, Theme.Warn,
+                "Перейти", "Остаться") != 0) return;
             Display(target);
         }
 
@@ -476,7 +458,7 @@ namespace CompInfo
             // Fields this version does not know are shown too, so nothing is hidden.
             foreach (string name in d.Names)
                 if (!known.Contains(name)) AddField(name, d.Text(name) ?? "");
-            AddField("Облако", r.CloudStatus + "   (последняя синхронизация копии: " + (string.IsNullOrEmpty(cloud.LastSyncAt) ? "не было" : Ui.Date(cloud.LastSyncAt)) + ")");
+            AddField("Облако", r.CloudStatus + "   (последняя синхронизация копии: " + (string.IsNullOrEmpty(cloud.LastSyncAt) ? "не было" : Fmt.Date(cloud.LastSyncAt)) + ")");
             AddField("Файл", r.FileName);
             table.ResumeLayout();
             comment.Text = d.Text("comment") ?? "";
@@ -490,7 +472,7 @@ namespace CompInfo
         static string Value(JsonObject d, string name)
         {
             if (name == "esetInstalled") return ComputerSnapshot.EsetText(d[name]);
-            if (name == "createdAt" || name == "collectedAt") return Ui.Date(d.Text(name));
+            if (name == "createdAt" || name == "collectedAt") return Fmt.Date(d.Text(name));
             if (name == "partOfDomain") { object v = d[name]; return v == null ? "" : (v is bool && (bool)v ? "да" : "нет"); }
             return d.Text(name) ?? "";
         }
@@ -504,7 +486,7 @@ namespace CompInfo
             TextBox v = new TextBox();
             v.ReadOnly = true;
             v.BorderStyle = BorderStyle.None;
-            v.BackColor = Color.White;
+            v.BackColor = Theme.Back;
             v.Text = value.Length == 0 ? "—" : value;
             v.ForeColor = value.Length == 0 ? Theme.Muted : Theme.Text;
             v.Dock = DockStyle.Fill;
@@ -535,8 +517,8 @@ namespace CompInfo
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
-            if (saveComment.Enabled && MessageBox.Show(this, "Комментарий изменён, но не сохранён. Закрыть без сохранения?", "Карточка компьютера",
-                MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) e.Cancel = true;
+            if (saveComment.Enabled && Ui.Ask(this, "Карточка компьютера", "Комментарий изменён, но не сохранён. Закрыть без сохранения?", Glyph.Warning, Theme.Warn,
+                "Закрыть", "Остаться") != 0) e.Cancel = true;
             base.OnFormClosing(e);
         }
     }

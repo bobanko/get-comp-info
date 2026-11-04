@@ -33,6 +33,18 @@ if ($Version -ne $codeVersion) {
 }
 
 $files = @(Invoke-Git @('ls-files') | Where-Object { $_ -notmatch '/' -and (Test-ProgramFileName $_) })
+
+# The window program (built by tools\build.BAT, not stored in Git) goes into releases only after the flash drives
+# run a version whose updater accepts comp-info.exe (Test-ProgramFileName, from 2026.11.05). Older updaters
+# refuse such an archive, so publish one release with this off first, then turn it on. See PROGRAM_UPDATE.md.
+$includeWindowsApp = $false
+if ($includeWindowsApp) {
+    $exe = Join-Path $root 'comp-info.exe'
+    if (-not (Test-Path -LiteralPath $exe)) { throw 'Нет comp-info.exe: сначала выполните tools\build.BAT.' }
+    $built = (Get-Item -LiteralPath $exe).VersionInfo.FileVersion
+    if ($built -ne $Version) { throw "comp-info.exe собран для версии $built, а выпускается $Version. Выполните tools\build.BAT." }
+    $files += 'comp-info.exe'
+}
 $commit = ([string](Invoke-Git @('rev-parse', 'HEAD'))).Trim()
 
 # "Что нового": commit subjects since the previous version tag (or the last 20 commits).

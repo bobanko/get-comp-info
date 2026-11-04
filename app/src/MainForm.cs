@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -10,6 +12,7 @@ namespace CompInfo
     {
         public string Key;
         public string Title;
+        public string NavTitle;
         public string Description;
         public string Icon;
         public bool NeedsAdmin;
@@ -17,17 +20,23 @@ namespace CompInfo
         public Page()
         {
             // Set before the page builds its controls: they take their sizes from this font.
-            Font = new Font("Segoe UI", 10f);
-            BackColor = Color.White;
+            Font = Ui.BaseFont;
+            BackColor = Theme.Back;
+            ForeColor = Theme.Text;
             Dock = DockStyle.Fill;
             Margin = new Padding(0);
         }
+
+        public MainForm Main { get { return FindForm() as MainForm; } }
 
         // Called every time the page is opened.
         public virtual void Opened() { }
 
         // A USB device was plugged in or removed.
         public virtual void DevicesChanged() { }
+
+        // The window is about to close or rebuild: false keeps it open (e.g. an operation is running).
+        public virtual bool CanLeave() { return true; }
     }
 
     public class MainForm : Form
@@ -39,47 +48,52 @@ namespace CompInfo
         readonly Label description = new Label();
         Page current;
 
+        // Set when the window closes to be built again (theme change); the section to reopen.
+        public string ReopenPage;
+
         public MainForm()
         {
-            Text = "CHAGEAR Тулбокс";
+            Text = "CHAGEAR Тулбокс" + (PowerShell.IsAdministrator() ? " — администратор" : "");
             try { base.Icon = System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch (Exception) { }
-            Font = new Font("Segoe UI", 10f);
-            BackColor = Color.White;
+            Font = Ui.BaseFont;
+            BackColor = Theme.Back;
+            ForeColor = Theme.Text;
+            Theme.TitleBar(this);
             StartPosition = FormStartPosition.CenterScreen;
             int em = Font.Height;
             Rectangle screen = Screen.PrimaryScreen.WorkingArea;
-            ClientSize = new Size(Math.Min(em * 70, screen.Width * 9 / 10), Math.Min(em * 40, screen.Height * 9 / 10));
+            ClientSize = new Size(Math.Min(em * 56, screen.Width * 9 / 10), Math.Min(em * 34, screen.Height * 9 / 10));
             MinimumSize = new Size(em * 44, em * 28);
 
             pages.Add(new CollectPage());
-            pages.Add(new ConsolePage("lan", "Настройка сети", "IP-адрес, маска подсети, шлюз и DNS проводного адаптера по профилям корпусов.", Glyph.Network,
-                "setup-lan-adapter.ps1", true));
-            pages.Add(new ConsolePage("name", "Имя компьютера", "Переименование по правилам IF / FR.", Glyph.Tag, "set-computer-name.ps1", true));
-            pages.Add(new ConsolePage("domain", "Домен", "Ввод компьютера в домен и вывод из него.", Glyph.Domain, "manage-computer-domain.ps1", true));
+            pages.Add(new LanPage());
+            pages.Add(new ComputerPage(false));
+            pages.Add(new ComputerPage(true));
             pages.Add(new PingPage());
             pages.Add(new DatabasePage());
             pages.Add(new UsbPage());
-            pages.Add(new ConsolePage("sync", "Синхронизация с облаком", "Отправка изменений в облако и загрузка базы из облака.", Glyph.Sync, "sync-cloud.ps1", false));
-            pages.Add(new ConsolePage("update", "Обновление программы", "Проверка и установка новой версии из облака.", Glyph.Update, "update-program.ps1", false));
+            pages.Add(new SyncPage());
+            pages.Add(new UpdatePage());
+            pages.Add(new AboutPage());
 
             // Right side: page title, description and the page itself.
             Panel right = new Panel();
             right.Dock = DockStyle.Fill;
-            right.Padding = new Padding(em * 3 / 2, em, em * 3 / 2, em);
-            right.BackColor = Color.White;
+            right.Padding = new Padding(em, em * 3 / 4, em, em * 3 / 4);
+            right.BackColor = Theme.Back;
             host.Dock = DockStyle.Fill;
-            host.BackColor = Color.White;
+            host.BackColor = Theme.Back;
             description.Dock = DockStyle.Top;
             description.ForeColor = Theme.Muted;
             description.AutoSize = false;
-            description.Padding = new Padding(0, 0, 0, em * 2 / 3);
+            description.Padding = new Padding(0, 0, 0, em / 2);
             description.Resize += delegate { Ui.FitHeight(description); };
             description.TextChanged += delegate { Ui.FitHeight(description); };
             title.Dock = DockStyle.Top;
-            title.Font = new Font("Segoe UI Semibold", 16f);
+            title.Font = new Font("Segoe UI Semibold", 15f);
             title.ForeColor = Theme.Text;
             title.AutoSize = false;
-            title.Height = title.Font.Height + em / 4;
+            title.Height = title.Font.Height + em / 6;
             right.Controls.Add(host);
             right.Controls.Add(description);
             right.Controls.Add(title);
@@ -88,9 +102,9 @@ namespace CompInfo
             // Left side: brand, version and the sections.
             Panel menu = new Panel();
             menu.Dock = DockStyle.Left;
-            menu.Width = em * 17;
+            menu.Width = em * 13;
             menu.BackColor = Theme.Sidebar;
-            menu.Padding = new Padding(em / 2, em, em / 2, em);
+            menu.Padding = new Padding(em / 3, em * 2 / 3, em / 3, em / 2);
             Controls.Add(menu);
             Panel line = new Panel();
             line.Dock = DockStyle.Left;
@@ -103,32 +117,54 @@ namespace CompInfo
             Brand brand = new Brand();
             brand.Dock = DockStyle.Top;
             brand.Height = em * 3;
+            ToolTip tip = new ToolTip();
+            tip.SetToolTip(brand, "Папка программы: " + AppPaths.Root);
             List<Control> stack = new List<Control>();
             stack.Add(brand);
+            NavButton about = null;
             foreach (Page p in pages)
             {
                 NavButton b = new NavButton(p);
                 b.Dock = DockStyle.Top;
-                b.Height = em * 2 + em / 3;
+                b.Height = em * 2;
                 Page target = p;
                 b.Click += delegate { Open(target); };
                 buttons.Add(b);
-                stack.Add(b);
+                // «О программе» sits at the bottom, next to the theme switch.
+                if (p is AboutPage) { about = b; b.Dock = DockStyle.Bottom; } else stack.Add(b);
             }
             // Docked controls stack from the last added, so add them in reverse.
             for (int i = stack.Count - 1; i >= 0; i--) menu.Controls.Add(stack[i]);
 
-            Label folder = new Label();
-            folder.Dock = DockStyle.Bottom;
-            folder.AutoSize = false;
-            folder.Height = em * 2;
-            folder.ForeColor = Theme.Muted;
-            folder.Font = new Font(Font.FontFamily, 8.5f);
-            folder.Text = "Папка программы:\r\n" + AppPaths.Root;
-            folder.AutoEllipsis = true;
-            menu.Controls.Add(folder);
-            ToolTip tip = new ToolTip();
-            tip.SetToolTip(folder, AppPaths.Root);
+            NavButton theme = new NavButton(null);
+            theme.Text = ThemeTitle();
+            theme.Glyph = Glyph.Theme;
+            theme.Dock = DockStyle.Bottom;
+            theme.Height = em * 2;
+            theme.Click += delegate { NextTheme(); };
+            tip.SetToolTip(theme, "Сменить оформление: как в Windows, светлое, тёмное");
+            menu.Controls.Add(theme);
+            menu.Controls.Add(about);
+        }
+
+        static string ThemeTitle()
+        {
+            return Theme.Choice == "dark" ? "Тема: тёмная" : Theme.Choice == "light" ? "Тема: светлая" : "Тема: как в Windows";
+        }
+
+        void NextTheme()
+        {
+            Theme.Choice = Theme.Choice == "system" ? "light" : Theme.Choice == "light" ? "dark" : "system";
+            Settings.Set("theme", Theme.Choice);
+            Rebuild();
+        }
+
+        // Builds the window again (colours are read while controls are built).
+        public void Rebuild()
+        {
+            if (current != null && !current.CanLeave()) return;
+            ReopenPage = current != null ? current.Key : null;
+            Close();
         }
 
         public Page Find(string key)
@@ -137,16 +173,25 @@ namespace CompInfo
             return null;
         }
 
+        public string StartPage;
+
         protected override void OnShown(EventArgs e)
         {
             base.OnShown(e);
-            if (current == null) Open(pages[0]);
+            if (current == null) Open(Find(StartPage ?? "") ?? pages[0]);
+        }
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            if (current != null && !current.CanLeave()) { e.Cancel = true; ReopenPage = null; }
+            base.OnFormClosing(e);
         }
 
         public void Open(Page page)
         {
             if (current != page)
             {
+                if (current != null && !current.CanLeave()) return;
                 host.SuspendLayout();
                 host.Controls.Clear();
                 host.Controls.Add(page);
@@ -157,6 +202,29 @@ namespace CompInfo
                 foreach (NavButton b in buttons) b.Selected = b.Page == page;
             }
             page.Opened();
+        }
+
+        public void Open(string key)
+        {
+            Page p = Find(key);
+            if (p != null) Open(p);
+        }
+
+        // Starts the program again with administrator rights on the given section; this copy closes.
+        public void RestartAsAdministrator(string page)
+        {
+            ProcessStartInfo info = new ProcessStartInfo(Application.ExecutablePath, "--page " + page);
+            info.UseShellExecute = true;
+            info.Verb = "runas";
+            info.WorkingDirectory = AppPaths.Root;
+            try { Process.Start(info); }
+            catch (Win32Exception ex)
+            {
+                if (ex.NativeErrorCode != 1223) Ui.Error(this, "Не удалось запустить программу с правами администратора: " + ex.Message);
+                return;
+            }
+            ReopenPage = null;
+            Close();
         }
 
         protected override void WndProc(ref Message m)
@@ -182,29 +250,32 @@ namespace CompInfo
             {
                 e.Graphics.Clear(Theme.Sidebar);
                 int em = Font.Height;
-                int x = em / 2;
-                using (Font big = new Font("Segoe UI Black", 12.5f))
+                int x = em / 3;
+                using (Font big = new Font("Segoe UI Black", 11f))
                 {
-                    string brand = "CHAGEAR ТУЛБОКС";
                     int colorIndex = 0;
+                    int top = (em * 3 / 2 - big.Height) / 2;
                     TextFormatFlags flags = TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix;
-                    foreach (char ch in brand)
+                    foreach (char ch in "CHAGEAR ТУЛБОКС")
                     {
-                        string s = ch.ToString();
                         if (ch == ' ')
                         {
-                            // The gear of the console header, between the two words.
-                            x += em / 4;
-                            Glyph.Draw(e.Graphics, Glyph.Settings, new Rectangle(x, 0, em, big.Height), Theme.Muted, em * 0.85f);
-                            x += em + em / 4;
+                            // The gear of the console header, between the two words: here the program icon.
+                            int side = em * 3 / 2;
+                            x += em / 8;
+                            e.Graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                            e.Graphics.DrawImage(Ui.AppImage, new Rectangle(x, 0, side, side));
+                            x += side + em / 8;
                             continue;
                         }
+                        string s = ch.ToString();
                         Size size = TextRenderer.MeasureText(e.Graphics, s, big, Size.Empty, flags);
-                        TextRenderer.DrawText(e.Graphics, s, big, new Point(x, 0), Theme.Rainbow[colorIndex % Theme.Rainbow.Length], flags);
+                        TextRenderer.DrawText(e.Graphics, s, big, new Point(x, top), Theme.Rainbow[colorIndex % Theme.Rainbow.Length], flags);
                         colorIndex++;
                         x += size.Width;
                     }
-                    TextRenderer.DrawText(e.Graphics, "версия " + AppVersion.Text, Font, new Point(em / 2, big.Height + em / 6), Theme.Muted, flags);
+                    string version = "версия " + AppVersion.Text + (PowerShell.IsAdministrator() ? " · админ" : "");
+                    TextRenderer.DrawText(e.Graphics, version, Font, new Point(em / 3, em * 3 / 2 + em / 8), Theme.Muted, flags);
                 }
             }
         }
@@ -213,12 +284,13 @@ namespace CompInfo
         class NavButton : Control
         {
             public readonly Page Page;
+            public string Glyph;
             bool selected, hover;
 
             public NavButton(Page page)
             {
                 Page = page;
-                Text = page.Title;
+                if (page != null) { Text = page.NavTitle ?? page.Title; Glyph = page.Icon; }
                 Cursor = Cursors.Hand;
                 SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
                 TabStop = true;
@@ -244,19 +316,20 @@ namespace CompInfo
             protected override void OnPaint(PaintEventArgs e)
             {
                 int em = Font.Height;
-                Color back = selected ? Color.White : hover ? Theme.SidebarHover : Theme.Sidebar;
+                Color back = selected ? Theme.SidebarSelected : hover ? Theme.SidebarHover : Theme.Sidebar;
                 e.Graphics.Clear(Theme.Sidebar);
-                Rectangle r = new Rectangle(0, 2, Width, Height - 4);
+                Rectangle r = new Rectangle(0, 1, Width, Height - 2);
                 using (SolidBrush b = new SolidBrush(back)) e.Graphics.FillRectangle(b, r);
                 if (selected)
                     using (SolidBrush b = new SolidBrush(Theme.Accent)) e.Graphics.FillRectangle(b, 0, r.Top + em / 3, 3, r.Height - em * 2 / 3);
                 Color iconColor = selected ? Theme.Accent : Theme.Muted;
-                Glyph.Draw(e.Graphics, Page.Icon, new Rectangle(em / 2, r.Top, em * 3 / 2, r.Height), iconColor, em * 0.95f);
+                CompInfo.Glyph.Draw(e.Graphics, Glyph, new Rectangle(em / 3, r.Top, em * 3 / 2, r.Height), iconColor, em * 0.9f);
+                int right = Page != null && Page.NeedsAdmin ? em * 3 / 2 : em / 3;
                 using (Font f = selected ? new Font(Font, FontStyle.Bold) : new Font(Font, FontStyle.Regular))
-                    TextRenderer.DrawText(e.Graphics, Text, f, new Rectangle(em * 2 + em / 3, r.Top, Width - em * 3, r.Height), Theme.Text,
+                    TextRenderer.DrawText(e.Graphics, Text, f, new Rectangle(em * 2, r.Top, Width - em * 2 - right, r.Height), Page == null ? Theme.Muted : Theme.Text,
                         TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
-                if (Page.NeedsAdmin)
-                    Glyph.Draw(e.Graphics, Glyph.Shield, new Rectangle(Width - em * 3 / 2, r.Top, em, r.Height), Theme.Muted, em * 0.7f);
+                if (Page != null && Page.NeedsAdmin)
+                    CompInfo.Glyph.Draw(e.Graphics, CompInfo.Glyph.Shield, new Rectangle(Width - em * 3 / 2, r.Top, em, r.Height), Theme.Muted, em * 0.65f);
                 if (Focused && ShowFocusCues) ControlPaint.DrawFocusRectangle(e.Graphics, r);
             }
         }

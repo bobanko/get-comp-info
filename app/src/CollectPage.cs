@@ -11,8 +11,8 @@ namespace CompInfo
     {
         readonly ProgressBar progress = new ProgressBar();
         readonly StatusLine state = new StatusLine();
-        readonly DataGridView grid = new DataGridView();
-        readonly TextBox comment = new TextBox();
+        readonly DataGridView grid;
+        readonly TextBox comment = Ui.Input(new TextBox());
         readonly Button save;
         readonly Button again;
         readonly StatusLine result = new StatusLine();
@@ -25,57 +25,34 @@ namespace CompInfo
         {
             Key = "collect";
             Title = "Сбор информации о компьютере";
-            Description = "Программа считывает имя, серийный номер, сеть и другие сведения об этом компьютере и сохраняет их в базу на флешке.";
+            NavTitle = "Сбор информации";
+            Description = "Имя, серийный номер, сеть и другие сведения об этом компьютере сохраняются в базу на флешке.";
             Icon = Glyph.Computer;
             int em = Font.Height;
 
             progress.Style = ProgressBarStyle.Marquee;
             progress.MarqueeAnimationSpeed = 30;
-            progress.Height = em / 2;
-            progress.Dock = DockStyle.Top;
+            progress.Height = em / 3;
             progress.Margin = new Padding(0, 0, 0, em / 2);
 
-            state.Dock = DockStyle.Top;
             state.Margin = new Padding(0, 0, 0, em / 2);
 
-            grid.Dock = DockStyle.Fill;
-            grid.ReadOnly = true;
-            grid.AllowUserToAddRows = false;
-            grid.AllowUserToDeleteRows = false;
-            grid.AllowUserToResizeRows = false;
-            grid.RowHeadersVisible = false;
-            grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-            grid.BackgroundColor = Color.White;
-            grid.BorderStyle = BorderStyle.FixedSingle;
-            grid.GridColor = Theme.Border;
-            grid.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
-            grid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
-            grid.EnableHeadersVisualStyles = false;
-            grid.ColumnHeadersDefaultCellStyle.BackColor = Theme.Sidebar;
-            grid.ColumnHeadersDefaultCellStyle.ForeColor = Theme.Muted;
-            grid.ColumnHeadersDefaultCellStyle.SelectionBackColor = Theme.Sidebar;
-            grid.ColumnHeadersHeight = em * 2;
-            grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
-            grid.RowTemplate.Height = em + em / 2;
-            grid.DefaultCellStyle.SelectionBackColor = grid.DefaultCellStyle.BackColor;
-            grid.DefaultCellStyle.SelectionForeColor = Theme.Text;
-            grid.DefaultCellStyle.WrapMode = DataGridViewTriState.False;
-            grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            grid = Ui.Grid(Font);
             grid.Columns.Add("field", "Поле");
             grid.Columns.Add("current", "Сейчас на компьютере");
             grid.Columns.Add("saved", "Сохранено в базе");
-            grid.Columns[0].FillWeight = 22;
-            grid.Columns[1].FillWeight = 39;
-            grid.Columns[2].FillWeight = 39;
+            grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            grid.Columns[0].FillWeight = 24;
+            grid.Columns[1].FillWeight = 38;
+            grid.Columns[2].FillWeight = 38;
             grid.Columns[0].DefaultCellStyle.ForeColor = Theme.Muted;
             foreach (DataGridViewColumn c in grid.Columns) c.SortMode = DataGridViewColumnSortMode.NotSortable;
-            grid.Margin = new Padding(0, 0, 0, em);
+            grid.Margin = new Padding(0, 0, 0, em / 2);
 
             Label commentLabel = Ui.Text("Комментарий (необязательно): кабинет, ответственный, особенности", Font, Theme.Text);
             commentLabel.Margin = new Padding(0, 0, 0, em / 4);
-            comment.Dock = DockStyle.Top;
             comment.MaxLength = 500;
-            comment.Margin = new Padding(0, 0, 0, em);
+            comment.Margin = new Padding(0, 0, 0, em / 2);
             comment.TextChanged += delegate { if (collection != null) ShowComparison(); };
             comment.KeyDown += delegate (object o, KeyEventArgs k)
             {
@@ -89,12 +66,11 @@ namespace CompInfo
             FlowLayoutPanel actions = Ui.Row();
             actions.Controls.Add(save);
             actions.Controls.Add(again);
-            actions.Margin = new Padding(0, 0, 0, em / 2);
+            actions.Margin = new Padding(0, 0, 0, em / 3);
 
-            result.Dock = DockStyle.Top;
             showFile.Text = "Показать файл в папке";
             showFile.AutoSize = true;
-            showFile.LinkColor = Theme.Info;
+            showFile.LinkColor = showFile.ActiveLinkColor = Theme.Info;
             showFile.Margin = new Padding(em + em / 3, 0, 0, 0);
             showFile.Visible = false;
             showFile.LinkClicked += delegate { if (collection != null) Ui.ShowInExplorer(collection.FilePath); };
@@ -102,22 +78,22 @@ namespace CompInfo
             body.Dock = DockStyle.Fill;
             body.ColumnCount = 1;
             body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            AddRow(progress, SizeType.AutoSize);
-            AddRow(state, SizeType.AutoSize);
-            AddRow(grid, SizeType.Percent);
-            AddRow(commentLabel, SizeType.AutoSize);
-            AddRow(comment, SizeType.AutoSize);
-            AddRow(actions, SizeType.AutoSize);
-            AddRow(result, SizeType.AutoSize);
-            AddRow(showFile, SizeType.AutoSize);
+            AddRow(progress, false);
+            AddRow(state, false);
+            AddRow(grid, true);
+            AddRow(commentLabel, false);
+            AddRow(comment, false);
+            AddRow(actions, false);
+            AddRow(result, false);
+            AddRow(showFile, false);
             Controls.Add(body);
             SetBusy(false);
         }
 
-        void AddRow(Control c, SizeType size)
+        void AddRow(Control c, bool fill)
         {
-            body.RowStyles.Add(size == SizeType.Percent ? new RowStyle(SizeType.Percent, 100) : new RowStyle(SizeType.AutoSize));
-            if (c.Dock == DockStyle.Top) c.Dock = DockStyle.Fill;
+            body.RowStyles.Add(fill ? new RowStyle(SizeType.Percent, 100) : new RowStyle(SizeType.AutoSize));
+            if (!(c is FlowLayoutPanel) && !(c is LinkLabel) && !(c is Label)) c.Dock = DockStyle.Fill;
             // Explicit cell: a hidden control must keep its row, or the rows below shift into the wrong styles.
             body.RowCount = body.RowStyles.Count;
             body.Controls.Add(c, 0, body.RowStyles.Count - 1);
@@ -154,10 +130,10 @@ namespace CompInfo
                 {
                     string text = "Найдена старая запись без UUID и серийного номера с таким же именем компьютера:\n\n" +
                         System.IO.Path.GetFileName(c.Legacy.Path) + "\n" +
-                        "Имя: " + c.Legacy.Record.Text("hostname") + "\nСобрана: " + Ui.Date(c.Legacy.Record.Text("collectedAt")) +
+                        "Имя: " + c.Legacy.Record.Text("hostname") + "\nСобрана: " + Fmt.Date(c.Legacy.Record.Text("collectedAt")) +
                         "\nКомментарий: " + (c.Legacy.Record.Text("comment") ?? "") +
                         "\n\nЭто запись именно этого компьютера? Если да, она будет обновлена и привязана к этой установке Windows.";
-                    if (MessageBox.Show(FindForm(), text, "Старая запись", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+                    if (Ui.Ask(FindForm(), "Старая запись", text, Glyph.Info, Theme.Info, "Да, это этот компьютер", "Нет") != 0)
                     {
                         state.Set(Glyph.Info, "Сбор отменён: старую запись не привязали. Нажмите «Собрать заново», чтобы решить ещё раз.", Theme.Warn);
                         return;
@@ -183,13 +159,11 @@ namespace CompInfo
         void ShowComparison()
         {
             Collection c = collection;
-            JsonObject current = c.Build(comment.Text, "");
-            List<Collection.Field> fields = c.Compare(current);
+            List<Collection.Field> fields = c.Compare(c.Build(comment.Text, ""));
             bool hasPrevious = c.Previous != null;
             grid.Columns[2].Visible = hasPrevious;
             grid.Columns[1].HeaderText = hasPrevious ? "Сейчас на компьютере" : "Значение";
             int changes = 0;
-            grid.SuspendLayout();
             if (grid.Rows.Count != fields.Count) { grid.Rows.Clear(); foreach (Collection.Field f in fields) grid.Rows.Add(); }
             for (int i = 0; i < fields.Count; i++)
             {
@@ -200,23 +174,22 @@ namespace CompInfo
                 row.Cells[2].Value = Shown(f.Previous);
                 bool changed = hasPrevious && f.Changed;
                 if (changed) changes++;
-                Color back = changed ? Theme.WarnLight : Color.White;
+                Color back = changed ? Theme.WarnLight : Theme.Surface;
                 row.DefaultCellStyle.BackColor = back;
                 row.DefaultCellStyle.SelectionBackColor = back;
                 row.Cells[1].Style.ForeColor = string.IsNullOrEmpty(f.Current) ? Theme.Muted : Theme.Text;
                 row.Cells[2].Style.ForeColor = string.IsNullOrEmpty(f.Previous) ? Theme.Muted : Theme.Text;
             }
-            grid.ResumeLayout();
             grid.ClearSelection();
 
             if (!hasPrevious)
                 state.Set(Glyph.Info, "Этого компьютера ещё нет в базе — будет создана новая запись.", Theme.Info);
             else if (changes == 0)
-                state.Set(Glyph.Check, "Запись этого компьютера уже есть в базе и совпадает с текущими данными. Сохранять нечего. Предыдущий сбор: " +
-                    Ui.Date(c.Previous.Text("collectedAt")) + ".", Theme.Good);
+                state.Set(Glyph.Check, "Запись уже есть в базе и совпадает с текущими данными, сохранять нечего. Предыдущий сбор: " +
+                    Fmt.Date(c.Previous.Text("collectedAt")) + ".", Theme.Good);
             else
-                state.Set(Glyph.Warning, "Запись этого компьютера уже есть в базе. Изменения (" + changes + ") выделены жёлтым — сохраните, чтобы обновить запись. Предыдущий сбор: " +
-                    Ui.Date(c.Previous.Text("collectedAt")) + ".", Theme.Warn);
+                state.Set(Glyph.Warning, "Запись уже есть в базе. Изменения (" + changes + ") выделены — сохраните, чтобы обновить запись. Предыдущий сбор: " +
+                    Fmt.Date(c.Previous.Text("collectedAt")) + ".", Theme.Warn);
             SetBusy(false);
         }
 
@@ -233,7 +206,7 @@ namespace CompInfo
                 JsonObject saved = collection.Save(comment.Text);
                 collection.Previous = saved;
                 ShowComparison();
-                result.Set(Glyph.Check, "Сохранено " + DateTime.Now.ToString("HH:mm") + ": " + collection.FilePath, Theme.Good);
+                result.Set(Glyph.Check, "Сохранено " + DateTime.Now.ToString("HH:mm") + ": " + System.IO.Path.GetFileName(collection.FilePath), Theme.Good);
                 showFile.Visible = true;
             }
             catch (Exception e)

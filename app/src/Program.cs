@@ -18,14 +18,37 @@ namespace CompInfo
             AppDomain.CurrentDomain.UnhandledException += delegate (object o, UnhandledExceptionEventArgs e) { Crash(e.ExceptionObject as Exception); };
             // TLS 1.2 is not always on by default in .NET Framework.
             System.Net.ServicePointManager.SecurityProtocol |= System.Net.SecurityProtocolType.Tls12;
+            ProgramUpdate.RemoveLeftovers();
 
-            MainForm form = new MainForm();
+            Theme.Choice = Option(args, "--theme", 1) ?? Settings.Get("theme", "system");
             string page = Option(args, "--page", 1);
-            if (page != null && form.Find(page) != null) form.Shown += delegate { form.Open(form.Find(page)); };
-
             string shot = Option(args, "--screenshot", 1);
-            if (shot != null) return Screenshot(form, shot, Option(args, "--screenshot", 2), Option(args, "--screenshot", 3));
-            Application.Run(form);
+            if (shot != null)
+            {
+                Theme.ApplyChoice();
+                return Screenshot(new MainForm(), shot, Option(args, "--screenshot", 2), Option(args, "--screenshot", 3));
+            }
+
+            // The window is built again after a theme change, on the same section and place.
+            Rectangle? bounds = null;
+            FormWindowState windowState = FormWindowState.Normal;
+            while (true)
+            {
+                Theme.ApplyChoice();
+                MainForm form = new MainForm();
+                form.StartPage = page;
+                if (bounds.HasValue)
+                {
+                    form.StartPosition = FormStartPosition.Manual;
+                    form.Bounds = bounds.Value;
+                    form.WindowState = windowState;
+                }
+                Application.Run(form);
+                if (form.ReopenPage == null) break;
+                page = form.ReopenPage;
+                bounds = form.WindowState == FormWindowState.Normal ? form.Bounds : form.RestoreBounds;
+                windowState = form.WindowState == FormWindowState.Maximized ? FormWindowState.Maximized : FormWindowState.Normal;
+            }
             return 0;
         }
 
@@ -44,9 +67,9 @@ namespace CompInfo
             form.StartPosition = FormStartPosition.Manual;
             form.Location = new Point(-20000, -20000);
             form.ShowInTaskbar = false;
+            form.StartPage = page;
             form.Shown += delegate
             {
-                form.Open(target);
                 System.Windows.Forms.Timer t = new System.Windows.Forms.Timer();
                 t.Interval = wait;
                 t.Tick += delegate
@@ -59,12 +82,40 @@ namespace CompInfo
                     }
                     DatabasePage database = target as DatabasePage;
                     if (database != null) database.SaveCardImage(System.IO.Path.ChangeExtension(file, null) + "-card.png");
-                    form.Close();
+                    if (target is SyncPage)
+                    {
+                        string stem = System.IO.Path.ChangeExtension(file, null);
+                        JsonObject local = Json.ParseObject("{\"computerId\":\"A1\",\"hostname\":\"FR-042-PC\",\"comment\":\"кабинет 12\",\"ip\":\"10.1.1.5\",\"collectedAt\":\"2026-11-04T10:00:00+02:00\"}");
+                        JsonObject cloud = Json.ParseObject("{\"computerId\":\"A1\",\"hostname\":\"FR-042-PC\",\"comment\":\"кабинет 14, Петров\",\"ip\":\"10.1.1.5\",\"collectedAt\":\"2026-11-02T09:00:00+02:00\",\"model\":\"82YU\"}");
+                        SaveImage(new ConflictDialog("FR-042-PC — A1.json | в облаке изменил(а) admin@example, 2026-11-04 12:00", local, cloud), stem + "-conflict.png");
+                        SaveImage(new KeyDialog("https://example/api/client", false, "Ключ из cloud-key.txt не подошёл: ключ отозван."), stem + "-key.png");
+                        SaveImage(new AskDialog("Запись удалена в облаке", "PC — A1.json\n\nЗапись удалена в облаке: admin, 2026-11-04 12:00.", Glyph.Warning, Theme.Warn,
+                            new[] { "Восстановить в облаке", "Удалить локальную запись", "Отложить" }), stem + "-ask.png");
+                    }
+                    form.ReopenPage = null;
+                    Environment.Exit(0);
                 };
                 t.Start();
             };
             Application.Run(form);
             return 0;
+        }
+
+        static void SaveImage(Form f, string file)
+        {
+            using (f)
+            {
+                f.StartPosition = FormStartPosition.Manual;
+                f.Location = new Point(-20000, -20000);
+                f.Show();
+                Application.DoEvents();
+                using (Bitmap b = new Bitmap(f.Width, f.Height))
+                {
+                    f.DrawToBitmap(b, new Rectangle(0, 0, f.Width, f.Height));
+                    b.Save(file, ImageFormat.Png);
+                }
+                f.Close();
+            }
         }
 
         static void Crash(Exception e)

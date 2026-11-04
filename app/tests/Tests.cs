@@ -35,6 +35,11 @@ namespace CompInfo
             Run("USB serial numbers", UsbSerials);
             Run("collected record", CollectedRecord);
             Run("cloud state", CloudStateFile);
+            Run("computer names match PowerShell", ComputerNames);
+            Run("record differences and merge", Differences);
+            Run("program files and versions", ProgramFiles);
+            Run("program update install", InstallRelease);
+            Run("synchronization with a fake cloud", Synchronization);
             Console.WriteLine(failures == 0 ? "All checks passed." : failures + " check(s) failed.");
             return failures == 0 ? 0 : 1;
         }
@@ -215,6 +220,175 @@ namespace CompInfo
             Directory.Delete(dir, true);
         }
 
+        // Expected values were printed by computer-management.ps1 (ConvertTo-ComputerDesignation and friends).
+        static void ComputerNames()
+        {
+            string[][] designations = { new[] { "Иванов", "IVANOV" }, new[] { "отдел 5", "OTDEL-5" }, new[] { "Щукин-Їжак", "SHCHUKIN-YIZHAK" },
+                new[] { "ivanov", "IVANOV" }, new[] { "Ёлка Ґ", "ELKA-G" }, new[] { "Объём Шъ", "OBEM-SH" }, new[] { "Цех №3", "TSEKH-№3" } };
+            foreach (string[] d in designations) Check(ComputerNaming.Designation(d[0]) == d[1], "designation of " + d[0] + ": " + ComputerNaming.Designation(d[0]));
+            ComputerPolicy p = new ComputerPolicy();
+            Check(ComputerNaming.Suggested("IF-042-IVANOV", "FR", p, null, null) == "FR-042-IVANOV", "suggested: keep designation");
+            Check(ComputerNaming.Suggested("DESKTOP-ABC", "IF", p, "Петров", null) == "IF-042-PETROV", "suggested: from designation");
+            Check(ComputerNaming.Suggested("DESKTOP-ABC", "IF", p, null, "10.111.171.130") == "IF-042-171-130", "suggested: from IP");
+            Check(ComputerNaming.Suggested("DESKTOP-ABC", "FR", p, null, null) == "FR-042-PC", "suggested: fallback");
+            Check(ComputerNaming.Suggested("XX-042-VERYLONGNAMEHERE", "IF", p, null, null) == "IF-042-VERYLONG", "suggested: cut to 15");
+            Check(ComputerNaming.Suggested("DESKTOP", "IF", p, "---", null) == "IF-042-PC", "suggested: only hyphens");
+            const string bad = "Нужно имя IF-042-...: латиница, цифры и дефис; окончание без дефиса по краям.";
+            Check(ComputerNaming.Issue("IF-042-IVANOV", "IF", p) == null, "valid name");
+            foreach (string n in new[] { "IF-042-", "IF-042--A", "IF-042-A-", "IF-042-ivanov", "IF-043-A", "IF-042-A_B" })
+                Check(ComputerNaming.Issue(n, "IF", p) == bad, "invalid name " + n);
+            Check(ComputerNaming.Issue("FR-042-IVANOV-PETR", "IF", p) == "Полное имя должно содержать не больше 15 символов.", "too long");
+        }
+
+        static void Differences()
+        {
+            JsonObject local = Json.ParseObject("{\"a\":1,\"b\":\"x\",\"c\":null,\"only\":true}");
+            JsonObject cloud = Json.ParseObject("{\"a\":1,\"b\":\"y\",\"c\":null,\"new\":[1]}");
+            Check(string.Join(",", RecordDiff.Differences(local, cloud)) == "b,new,only", "differences: " + string.Join(",", RecordDiff.Differences(local, cloud)));
+            JsonObject merged = RecordDiff.Merge(local, cloud, new[] { "b", "only" });
+            Check(Json.Compact(merged) == "{\"a\":1,\"c\":null,\"b\":\"y\"}", "merge: " + Json.Compact(merged));
+            Check(Json.Compact(local) == "{\"a\":1,\"b\":\"x\",\"c\":null,\"only\":true}", "merge must not change the local record");
+            Check(RecordDiff.ValueText(local, "missing") == "(поле отсутствует)" && RecordDiff.ValueText(local, "c") == "(null)", "value texts");
+        }
+
+        static void ProgramFiles()
+        {
+            foreach (string ok in new[] { "cloud-config.json", "comp-info.exe", "COMP-INFO.EXE", "a.ps1", "menu.BAT", "x.cmd" })
+                Check(ProgramUpdate.IsProgramFile(ok), "program file " + ok);
+            foreach (string no in new[] { "data.json", "other.exe", "sub/a.ps1", "..\\a.ps1", "cloud-key.txt", "Cloud-Config.json" })
+                Check(!ProgramUpdate.IsProgramFile(no), "not a program file " + no);
+            Check(ProgramUpdate.IsNewer("2026.11.05.1", "2026.11.04.12") && !ProgramUpdate.IsNewer("2026.11.04.1", "2026.11.04.1") && !ProgramUpdate.IsNewer("x", "1.0"), "versions");
+        }
+
+        static string MakeRelease(string dir, string version, Dictionary<string, string> files, string extra)
+        {
+            string content = Path.Combine(dir, "content-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(content);
+            List<object> list = new List<object>();
+            foreach (KeyValuePair<string, string> f in files)
+            {
+                string path = Path.Combine(content, f.Key);
+                File.WriteAllText(path, f.Value, new UTF8Encoding(false));
+                JsonObject entry = new JsonObject();
+                entry["path"] = f.Key; entry["sha256"] = ProgramUpdate.Sha256(path); entry["size"] = new FileInfo(path).Length;
+                list.Add(entry);
+            }
+            if (extra != null) File.WriteAllText(Path.Combine(content, extra), "x");
+            JsonObject manifest = new JsonObject();
+            manifest["version"] = version; manifest["files"] = list;
+            File.WriteAllText(Path.Combine(content, "manifest.json"), Json.Compact(manifest));
+            string zip = Path.Combine(dir, "release-" + Guid.NewGuid().ToString("N") + ".zip");
+            System.IO.Compression.ZipFile.CreateFromDirectory(content, zip);
+            return zip;
+        }
+
+        static void InstallRelease()
+        {
+            string dir = TempDir();
+            try
+            {
+                string root = Path.Combine(dir, "copy");
+                Directory.CreateDirectory(Path.Combine(root, "data"));
+                File.WriteAllText(Path.Combine(root, "old.ps1"), "old");
+                File.WriteAllText(Path.Combine(root, "keep.ps1"), "v1");
+                File.WriteAllText(Path.Combine(root, "comp-info.exe"), "exe v1");
+                File.WriteAllText(Path.Combine(root, "data", "r.json"), "{}");
+                Dictionary<string, string> files = new Dictionary<string, string> { { "keep.ps1", "v2" }, { "new.BAT", "@echo off" }, { "cloud-config.json", "{}" } };
+
+                bool refused = false;
+                try { ProgramUpdate.Install(root, MakeRelease(dir, "2.0", files, "evil.ps1"), "2.0", "1.0"); } catch (InvalidDataException) { refused = true; }
+                Check(refused && File.ReadAllText(Path.Combine(root, "keep.ps1")) == "v1", "an archive with an extra file must change nothing");
+                refused = false;
+                try { ProgramUpdate.Install(root, MakeRelease(dir, "2.0", files, null), "3.0", "1.0"); } catch (InvalidDataException) { refused = true; }
+                Check(refused, "wrong version must be refused");
+
+                ProgramUpdate.Result r = ProgramUpdate.Install(root, MakeRelease(dir, "2.0", files, null), "2.0", "1.0");
+                Check(File.ReadAllText(Path.Combine(root, "keep.ps1")) == "v2" && File.Exists(Path.Combine(root, "new.BAT")), "files installed");
+                Check(!File.Exists(Path.Combine(root, "old.ps1")) && r.Removed.Contains("old.ps1"), "old program file removed");
+                Check(File.Exists(Path.Combine(root, "comp-info.exe")), "the window program is kept by a release without it");
+                Check(File.Exists(Path.Combine(root, "data", "r.json")), "data untouched");
+                Check(File.ReadAllText(Path.Combine(r.Backup, "keep.ps1")) == "v1", "backup of the previous version");
+            }
+            finally { Directory.Delete(dir, true); }
+        }
+
+        static JsonObject Rec(string id, string host, string comment)
+        {
+            JsonObject r = new JsonObject();
+            r["computerId"] = id; r["hostname"] = host; r["comment"] = comment;
+            return r;
+        }
+
+        static void Synchronization()
+        {
+            string root = TempDir();
+            using (FakeCloud cloud = new FakeCloud())
+            {
+                try
+                {
+                    string data = Path.Combine(root, "data");
+                    Directory.CreateDirectory(data);
+                    Files.WriteJson(Path.Combine(root, "cloud-config.json"), Json.ParseObject("{\"apiUrl\":\"" + cloud.ApiUrl + "\"}"));
+                    Check(CloudConfig.ReadApiUrl(root) == cloud.ApiUrl, "local test cloud address accepted");
+                    CloudClient client = new CloudClient(cloud.ApiUrl, FakeCloud.Key);
+                    string error;
+                    Check(client.Me(out error) != null, "key accepted");
+                    Check(new CloudClient(cloud.ApiUrl, "wrong").Me(out error) == null && error == "Ключ не подошёл.", "wrong key: " + error);
+
+                    JsonObject a = Rec("A", "pc-a", "первый");
+                    a["addedToExternalDatabase"] = true;
+                    Files.WriteJson(Path.Combine(data, "A.json"), a);
+                    Files.WriteJson(Path.Combine(data, "O.E.M..json"), Rec(null, "pc-b", ""));
+                    ScriptedQuestions ui = new ScriptedQuestions();
+                    SyncCounts c = new CloudSync(root, client, ui).Run();
+                    Check(c.PushedNew == 2 && c.Errors.Count == 0 && c.NetworkProfiles == "missing", "first sync pushes both: " + c.PushedNew + " " + string.Join("; ", c.Errors));
+                    Check(cloud.Devices.ContainsKey("O.E.M."), "legacy id with dots reaches the cloud unchanged: " + string.Join(" | ", new List<string>(cloud.Devices.Keys)));
+                    Check(!Files.ReadRecord(Path.Combine(data, "A.json")).Has("addedToExternalDatabase"), "deprecated field removed");
+                    CloudState state = CloudState.ForDisplay(root);
+                    Check(state.StatusOf(Records.Load(Path.Combine(data, "A.json"), null)) == CloudState.Synced, "record synced");
+
+                    int puts = cloud.Puts;
+                    c = new CloudSync(root, client, ui).Run();
+                    Check(cloud.Puts == puts && c.PushedNew + c.PushedUpdated + c.ReceivedNew + c.ReceivedUpdated == 0, "nothing to do the second time");
+
+                    // Changed on both sides: the user keeps the cloud comment and the local hostname.
+                    cloud.Put("A", Rec("A", "pc-a", "из облака"), false);
+                    Files.WriteJson(Path.Combine(data, "A.json"), Rec("A", "pc-a2", "первый"));
+                    ui.CloudFields.Add("comment");
+                    c = new CloudSync(root, client, ui).Run();
+                    JsonObject saved = Files.ReadRecord(Path.Combine(data, "A.json"));
+                    Check(ui.Conflicts == 1 && c.PushedUpdated == 1, "conflict resolved and sent");
+                    Check(saved.Text("hostname") == "pc-a2" && saved.Text("comment") == "из облака", "merged record: " + Json.Compact(saved));
+                    Check(Json.Canonical(cloud.Devices["A"].Data) == Json.Canonical(saved), "cloud has the merged record");
+
+                    // New record in the cloud, the other one deleted there.
+                    cloud.Put("C/1", Rec("C/1", "pc-c", ""), false);
+                    cloud.Put("O.E.M.", null, true);
+                    c = new CloudSync(root, client, ui).Run();
+                    Check(c.ReceivedNew == 1 && File.Exists(Path.Combine(data, "C_1.json")), "new cloud record downloaded into a safe file name");
+                    Check(c.Deleted == 1 && !File.Exists(Path.Combine(data, "O.E.M..json")), "record deleted in the cloud is deleted here");
+
+                    // A file deleted by hand comes back: local deletion never deletes in the cloud.
+                    File.Delete(Path.Combine(data, "C_1.json"));
+                    c = new CloudSync(root, client, ui).Run();
+                    Check(File.Exists(Path.Combine(data, "C_1.json")), "locally deleted record downloaded again");
+
+                    // Deleted in the cloud but changed here: the user restores it.
+                    cloud.Put("A", null, true);
+                    Files.WriteJson(Path.Combine(data, "A.json"), Rec("A", "pc-a3", ""));
+                    ui.DeletedAnswer = 0;
+                    c = new CloudSync(root, client, ui).Run();
+                    Check(ui.Deletions == 1 && !cloud.Devices["A"].Deleted && cloud.Devices["A"].Data.Text("hostname") == "pc-a3", "restored in the cloud");
+
+                    // Two files with one id are skipped until the user keeps one.
+                    Files.WriteJson(Path.Combine(data, "dup.json"), Rec("A", "copy", ""));
+                    puts = cloud.Puts;
+                    c = new CloudSync(root, client, ui).Run();
+                    Check(cloud.Puts == puts && c.Errors.Exists(delegate (string e) { return e.StartsWith("Несколько файлов с идентификатором A"); }), "duplicates are reported, not sent");
+                }
+                finally { Directory.Delete(root, true); }
+            }
+        }
         // Real copy: every record the console version marked as synced must still be synced here.
         static int CheckData(string root)
         {

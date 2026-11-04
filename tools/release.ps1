@@ -76,7 +76,14 @@ try {
     if (Invoke-Git @('tag', '--list', $tag)) { throw "Тег $tag уже есть." }
     if (Invoke-Git @('ls-remote', '--tags', 'origin', "refs/tags/$tag")) { throw "Тег $tag уже есть в GitHub." }
 
-    # 4. Build the archive locally: the same check Actions does, before anything is pushed.
+    # 4. Build the window program with the new version and run its checks, then the archive:
+    # the same checks Actions does, before anything is pushed.
+    Write-Host 'Сборка comp-info.exe...' -ForegroundColor Cyan
+    $output = & cmd.exe /c (Join-Path $PSScriptRoot 'build.BAT') 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        $output | Select-Object -Last 20 | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray }
+        throw 'Сборка comp-info.exe или её проверки не прошли.'
+    }
     Write-Host "Сборка версии $version..." -ForegroundColor Cyan
     if ((Invoke-PowerShellFile (Join-Path $PSScriptRoot 'build-release.ps1') @('-Version', $version)) -ne 0) {
         throw 'Сборка архива не удалась.'
