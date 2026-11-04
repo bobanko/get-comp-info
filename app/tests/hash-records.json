@@ -1,0 +1,25 @@
+[
+  {
+    "computerId": "03341FE8-9B79-4CC9-8CBD-A82BDD18C277",
+    "computerIdSource": "smbiosUuid",
+    "hostname": "IF-042-ИВАНОВ",
+    "ip": "10.111.171.130",
+    "mac": "00-11-22-33-44-55",
+    "serial": "PF58Y8F9",
+    "smbiosUuid": "03341FE8-9B79-4CC9-8CBD-A82BDD18C277",
+    "windowsMachineGuid": "1B2C3D4E-0000-1111-2222-333344445555",
+    "partOfDomain": false,
+    "domain": "WORKGROUP",
+    "manufacturer": "LENOVO",
+    "model": "82YU",
+    "username": "user",
+    "comment": "Каб. 12 <старый> & 'монитор' \"Dell\"\tвторая\nстрока 😀 \u0085   / \\",
+    "windows": "Microsoft Windows 11 Pro",
+    "esetInstalled": true,
+    "collectedAt": "2026-08-21T16:20:31.0000000+03:00",
+    "createdAt": "2026-08-20T10:02:11.0000000+03:00"
+  },
+  { "aB": 1, "ac": 2, "Ad": 3, "B": 4, "b1": 5, "_x": null, "a_b": [], "Zeta": {}, "alpha": [1, "2", true, null, {"y": 1.50, "x": -0}], "num": 12345678901, "dbl": 1e3, "dec": 1.0 },
+  { "computerId": "1Z5224763260300247", "hostname": null, "esetInstalled": null, "addedToExternalDatabase": false, "nested": { "b": [ { "d": "D", "c": "C" } ], "a": "" } },
+  {}
+]

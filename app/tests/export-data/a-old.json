@@ -1,0 +1,7 @@
+{
+  "hostname": "Alpha",
+  "serial": null,
+  "extra": { "b": [1, 2], "a": "x" },
+  "tags": ["один", "два"],
+  "count": 3
+}

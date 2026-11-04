@@ -1,0 +1,12 @@
+{
+  "computerId": "B-SERIAL",
+  "computerIdSource": "serial",
+  "hostname": "beta",
+  "ip": "10.1.1.2",
+  "serial": "B-SERIAL",
+  "comment": "Кабинет \"12\"; второй этаж",
+  "esetInstalled": false,
+  "partOfDomain": true,
+  "addedToExternalDatabase": true,
+  "collectedAt": "2026-08-21T16:20:31.0000000+03:00"
+}

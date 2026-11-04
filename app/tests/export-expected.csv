@@ -1,0 +1,4 @@
+﻿"hostname";"serial";"extra";"tags";"count";"esetInstalled";"cloudStatus";"computerId";"computerIdSource";"ip";"comment";"partOfDomain";"collectedAt"
+"Alpha";;"{""b"":[1,2],""a"":""x""}";"[""один"",""два""]";"3";;"Нет в облаке";;;;;;
+"alpha";"S2";;;;"True";"Нет в облаке";"C-1";;;"";;
+"beta";"B-SERIAL";;;;"False";"Нет в облаке";"B-SERIAL";"serial";"10.1.1.2";"Кабинет ""12""; второй этаж";"True";"2026-08-21T16:20:31.0000000+03:00"

@@ -214,6 +214,7 @@ Hostname больше не используется как резервный ID
 - [LAN_ADAPTER_REQUIREMENTS.md](LAN_ADAPTER_REQUIREMENTS.md) — настройка LAN-адаптера.
 - [CONSOLE_UI_GUIDELINES.md](CONSOLE_UI_GUIDELINES.md) — стиль консольных интерфейсов.
 - [CONSOLE_DIAGNOSTICS.md](CONSOLE_DIAGNOSTICS.md) — диагностика консоли: эмодзи и скорость отрисовки.
+- [WINDOWS_APP.md](WINDOWS_APP.md) — оконная версия comp-info.exe: состояние переезда, совместимость, сборка.
 
 ---
 

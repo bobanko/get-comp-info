@@ -26,6 +26,10 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "$($test.Name) failed" }
           }
 
+      - name: Build the window version and run its checks
+        shell: cmd
+        run: tools\build.BAT
+
       - name: Build release
         shell: pwsh
         # Same Windows PowerShell 5.1 as on the flash drives. Fails when the tag does not match console-ui.ps1.
