@@ -372,6 +372,22 @@ namespace CompInfo
                     Check(c.ReceivedNew == 1 && File.Exists(Path.Combine(data, "C_1.json")), "new cloud record downloaded into a safe file name");
                     Check(c.Deleted == 1 && !File.Exists(Path.Combine(data, "O.E.M..json")), "record deleted in the cloud is deleted here");
 
+                    // An old copy of a computer uploaded under its file name collides with the record in that file.
+                    JsonObject old = Rec(null, "pc-old", "");
+                    old["serial"] = "SER-X";
+                    JsonObject current = Rec("UUID-X", "pc-new", "");
+                    current["serial"] = "SER-X";
+                    Files.WriteJson(Path.Combine(data, "SER-X.json"), current);
+                    c = new CloudSync(root, client, ui).Run();
+                    cloud.Put("SER-X", old, false);
+                    c = new CloudSync(root, client, ui).Run();
+                    Check(c.Errors.Count == 1 && c.Errors[0].Contains("запись UUID-X, pc-new") && c.Errors[0].Contains("дубликат"), "duplicate explained: " + string.Join("; ", c.Errors));
+                    Check(Files.ReadRecord(Path.Combine(data, "SER-X.json")).Text("computerId") == "UUID-X", "the local record is kept");
+                    File.Delete(Path.Combine(data, "SER-X.json"));
+                    cloud.Put("SER-X", null, true);
+                    cloud.Put("UUID-X", null, true);
+                    c = new CloudSync(root, client, ui).Run();
+
                     // A file deleted by hand comes back: local deletion never deletes in the cloud.
                     File.Delete(Path.Combine(data, "C_1.json"));
                     c = new CloudSync(root, client, ui).Run();

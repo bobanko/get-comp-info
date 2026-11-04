@@ -254,7 +254,7 @@ namespace CompInfo
         // Plain gear (96 px) for the small picture in the window header, as in the small icon sizes.
         public static Bitmap AppImage { get { return gearImage ?? (gearImage = Resource("CompInfo.brand.png")); } }
 
-        // The bearded gear itself (160 px) for «О программе».
+        // The bearded gear itself (256 px) for «О программе».
         public static Bitmap FaceImage { get { return faceImage ?? (faceImage = Resource("CompInfo.face.png")); } }
 
         // Pictures embedded by tools\build.BAT (made by tools\make-icon.BAT).

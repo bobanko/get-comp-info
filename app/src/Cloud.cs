@@ -498,7 +498,15 @@ namespace CompInfo
                         path = Path.Combine(dataPath, fileName);
                         if (File.Exists(path))
                         {
-                            Counts.Errors.Add(fileName + ": файл занят другой записью, запись " + id + " из облака не загружена.");
+                            // Usually an old copy of the same computer uploaded under its file name: say which records collide.
+                            Item occupant = null;
+                            foreach (Item other in local.Values) if (string.Equals(other.Path, path, StringComparison.OrdinalIgnoreCase)) occupant = other;
+                            string cloudHost = data.Text("hostname") ?? "";
+                            string mine = occupant == null ? "" : " (запись " + occupant.Id + ", " + (occupant.Record.Text("hostname") ?? "") + ")";
+                            bool sameComputer = occupant != null && !string.IsNullOrEmpty(data.Text("serial")) &&
+                                string.Equals(data.Text("serial"), occupant.Record.Text("serial"), StringComparison.OrdinalIgnoreCase);
+                            Counts.Errors.Add(fileName + ": файл занят" + mine + ", запись " + id + (cloudHost.Length > 0 ? " (" + cloudHost + ")" : "") + " из облака не загружена." +
+                                (sameComputer ? " У них один серийный номер — похоже на дубликат одного компьютера: удалите лишнюю запись в веб-интерфейсе." : ""));
                             continue;
                         }
                         // The saved file must be recognized as the same record on the next run.

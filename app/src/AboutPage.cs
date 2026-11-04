@@ -42,7 +42,7 @@ namespace CompInfo
             t.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             t.Location = new Point(0, 0);
 
-            int side = em * 4;
+            int side = em * 7;
             PictureBox pic = new PictureBox();
             pic.Image = Ui.FaceImage;
             pic.SizeMode = PictureBoxSizeMode.Zoom;

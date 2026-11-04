@@ -15,7 +15,7 @@ static class MakeIcon
     static bool Cli;
     static int GearUpTo;        // --gear-small: sizes up to 32 px are a plain gear instead of the picture
     static string GearPng;      // --gear-png=<file>: the plain gear alone, 96 px (picture in the window header)
-    static string FacePng;      // --face-png=<file>: the picture itself, 160 px (window «О программе»)
+    static string FacePng;      // --face-png=<file>: the picture itself, 256 px (window «О программе»)
     static Bitmap Source;   // background removed, cropped to a square
 
     static int Main(string[] args)
@@ -47,7 +47,7 @@ static class MakeIcon
         WriteIco(pos[1], sizes, pngs);
         if (pos.Count > 2) SavePreview(pos[2], sizes);
         if (GearPng != null) using (Bitmap g = DrawGear(96)) g.Save(GearPng, ImageFormat.Png);
-        if (FacePng != null) using (Bitmap f = Scale(Source, 160)) f.Save(FacePng, ImageFormat.Png);
+        if (FacePng != null) using (Bitmap f = Scale(Source, 256)) f.Save(FacePng, ImageFormat.Png);
         Console.WriteLine("Icon: " + pos[1]);
         return 0;
     }
