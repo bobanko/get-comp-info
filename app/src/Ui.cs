@@ -276,6 +276,38 @@ namespace CompInfo
             typeof(Control).GetProperty("DoubleBuffered", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).SetValue(c, true, null);
         }
 
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        static extern uint PrivateExtractIcons(string file, int index, int cx, int cy, IntPtr[] icons, int[] ids, uint count, uint flags);
+
+        [DllImport("user32.dll")]
+        static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
+        static IntPtr ExeIcon(Size size)
+        {
+            IntPtr[] h = new IntPtr[1];
+            int[] id = new int[1];
+            try { return PrivateExtractIcons(Application.ExecutablePath, 0, size.Width, size.Height, h, id, 1, 0) == 1 ? h[0] : IntPtr.Zero; }
+            catch (Exception) { return IntPtr.Zero; }
+        }
+
+        // Title bar and taskbar icons taken from the program file at the exact sizes Windows uses
+        // (not through Explorer, whose icon cache may still hold an old picture): small sizes are the plain gear.
+        public static void WindowIcon(Form f)
+        {
+            IntPtr big = ExeIcon(SystemInformation.IconSize);
+            if (big != IntPtr.Zero) f.Icon = Icon.FromHandle(big);
+            IntPtr small = ExeIcon(SystemInformation.SmallIconSize);
+            MethodInvoker apply = delegate
+            {
+                if (f.IsDisposed) return;
+                if (small != IntPtr.Zero) SendMessage(f.Handle, 0x80, IntPtr.Zero, small);   // WM_SETICON, ICON_SMALL
+                if (big != IntPtr.Zero) SendMessage(f.Handle, 0x80, (IntPtr)1, big);         // ICON_BIG
+            };
+            // WinForms sets its own icons (the big one scaled down) while creating the window: ours go after it.
+            f.HandleCreated += delegate { f.BeginInvoke(apply); };
+            f.Shown += delegate { apply(); };
+        }
+
         // Form in the colours of the theme.
         public static void Dialog(Form f)
         {
@@ -285,7 +317,7 @@ namespace CompInfo
             f.StartPosition = FormStartPosition.CenterParent;
             f.ShowInTaskbar = false;
             f.MinimizeBox = false;
-            try { f.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch (Exception) { }
+            WindowIcon(f);
             Theme.TitleBar(f);
         }
     }

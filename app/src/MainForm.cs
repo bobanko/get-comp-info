@@ -54,7 +54,7 @@ namespace CompInfo
         public MainForm()
         {
             Text = "CHAGEAR Тулбокс" + (PowerShell.IsAdministrator() ? " — администратор" : "");
-            try { base.Icon = System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch (Exception) { }
+            Ui.WindowIcon(this);
             Font = Ui.BaseFont;
             BackColor = Theme.Back;
             ForeColor = Theme.Text;
