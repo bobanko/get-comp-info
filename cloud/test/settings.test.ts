@@ -7,6 +7,7 @@ function sampleSettings(overrides: Record<string, unknown> = {}) {
     firstOctet: 10,
     segments: [20, 21],
     domainCheckHost: 'dc.example.local',
+    domainName: 'example.local',
     locations: [
       { name: 'Главный корпус', thirdOctet: 5, prefixLength: 25, gatewayOctet: 129, firstHostOctet: 130, lastHostOctet: 254, dnsServers: ['10.9.0.1', '10.9.0.2'] },
       { name: 'Склад', thirdOctet: 7, prefixLength: 28, gatewayOctet: 97, firstHostOctet: 98, lastHostOctet: 110, dnsServers: ['10.9.0.1'], segments: [20] },
@@ -33,6 +34,7 @@ describe('network settings', () => {
     expect(downloaded.status).toBe(200);
     expect(downloaded.body.value.locations[1]).toEqual(sampleSettings().locations[1]);
     expect(downloaded.body.value.domainCheckHost).toBe('dc.example.local');
+    expect(downloaded.body.value.domainName).toBe('example.local');
 
     const history = await webRequest(admin, 'GET', '/settings/network/history');
     expect(history.body.history[0]).toMatchObject({ revision: saved.body.setting.revision, changedBy: admin });
@@ -58,9 +60,10 @@ describe('network settings', () => {
 
   it('drop unknown fields and an empty domain check host', async () => {
     const admin = await addUser('admin');
-    const value = { ...sampleSettings({ domainCheckHost: '' }), extra: 'x' };
+    const value = { ...sampleSettings({ domainCheckHost: '', domainName: ' Corp.Example ' }), extra: 'x' };
     const saved = await webRequest(admin, 'PUT', '/settings/network', { baseRevision: await currentRevision(admin), value });
     expect(saved.body.setting.value.domainCheckHost).toBeNull();
+    expect(saved.body.setting.value.domainName).toBe('corp.example');
     expect(saved.body.setting.value).not.toHaveProperty('extra');
   });
 
@@ -72,6 +75,8 @@ describe('network settings', () => {
       ['bad first octet', { firstOctet: 256 }],
       ['duplicate segments', { segments: [20, 20] }],
       ['bad domain', { domainCheckHost: 'not a host!' }],
+      ['bad domain name', { domainName: 'nodot' }],
+      ['address as domain name', { domainName: '10.0.0.1' }],
       ['duplicate names', { locations: [location, { ...location, name: 'главный КОРПУС' }] }],
       ['prefix too short', { locations: [{ ...location, prefixLength: 16 }] }],
       ['gateway is the network address', { locations: [{ ...location, gatewayOctet: 128 }] }],

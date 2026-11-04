@@ -275,7 +275,7 @@ namespace CompInfo
     public class ComputerPage : Page
     {
         readonly bool domainMode;
-        readonly ComputerPolicy policy = ComputerPolicy.Current;
+        ComputerPolicy policy = ComputerPolicy.Load();
         readonly Label now;
         readonly StatusLine state = new StatusLine();
         readonly FlowLayoutPanel stateActions = Ui.Row();
@@ -298,7 +298,7 @@ namespace CompInfo
             this.domainMode = domainMode;
             Key = domainMode ? "domain" : "name";
             Title = domainMode ? "Домен" : "Имя компьютера";
-            Description = domainMode ? "Ввод компьютера в домен " + policy.DomainName + " и вывод из него. После изменения нужна перезагрузка."
+            Description = domainMode ? "Ввод компьютера в домен подразделения и вывод из него. Домен берётся из профилей сети в облаке. После изменения нужна перезагрузка."
                 : "Переименование по правилам: " + policy.InternetPrefix + "-" + policy.UnitCode + "-… для интернета, " + policy.DomainPrefix + "-" + policy.UnitCode + "-… для доменной сети. После изменения нужна перезагрузка.";
             Icon = domainMode ? Glyph.Domain : Glyph.Tag;
             NeedsAdmin = true;
@@ -394,6 +394,7 @@ namespace CompInfo
             }
             catch (Exception e) { state.Set(Glyph.Warning, "Не удалось прочитать состояние компьютера: " + e.Message, Theme.Bad); return; }
             ComputerState s = current;
+            policy = ComputerPolicy.Load();
             now.Text = "Сейчас: " + s.Name + "\r\nДомен / рабочая группа: " + s.Domain + (s.PartOfDomain ? " (член домена)" : " (рабочая группа)") +
                 (s.PendingName != null ? "\r\nПосле перезагрузки имя станет: " + s.PendingName : "");
             // COMPINFO_UI_PREVIEW shows the form without rights (screenshots); the change itself still checks real rights.
@@ -438,6 +439,13 @@ namespace CompInfo
                 return;
             }
             if (s.DomainRole >= 4) { state.Set(Glyph.Warning, "Изменения на контроллере домена не поддерживаются.", Theme.Bad); return; }
+            if (policy.DomainName == null && (domainMode || s.PartOfDomain))
+            {
+                state.Set(Glyph.Warning, ComputerPolicy.NoDomain, Theme.Warn);
+                StateButton("Открыть синхронизацию", Glyph.Sync, true, delegate { if (Main != null) Main.Open("sync"); });
+                return;
+            }
+            if (domainMode) now.Text += "\r\nДомен подразделения: " + policy.DomainName;
             if (s.PartOfDomain && !string.Equals(s.Domain, policy.DomainName, StringComparison.OrdinalIgnoreCase))
             {
                 state.Set(Glyph.Warning, "Компьютер состоит в другом домене. Автоматический перенос не поддерживается.", Theme.Bad);

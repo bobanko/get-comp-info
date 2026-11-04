@@ -163,10 +163,14 @@ namespace CompInfo
                 "\"locations\":[{\"name\":\"Штаб\",\"thirdOctet\":171,\"prefixLength\":25,\"gatewayOctet\":129,\"firstHostOctet\":130,\"lastHostOctet\":254,\"dnsServers\":[\"10.121.1.2\"]}," +
                 "{\"name\":\"Склад\",\"thirdOctet\":5,\"prefixLength\":24,\"gatewayOctet\":1,\"firstHostOctet\":2,\"lastHostOctet\":200,\"dnsServers\":[],\"segments\":[113]}]}}", Encoding.UTF8);
             NetworkProfiles p = NetworkProfiles.Read(path);
-            Check(!p.Missing && p.Locations.Count == 2 && p.DomainCheckHost == "dc.example", "profiles read");
+            Check(!p.Missing && p.Locations.Count == 2 && p.DomainCheckHost == "dc.example" && p.DomainName == "dc.example", "profiles read, domain falls back to the check host");
             Check(p.IsOfficeAddress("10.112.171.200") && !p.IsOfficeAddress("10.112.171.100") && !p.IsOfficeAddress("10.113.171.200"), "office address by common segments");
             Check(p.IsOfficeAddress("10.113.5.20") && !p.IsOfficeAddress("10.111.5.20"), "office address by own segments");
-            Check(NetworkProfiles.Read(Path.Combine(dir, "none.json")).Missing, "missing profiles");
+            Check(NetworkProfiles.Read(Path.Combine(dir, "none.json")).Missing && NetworkProfiles.Read(Path.Combine(dir, "none.json")).DomainName == null, "missing profiles");
+            File.WriteAllText(path, "{\"value\":{\"domainCheckHost\":\"10.0.0.1\",\"domainName\":\" Corp.Example \",\"locations\":[{\"name\":\"A\",\"thirdOctet\":1}]}}", Encoding.UTF8);
+            Check(NetworkProfiles.Read(path).DomainName == "corp.example", "domain from the «Домен» field");
+            File.WriteAllText(path, "{\"value\":{\"domainCheckHost\":\"10.0.0.1\",\"locations\":[{\"name\":\"A\",\"thirdOctet\":1}]}}", Encoding.UTF8);
+            Check(NetworkProfiles.Read(path).DomainName == null, "an IP address is not a domain");
             Directory.Delete(dir, true);
         }
 

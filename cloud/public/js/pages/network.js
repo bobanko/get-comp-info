@@ -34,13 +34,14 @@ export async function renderNetwork(context) {
   // with the gateway and mask until the admin chooses to set it by hand.
   // The saved format keeps DNS in every location (the console reads it there); the page shows
   // the DNS most locations share once, and only the different ones in their locations.
-  const value = setting?.value ?? { firstOctet: 10, segments: [], domainCheckHost: null, locations: [emptyLocation()] };
+  const value = setting?.value ?? { firstOctet: 10, segments: [], domainCheckHost: null, domainName: null, locations: [emptyLocation()] };
   const sharedDns = commonDns(value.locations);
   const draft = {
     firstOctet: String(value.firstOctet),
     segments: value.segments.join(', '),
     dnsServers: sharedDns,
     domainCheckHost: value.domainCheckHost ?? '',
+    domainName: value.domainName ?? '',
     locations: value.locations.map((location) => ({
       ...location,
       dnsServers: location.dnsServers.join(', ') === sharedDns ? '' : location.dnsServers.join(', '),
@@ -131,6 +132,13 @@ function draw(context, setting, history, draft, view, errorText) {
         {},
         input(draft, 'domainCheckHost', { class: 'mono host', placeholder: 'не проверять', 'aria-label': 'Узел для проверки домена' }),
         h('small', { class: 'muted hint' }, 'Быстрый ping проверяет этот узел, если компьютер в одной из сетей.'),
+      ),
+      h('span', { class: 'net-label' }, 'Домен'),
+      h(
+        'div',
+        {},
+        input(draft, 'domainName', { class: 'mono host', placeholder: 'как узел проверки домена', 'aria-label': 'Домен для ввода компьютеров' }),
+        h('small', { class: 'muted hint' }, 'В него программа вводит компьютеры (раздел «Домен»). Пусто — берётся узел проверки домена.'),
       ),
     ),
     problemList(() => generalProblems(draft)),
@@ -441,6 +449,7 @@ function toValue(draft) {
     firstOctet: number(draft.firstOctet),
     segments: parseNumberList(draft.segments),
     domainCheckHost: draft.domainCheckHost.trim() || null,
+    domainName: draft.domainName.trim() || null,
     locations: draft.locations.map((location) => {
       const result = {
         name: String(location.name ?? '').trim(),

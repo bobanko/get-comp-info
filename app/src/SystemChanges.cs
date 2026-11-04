@@ -100,16 +100,24 @@ namespace CompInfo
         }
     }
 
-    // Naming rules of the unit (computer-policy.ps1).
+    // Naming rules of the unit (computer-policy.ps1). The domain is not kept in the public repository:
+    // it comes from the cloud network profiles (network-profiles.json), null until they are synchronized.
     public class ComputerPolicy
     {
         public string UnitCode = "042";
-        public string DomainName = "gu.gvardia.mvs";
+        public string DomainName;
         public string WorkgroupName = "WORKGROUP";
         public string InternetPrefix = "IF";
         public string DomainPrefix = "FR";
 
-        public static readonly ComputerPolicy Current = new ComputerPolicy();
+        public const string NoDomain = "Домен не задан: синхронизируйтесь с облаком, чтобы загрузить профили сети (в веб-интерфейсе — страница «Сеть», поле «Домен»).";
+
+        public static ComputerPolicy Load()
+        {
+            ComputerPolicy p = new ComputerPolicy();
+            p.DomainName = NetworkProfiles.Read(AppPaths.File("network-profiles.json")).DomainName;
+            return p;
+        }
     }
 
     // Computer name and domain membership (computer-management.ps1).
@@ -317,6 +325,7 @@ namespace CompInfo
         // Returns false when the computer already has this name.
         public static bool Apply(Request r, ComputerPolicy p)
         {
+            if (p.DomainName == null && (r.Operation != "Rename" || ComputerState.Read().PartOfDomain)) throw new InvalidOperationException(ComputerPolicy.NoDomain);
             if (!PowerShell.IsAdministrator()) throw new InvalidOperationException("Нужны права локального администратора.");
             ComputerState state = ComputerState.Read();
             AssertAllowed(state);

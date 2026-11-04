@@ -23,6 +23,9 @@ export interface NetworkSettings {
   segments: number[];
   // Host pinged by quick ping when the computer is in one of the networks; null skips the check.
   domainCheckHost: string | null;
+  // Active Directory domain the console joins computers to; null falls back to domainCheckHost.
+  // Kept here, not in the public repository.
+  domainName: string | null;
   locations: NetworkLocation[];
 }
 
@@ -36,6 +39,8 @@ export interface SettingRecord<T> {
 
 const IPV4 = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
 const HOST = /^(?=.{1,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/i;
+// Same rule as the console: lower-case labels with at least one dot, the last one not only digits (not an IP address).
+const DOMAIN = /^(?=.{1,253}$)[a-z0-9]+(?:[.-][a-z0-9]+)*\.[a-z0-9]*[a-z][a-z0-9]*$/;
 
 function octet(value: unknown, where: string): number {
   if (!Number.isInteger(value) || (value as number) < 0 || (value as number) > 255) {
@@ -64,6 +69,13 @@ export function validateNetworkSettings(value: unknown): NetworkSettings {
     const host = typeof value.domainCheckHost === 'string' ? value.domainCheckHost.trim() : '';
     if (!HOST.test(host) && !IPV4.test(host)) fail(400, 'invalid_settings', 'Адрес для проверки домена: нужно имя узла или IPv4-адрес.');
     domainCheckHost = host;
+  }
+
+  let domainName: string | null = null;
+  if (value.domainName !== null && value.domainName !== undefined && value.domainName !== '') {
+    const name = typeof value.domainName === 'string' ? value.domainName.trim().toLowerCase() : '';
+    if (!DOMAIN.test(name)) fail(400, 'invalid_settings', 'Домен: нужно имя вида corp.example (латиница, цифры, точки и дефисы).');
+    domainName = name;
   }
 
   if (!Array.isArray(value.locations) || value.locations.length === 0 || value.locations.length > 50) {
@@ -117,7 +129,7 @@ export function validateNetworkSettings(value: unknown): NetworkSettings {
     }
     return location;
   });
-  return { firstOctet, segments, domainCheckHost, locations };
+  return { firstOctet, segments, domainCheckHost, domainName, locations };
 }
 
 interface SettingRow {

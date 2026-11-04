@@ -24,6 +24,8 @@ namespace CompInfo
         public List<int> Segments = new List<int>();
         public int FirstOctet = 10;
         public string DomainCheckHost;
+        // Domain computers are joined to: «Домен», or else the domain check host; null when neither is set.
+        public string DomainName;
 
         public static string MaskFromPrefix(int prefixLength)
         {
@@ -79,6 +81,8 @@ namespace CompInfo
                 p.FirstOctet = value["firstOctet"] == null ? 10 : Convert.ToInt32(value["firstOctet"]);
                 string host = value.Text("domainCheckHost");
                 p.DomainCheckHost = string.IsNullOrEmpty(host) ? null : host;
+                string domain = (value.Text("domainName") ?? p.DomainCheckHost ?? "").Trim().ToLowerInvariant();
+                p.DomainName = System.Text.RegularExpressions.Regex.IsMatch(domain, "^(?=.{1,253}$)[a-z0-9]+(?:[.-][a-z0-9]+)*\\.[a-z0-9]*[a-z][a-z0-9]*$") ? domain : null;
                 return p;
             }
             catch (Exception) { return empty; }
