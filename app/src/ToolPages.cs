@@ -49,7 +49,7 @@ namespace CompInfo
             grid.Columns[2].AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
             grid.Columns[2].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
             grid.Columns[3].AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
-            grid.Columns[3].DefaultCellStyle.Font = new Font(Font, FontStyle.Bold);
+            grid.Columns[3].DefaultCellStyle.Font = new Font(Ui.MonoFont, FontStyle.Bold);
             grid.Columns[4].Width = em * 7;
             grid.RowTemplate.Height = em * 2;
             foreach (DataGridViewColumn c in grid.Columns) c.SortMode = DataGridViewColumnSortMode.NotSortable;
@@ -181,6 +181,7 @@ namespace CompInfo
             grid.Columns.Add("result", L.T("Результат"));
             grid.Columns[1].AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
             grid.Columns[2].AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
+            grid.Columns[2].DefaultCellStyle.Font = Ui.MonoFont;
             grid.Columns[3].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
             foreach (DataGridViewColumn c in grid.Columns) c.SortMode = DataGridViewColumnSortMode.NotSortable;
 

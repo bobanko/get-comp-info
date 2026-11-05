@@ -13,35 +13,48 @@ namespace CompInfo
     {
         public static bool Dark;
         public static Color Back, Surface, Sidebar, SidebarHover, SidebarSelected, Border, Text, Muted,
-            Accent, AccentHover, AccentDown, AccentDisabled, OnAccent,
+            Accent, AccentHover, AccentDown, AccentDisabled, AccentSoft, OnAccent,
             Good, GoodLight, Warn, WarnLight, Bad, BadLight, Info, Selection, HeaderBack;
         public static Color[] Rainbow;
 
         static Color C(int rgb) { return Color.FromArgb((rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255); }
 
+        // a moved towards b by part (0..1).
+        public static Color Mix(Color a, Color b, double part)
+        {
+            return Color.FromArgb((int)(a.R + (b.R - a.R) * part), (int)(a.G + (b.G - a.G) * part), (int)(a.B + (b.B - a.B) * part));
+        }
+
+        // The colours of the web interface (cloud/public/app.css), so both look like one product.
         public static void Apply(bool dark)
         {
             Dark = dark;
-            OnAccent = Color.White;
             if (!dark)
             {
-                Back = Color.White; Surface = Color.White; Sidebar = C(0xF3F5F4); SidebarHover = C(0xE7EBE9); SidebarSelected = Color.White;
-                Border = C(0xDDE1DF); Text = C(0x1F2937); Muted = C(0x6B7280);
-                Accent = C(0x1E8C5A); AccentHover = C(0x24A067); AccentDown = C(0x177048); AccentDisabled = C(0xB8C9C0);
-                Good = C(0x2E7D32); GoodLight = C(0xE8F5E9); Warn = C(0xB26A00); WarnLight = C(0xFFF4CC); Bad = C(0xC62828); BadLight = C(0xFDECEA);
-                Info = C(0x1565C0); Selection = C(0xCCE4F7); HeaderBack = C(0xF3F5F4);
-                // Letters of the brand, as in the console header (darker shades for a light background).
-                Rainbow = new[] { C(0xD32F2F), C(0xE08E00), C(0x2E7D32), C(0x00838F), C(0x1565C0), C(0x8E24AA) };
+                Back = C(0xF5F6F8); Surface = C(0xFFFFFF); HeaderBack = C(0xF0F2F5);
+                Text = C(0x1A1D21); Muted = C(0x5D6673); Border = C(0xDDE1E6);
+                Accent = C(0x2563EB); OnAccent = C(0xFFFFFF); AccentSoft = C(0xE8EFFF);
+                Good = C(0x16723A); GoodLight = C(0xE3F5E9); Warn = C(0x9A5B00); WarnLight = C(0xFDF1DC); Bad = C(0xB42318); BadLight = C(0xFDECEB);
+                // Brand letters of the console header: red, yellow, green, cyan, blue, magenta.
+                Rainbow = new[] { C(0xD92D20), C(0xB88700), C(0x15803D), C(0x0E8FA3), C(0x2563EB), C(0xB425C4) };
             }
             else
             {
-                Back = C(0x202124); Surface = C(0x2A2B2F); Sidebar = C(0x18191B); SidebarHover = C(0x26282B); SidebarSelected = C(0x2E3034);
-                Border = C(0x3C3F44); Text = C(0xE6E7E9); Muted = C(0x9AA0A6);
-                Accent = C(0x23905E); AccentHover = C(0x2BA56C); AccentDown = C(0x1C764D); AccentDisabled = C(0x2F4A3D);
-                Good = C(0x5CC08A); GoodLight = C(0x1E3A2A); Warn = C(0xE8A93C); WarnLight = C(0x3C3220); Bad = C(0xF07167); BadLight = C(0x4A2626);
-                Info = C(0x6AA9F0); Selection = C(0x264F78); HeaderBack = C(0x26282B);
-                Rainbow = new[] { C(0xFF6B6B), C(0xFFC145), C(0x6BD38B), C(0x4FD1D9), C(0x6AA9F0), C(0xC77DFF) };
+                Back = C(0x111317); Surface = C(0x1A1D23); HeaderBack = C(0x22262D);
+                Text = C(0xE6E8EB); Muted = C(0x9AA3AE); Border = C(0x2E333B);
+                Accent = C(0x6C9BFF); OnAccent = C(0x0B1020); AccentSoft = C(0x1D2A45);
+                Good = C(0x57C47F); GoodLight = C(0x173323); Warn = C(0xE8B04F); WarnLight = C(0x3A2C12); Bad = C(0xF2837A); BadLight = C(0x3D1C1A);
+                Rainbow = new[] { C(0xFF6B6B), C(0xFFD43B), C(0x51CF66), C(0x3BC9DB), C(0x6C9BFF), C(0xE599F7) };
             }
+            Sidebar = Surface;
+            SidebarHover = HeaderBack;
+            SidebarSelected = AccentSoft;
+            Selection = AccentSoft;
+            Info = Accent;
+            // Web buttons: brightness(1.08) on hover.
+            AccentHover = Mix(Accent, Color.White, 0.10);
+            AccentDown = Mix(Accent, dark ? Color.White : Color.Black, 0.15);
+            AccentDisabled = Mix(Accent, Surface, 0.55);
         }
 
         // Windows setting "Режим приложений по умолчанию".

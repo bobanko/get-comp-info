@@ -16,7 +16,7 @@ namespace CompInfo
         readonly Label footer;
         List<RecordFile> all = new List<RecordFile>();
         List<RecordFile> shown = new List<RecordFile>();
-        Dictionary<string, int> ipCounts = new Dictionary<string, int>();
+        Dictionary<string, int> ipCounts = new Dictionary<string, int>(), hostCounts = new Dictionary<string, int>(), serialCounts = new Dictionary<string, int>();
         CloudState cloud = new CloudState();
         string lastSync = "";
         CurrentComputer me;
@@ -65,6 +65,14 @@ namespace CompInfo
                 grid.Columns[index].MinimumWidth = em * 2;
                 grid.Columns[index].SortMode = DataGridViewColumnSortMode.Programmatic;
             }
+            // Web table: host name semibold, technical values monospaced, comment muted; ESET and cloud as pills.
+            grid.Columns[0].DefaultCellStyle.Font = new Font("Segoe UI Semibold", Font.SizeInPoints);
+            grid.Columns[1].DefaultCellStyle.Font = Ui.MonoFont;
+            grid.Columns[2].DefaultCellStyle.Font = Ui.MonoFont;
+            grid.Columns[7].DefaultCellStyle.ForeColor = Theme.Muted;
+            Badges.Enable(grid, 5, 6);
+            // Widths are fitted to the window (FitColumns): no horizontal scroll bar.
+            grid.ScrollBars = ScrollBars.Vertical;
             grid.ColumnHeaderMouseClick += delegate (object o, DataGridViewCellMouseEventArgs e)
             {
                 if (e.ColumnIndex == 6 || e.ColumnIndex == 7) return;   // ESET and comment are not sortable, as in the console
@@ -78,7 +86,7 @@ namespace CompInfo
             };
             grid.Resize += delegate { FitColumns(); };
 
-            footer = Ui.Paragraph(L.T("Подсвечен этот компьютер. Красный IP-адрес — такой же адрес есть у другой записи."), Font, Theme.Muted);
+            footer = Ui.Paragraph(L.T("Подсвечен этот компьютер. Красным — повторы имени, IP или серийного номера, жёлтым — имя не по правилам, зелёным — собрано за 7 дней."), Font, Theme.Muted);
             footer.Dock = DockStyle.Bottom;
 
             Controls.Add(grid);
@@ -119,13 +127,15 @@ namespace CompInfo
             cloud = CloudState.ForDisplay(AppPaths.Root);
             all = Records.ReadAll(AppPaths.Data, cloud, warnings);
             // Compare full addresses across the whole base, before the search.
+            // Repeats across the whole base, before the search, by the keys of the web interface (logic.js).
             ipCounts = new Dictionary<string, int>();
+            hostCounts = new Dictionary<string, int>();
+            serialCounts = new Dictionary<string, int>();
             foreach (RecordFile r in all)
             {
-                string ip = (r.Data.Text("ip") ?? "").Trim();
-                if (ip.Length == 0) continue;
-                int n;
-                ipCounts[ip] = ipCounts.TryGetValue(ip, out n) ? n + 1 : 1;
+                Count(ipCounts, IpKey(r.Data));
+                Count(hostCounts, HostKey(r.Data));
+                Count(serialCounts, SerialKey(r.Data));
             }
             if (warnings.Count > 0)
                 notes.Set(Glyph.Warning, L.T("Пропущены файлы, которые не удалось прочитать (") + warnings.Count + "): " + string.Join("; ", warnings), Theme.Warn);
@@ -137,6 +147,41 @@ namespace CompInfo
                 int index = shown.FindIndex(delegate (RecordFile r) { return r.Path == selected; });
                 if (index >= 0) Select(index);
             }
+        }
+
+        static void Count(Dictionary<string, int> counts, string key)
+        {
+            if (key.Length == 0) return;
+            int n;
+            counts[key] = counts.TryGetValue(key, out n) ? n + 1 : 1;
+        }
+
+        static bool Repeated(Dictionary<string, int> counts, string key)
+        {
+            int n;
+            return key.Length > 0 && counts.TryGetValue(key, out n) && n > 1;
+        }
+
+        static string IpKey(JsonObject d) { return (d.Text("ip") ?? "").Trim(); }
+        static string HostKey(JsonObject d) { return (d.Text("hostname") ?? "").Trim().ToUpperInvariant(); }
+        static string SerialKey(JsonObject d) { return Identity.UsableSerial(d.Text("serial")) ? d.Text("serial").Trim().ToUpperInvariant() : ""; }
+
+        // Naming policy of the web interface: "AB-123-…"; DESKTOP-, LAPTOP-, WIN- are names Windows made up.
+        static string HostIssue(string name)
+        {
+            name = (name ?? "").Trim();
+            if (name.Length == 0) return null;
+            if (System.Text.RegularExpressions.Regex.IsMatch(name, "^(DESKTOP|LAPTOP|WIN)-", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                return L.T("Имя по умолчанию от Windows: переименуйте по правилам");
+            return System.Text.RegularExpressions.Regex.IsMatch(name, "^[A-Z]{2}-\\d{3}-.", System.Text.RegularExpressions.RegexOptions.IgnoreCase) ? null : L.T("Имя не по правилам (ожидается вид АА-000-…)");
+        }
+
+        static bool Recent(string value)
+        {
+            DateTime d;
+            if (!DateTime.TryParse(value ?? "", out d)) return false;
+            TimeSpan age = DateTime.Now - d;
+            return age.TotalDays <= 7 && age.TotalMinutes >= -1;
         }
 
         static long IpOrder(string value)
@@ -220,36 +265,48 @@ namespace CompInfo
 
             grid.SuspendLayout();
             grid.Rows.Clear();
+            Font bold = new Font(Font, FontStyle.Bold);
             foreach (RecordFile r in shown)
             {
                 JsonObject d = r.Data;
                 string ip = (d.Text("ip") ?? "").Trim();
-                // Short values keep the table readable in a small window; the full ones are in tooltips and the card.
                 string collected = Fmt.Date(d.Text("collectedAt"));
-                string cloudShort = r.CloudStatus == CloudState.Synced ? L.T("да") : r.CloudStatus == CloudState.Changed ? L.T("изменено") : L.T("нет");
+                object eset = d["esetInstalled"];
                 int index = grid.Rows.Add(d.Text("hostname"), ip, d.Text("serial"), d.Text("username"), collected.Length > 10 ? collected.Substring(0, 10) : collected,
-                    cloudShort, EsetShort(d["esetInstalled"]), d.Text("comment"));
-                grid.Rows[index].Cells[4].ToolTipText = collected;
-                grid.Rows[index].Cells[5].ToolTipText = L.T(r.CloudStatus);
+                    L.T(r.CloudStatus), ComputerSnapshot.EsetText(eset), d.Text("comment"));
                 DataGridViewRow row = grid.Rows[index];
+                row.Cells[4].ToolTipText = collected;
+                // Pills, as the badges of the web interface.
+                row.Cells[5].Tag = r.CloudStatus == CloudState.Synced ? BadgeKind.Ok : r.CloudStatus == CloudState.Changed ? BadgeKind.Warn : BadgeKind.Muted;
+                row.Cells[6].Tag = eset == null ? BadgeKind.Muted : (eset is bool && (bool)eset) ? BadgeKind.Ok : BadgeKind.Warn;
+                // Hostname: not by the rules — yellow, repeated — red (wins), as in the web table.
+                List<string> notes = new List<string>();
+                string issue = HostIssue(d.Text("hostname"));
+                if (issue != null) { row.Cells[0].Style.ForeColor = Theme.Warn; notes.Add(issue); }
+                if (Repeated(hostCounts, HostKey(d))) { row.Cells[0].Style.ForeColor = Theme.Bad; notes.Insert(0, L.T("Это имя есть у нескольких устройств")); }
                 if (me != null && me.Matches(d))
                 {
                     row.DefaultCellStyle.BackColor = Theme.GoodLight;
-                    row.Cells[0].Style.Font = new Font(Font, FontStyle.Bold);
-                    row.Cells[0].ToolTipText = L.T("Этот компьютер");
+                    notes.Insert(0, L.T("Этот компьютер"));
                 }
-                int same;
-                if (ip.Length > 0 && ipCounts.TryGetValue(ip, out same) && same > 1)
+                row.Cells[0].ToolTipText = string.Join("\n", notes);
+                if (Repeated(ipCounts, IpKey(d)))
                 {
                     row.Cells[1].Style.ForeColor = Theme.Bad;
-                    row.Cells[1].ToolTipText = L.T("Этот IP-адрес есть ещё у ") + (same - 1) + L.T(" записи(ей)");
+                    row.Cells[1].ToolTipText = L.T("Этот IP есть у нескольких устройств");
                 }
-                row.Cells[5].Style.ForeColor = r.CloudStatus == CloudState.Synced ? Theme.Good : r.CloudStatus == CloudState.Changed ? Theme.Warn : Theme.Muted;
-                object eset = d["esetInstalled"];
-                row.Cells[6].Style.ForeColor = eset == null ? Theme.Muted : (eset is bool && (bool)eset) ? Theme.Good : Theme.Warn;
-                row.Cells[6].ToolTipText = ComputerSnapshot.EsetText(eset);
-            }
-            for (int i = 0; i < grid.Columns.Count; i++)
+                if (Repeated(serialCounts, SerialKey(d)))
+                {
+                    row.Cells[2].Style.ForeColor = Theme.Bad;
+                    row.Cells[2].ToolTipText = L.T("Этот серийный номер есть у нескольких устройств");
+                }
+                if (Recent(d.Text("collectedAt")))
+                {
+                    row.Cells[4].Style.ForeColor = Theme.Good;
+                    row.Cells[4].Style.Font = bold;
+                    row.Cells[4].ToolTipText = collected + " — " + L.T("собрано за последние 7 дней");
+                }
+            }            for (int i = 0; i < grid.Columns.Count; i++)
                 grid.Columns[i].HeaderCell.SortGlyphDirection = i == sortColumn ? (descending ? SortOrder.Descending : SortOrder.Ascending) : SortOrder.None;
             grid.ResumeLayout();
             FitColumns();
@@ -272,14 +329,14 @@ namespace CompInfo
                 int sum = 0;
                 for (int i = 0; i < last; i++)
                 {
-                    wanted[i] = grid.Columns[i].GetPreferredWidth(DataGridViewAutoSizeColumnMode.AllCells, true) + em / 2;
+                    wanted[i] = grid.Columns[i].GetPreferredWidth(DataGridViewAutoSizeColumnMode.AllCells, true) + em / 2 + (i == 5 || i == 6 ? em : 0);
                     sum += wanted[i];
                 }
                 int available = grid.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 2;
                 // Not enough room: serial number, then user, then the computer name give way;
                 // IP, date and statuses always stay whole.
                 int deficit = sum + em * 5 - available;
-                foreach (int[] shrink in new[] { new[] { 2, em * 5 }, new[] { 3, em * 4 }, new[] { 0, em * 6 } })
+                foreach (int[] shrink in new[] { new[] { 2, em * 5 }, new[] { 3, em * 4 }, new[] { 6, em * 5 }, new[] { 5, em * 5 }, new[] { 0, em * 6 }, new[] { 1, em * 6 } })
                 {
                     if (deficit <= 0) break;
                     int cut = Math.Min(deficit, Math.Max(0, wanted[shrink[0]] - shrink[1]));

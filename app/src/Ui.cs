@@ -62,6 +62,17 @@ namespace CompInfo
     {
         public static readonly Font BaseFont = new Font("Segoe UI", 10f);
 
+        // Technical values (IP, serial numbers, IDs), as the "mono" class of the web interface.
+        public static readonly Font MonoFont = MakeMono();
+
+        static Font MakeMono()
+        {
+            using (InstalledFontCollection fonts = new InstalledFontCollection())
+                foreach (FontFamily f in fonts.Families)
+                    if (f.Name == "Cascadia Mono") return new Font(f.Name, 9.5f);
+            return new Font("Consolas", 10f);
+        }
+
         static ToolTip tips;
 
         // Tooltip with the key combination of a button: Ui.Keys(save, "Ctrl+S").
@@ -98,7 +109,7 @@ namespace CompInfo
         static Button Plain(string text, string glyph, Font font, Color iconColor)
         {
             int em = font.Height;
-            Button b = new Button();
+            Button b = new RoundButton();
             b.Font = font;
             b.Text = text;
             b.FlatStyle = FlatStyle.Flat;
@@ -211,6 +222,8 @@ namespace CompInfo
             grid.ColumnHeadersDefaultCellStyle.SelectionBackColor = Theme.HeaderBack;
             grid.ColumnHeadersDefaultCellStyle.SelectionForeColor = Theme.Muted;
             grid.ColumnHeadersDefaultCellStyle.WrapMode = DataGridViewTriState.False;
+            // Web table header: 12px semibold, muted, on surface-2.
+            grid.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI Semibold", 9f);
             grid.ColumnHeadersHeight = em * 2;
             grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
             grid.RowTemplate.Height = em + em / 2;
@@ -385,7 +398,122 @@ namespace CompInfo
         }
     }
 
-    // A row of buttons where exactly one is chosen (theme, language).
+    // Rounded rectangles of the web look (border-radius).
+    public static class Shapes
+    {
+        public static System.Drawing.Drawing2D.GraphicsPath Round(Rectangle r, int radius)
+        {
+            System.Drawing.Drawing2D.GraphicsPath p = new System.Drawing.Drawing2D.GraphicsPath();
+            int d = Math.Max(1, Math.Min(radius * 2, Math.Min(r.Width, r.Height)));
+            p.AddArc(r.X, r.Y, d, d, 180, 90);
+            p.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+            p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+            p.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+            p.CloseFigure();
+            return p;
+        }
+
+        // Pill label ("badge" of the web interface): soft background, coloured text.
+        public static void Badge(Graphics g, Rectangle cell, string text, Font font, Color fore, Color back, bool center)
+        {
+            if (string.IsNullOrEmpty(text)) return;
+            int em = font.Height;
+            Size size = TextRenderer.MeasureText(g, text, font, Size.Empty, TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix);
+            int w = Math.Min(cell.Width - 4, size.Width + em * 2 / 3), h = Math.Min(cell.Height - 4, em + 2);
+            int x = center ? cell.X + (cell.Width - w) / 2 : cell.X + em / 4, y = cell.Y + (cell.Height - h) / 2;
+            Rectangle r = new Rectangle(x, y, w, h);
+            System.Drawing.Drawing2D.SmoothingMode old = g.SmoothingMode;
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            using (System.Drawing.Drawing2D.GraphicsPath path = Round(r, h / 2))
+            using (SolidBrush b = new SolidBrush(back)) g.FillPath(b, path);
+            g.SmoothingMode = old;
+            TextRenderer.DrawText(g, text, font, r, fore, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+        }
+    }
+
+    // Kind of a badge cell: its colours follow the theme.
+    public enum BadgeKind { None, Ok, Warn, Danger, Muted }
+
+    public static class Badges
+    {
+        // Cells of these columns with a BadgeKind in Tag are drawn as pills (ESET, cloud status).
+        public static void Enable(DataGridView grid, params int[] columns)
+        {
+            Font font = new Font("Segoe UI", 9f);
+            grid.CellPainting += delegate (object o, DataGridViewCellPaintingEventArgs e)
+            {
+                if (e.RowIndex < 0 || Array.IndexOf(columns, e.ColumnIndex) < 0) return;
+                DataGridViewCell cell = grid.Rows[e.RowIndex].Cells[e.ColumnIndex];
+                if (!(cell.Tag is BadgeKind) || (BadgeKind)cell.Tag == BadgeKind.None) return;
+                e.PaintBackground(e.CellBounds, (e.State & DataGridViewElementStates.Selected) != 0);
+                Color fore, back;
+                Colors((BadgeKind)cell.Tag, out fore, out back);
+                Shapes.Badge(e.Graphics, e.CellBounds, Convert.ToString(e.FormattedValue), font, fore, back, false);
+                e.Handled = true;
+            };
+        }
+
+        public static void Colors(BadgeKind kind, out Color fore, out Color back)
+        {
+            switch (kind)
+            {
+                case BadgeKind.Ok: fore = Theme.Good; back = Theme.GoodLight; break;
+                case BadgeKind.Warn: fore = Theme.Warn; back = Theme.WarnLight; break;
+                case BadgeKind.Danger: fore = Theme.Bad; back = Theme.BadLight; break;
+                default: fore = Theme.Muted; back = Theme.HeaderBack; break;
+            }
+        }
+    }
+
+    // Flat button with rounded corners, like the buttons of the web interface.
+    public class RoundButton : Button
+    {
+        bool hover, down;
+
+        public RoundButton()
+        {
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
+        }
+
+        protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { hover = false; down = false; Invalidate(); base.OnMouseLeave(e); }
+        protected override void OnMouseDown(MouseEventArgs e) { down = true; Invalidate(); base.OnMouseDown(e); }
+        protected override void OnMouseUp(MouseEventArgs e) { down = false; Invalidate(); base.OnMouseUp(e); }
+        protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
+        protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            Graphics g = e.Graphics;
+            Color parent = Parent != null ? Parent.BackColor : Theme.Back;
+            if (parent == Color.Transparent) parent = Theme.Back;
+            g.Clear(parent);
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            Color back = !Enabled ? BackColor : down ? FlatAppearance.MouseDownBackColor : hover ? FlatAppearance.MouseOverBackColor : BackColor;
+            Rectangle r = new Rectangle(0, 0, Width - 1, Height - 1);
+            using (System.Drawing.Drawing2D.GraphicsPath path = Shapes.Round(r, 6))
+            {
+                using (SolidBrush b = new SolidBrush(back)) g.FillPath(b, path);
+                if (FlatAppearance.BorderSize > 0)
+                    using (Pen pen = new Pen(FlatAppearance.BorderColor)) g.DrawPath(pen, path);
+                // Keyboard focus: the accent outline of the web interface (focus-visible).
+                if (Focused && ShowFocusCues)
+                    using (Pen pen = new Pen(Theme.Accent, 2)) g.DrawPath(pen, path);
+            }
+            Color fore = Enabled ? ForeColor : Theme.Mix(ForeColor, back, 0.45);
+            Size text = TextRenderer.MeasureText(g, Text, Font, Size.Empty, TextFormatFlags.NoPrefix);
+            int iconW = Image != null ? Image.Width : 0;
+            int x = (Width - iconW - text.Width) / 2;
+            if (Image != null)
+            {
+                if (Enabled) g.DrawImage(Image, x, (Height - Image.Height) / 2, Image.Width, Image.Height);
+                else ControlPaint.DrawImageDisabled(g, Image, x, (Height - Image.Height) / 2, back);
+            }
+            TextRenderer.DrawText(g, Text, Font, new Point(x + iconW, (Height - text.Height) / 2), fore, TextFormatFlags.NoPrefix);
+        }
+    }
+
+    // A row of buttons where exactly one is chosen (theme, language), like the segmented toggles of the web.
     public class Segmented : Control
     {
         readonly string[] items, tips;
@@ -424,28 +552,36 @@ namespace CompInfo
 
         protected override void OnPaint(PaintEventArgs e)
         {
-            e.Graphics.Clear(Theme.Sidebar);
+            Graphics g = e.Graphics;
+            g.Clear(Parent != null ? Parent.BackColor : Theme.Sidebar);
             int em = Font.Height;
-            using (Pen border = new Pen(Theme.Border))
+            Rectangle all = new Rectangle(0, 0, Width - 1, Height - 1);
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            using (System.Drawing.Drawing2D.GraphicsPath outline = Shapes.Round(all, 6))
             {
+                using (SolidBrush b = new SolidBrush(Theme.Surface)) g.FillPath(b, outline);
+                g.SetClip(outline);
                 for (int i = 0; i < items.Length; i++)
                 {
-                    int x0 = i * (Width - 1) / items.Length, x1 = (i + 1) * (Width - 1) / items.Length;
-                    Rectangle r = new Rectangle(x0, 0, x1 - x0, Height - 1);
-                    Color back = i == selected ? Theme.Accent : i == hover ? Theme.SidebarHover : Theme.Surface;
-                    Color fore = i == selected ? Theme.OnAccent : Theme.Text;
-                    using (SolidBrush b = new SolidBrush(back)) e.Graphics.FillRectangle(b, r);
-                    e.Graphics.DrawRectangle(border, r);
-                    if (glyphs) Glyph.Draw(e.Graphics, items[i], r, fore, em * 0.8f);
+                    int x0 = i * Width / items.Length, x1 = (i + 1) * Width / items.Length;
+                    Rectangle r = new Rectangle(x0, 0, x1 - x0, Height);
+                    Color back = i == selected ? Theme.AccentSoft : i == hover ? Theme.HeaderBack : Theme.Surface;
+                    Color fore = i == selected ? Theme.Accent : Theme.Text;
+                    using (SolidBrush b = new SolidBrush(back)) g.FillRectangle(b, r);
+                    if (i > 0) using (Pen p = new Pen(Theme.Border)) g.DrawLine(p, x0, 0, x0, Height);
+                    if (glyphs) Glyph.Draw(g, items[i], r, fore, em * 0.8f);
                     else
                         using (Font f = new Font(Font.FontFamily, 8.5f, i == selected ? FontStyle.Bold : FontStyle.Regular))
-                            TextRenderer.DrawText(e.Graphics, items[i], f, r, fore, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+                            TextRenderer.DrawText(g, items[i], f, r, fore, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
                 }
+                g.ResetClip();
+                using (Pen p = new Pen(Theme.Border)) g.DrawPath(p, outline);
             }
         }
     }
 
-    // Small coloured status line: an icon and a text, e.g. "✓ Сохранено".
+    // Status message: muted text, or for success, warning and error a soft rounded panel
+    // with an icon, like the notices of the web interface.
     public class StatusLine : Control
     {
         string glyph;
@@ -473,22 +609,52 @@ namespace CompInfo
 
         protected override void OnResize(EventArgs e) { base.OnResize(e); FitHeight(); }
 
+        // The soft panel colour, or empty for plain text.
+        Color Panel
+        {
+            get
+            {
+                if (color == Theme.Good) return Theme.GoodLight;
+                if (color == Theme.Warn) return Theme.WarnLight;
+                if (color == Theme.Bad) return Theme.BadLight;
+                if (color == Theme.Info || color == Theme.Accent) return Theme.AccentSoft;
+                return Color.Empty;
+            }
+        }
+
+        int Inner { get { return Panel.IsEmpty ? 0 : Font.Height / 2; } }
+
         int TextLeft { get { return glyph == null ? 0 : Font.Height + Font.Height / 3; } }
 
         void FitHeight()
         {
-            if (Width <= TextLeft) return;
-            Size s = TextRenderer.MeasureText(Text.Length == 0 ? " " : Text, Font, new Size(Width - TextLeft - Padding.Horizontal, int.MaxValue), TextFormatFlags.WordBreak);
-            int h = Math.Max(s.Height, Font.Height) + 2 + Padding.Vertical;
+            int inner = Inner;
+            int width = Width - TextLeft - Padding.Horizontal - inner * 2;
+            if (width <= 0) return;
+            Size s = TextRenderer.MeasureText(Text.Length == 0 ? " " : Text, Font, new Size(width, int.MaxValue), TextFormatFlags.WordBreak);
+            int h = Math.Max(s.Height, Font.Height) + 2 + Padding.Vertical + inner * 2 - (inner > 0 ? Font.Height / 4 : 0);
             if (Height != h) Height = h;
         }
 
         protected override void OnPaint(PaintEventArgs e)
         {
             int em = Font.Height;
-            int top = Padding.Top + 1;
-            if (glyph != null) Glyph.Draw(e.Graphics, glyph, new Rectangle(Padding.Left, top, em, em), color, em * 0.8f);
-            TextRenderer.DrawText(e.Graphics, Text, Font, new Rectangle(Padding.Left + TextLeft, top, Width - TextLeft - Padding.Horizontal, Height - top), color,
+            int inner = Inner;
+            Rectangle box = new Rectangle(Padding.Left, Padding.Top, Width - Padding.Horizontal - 1, Height - Padding.Vertical - 1);
+            if (!Panel.IsEmpty)
+            {
+                e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                using (System.Drawing.Drawing2D.GraphicsPath path = Shapes.Round(box, 8))
+                {
+                    using (SolidBrush b = new SolidBrush(Panel)) e.Graphics.FillPath(b, path);
+                    using (Pen p = new Pen(Theme.Mix(Panel, color, 0.3))) e.Graphics.DrawPath(p, path);
+                }
+            }
+            int top = box.Top + (inner > 0 ? inner - em / 8 : 1);
+            int left = box.Left + inner;
+            if (glyph != null) Glyph.Draw(e.Graphics, glyph, new Rectangle(left, top, em, em), color, em * 0.8f);
+            Color textColor = Panel.IsEmpty ? color : Theme.Text;
+            TextRenderer.DrawText(e.Graphics, Text, Font, new Rectangle(left + TextLeft, top, box.Width - TextLeft - inner * 2, box.Height - (top - box.Top)), textColor,
                 TextFormatFlags.WordBreak | TextFormatFlags.Left | TextFormatFlags.Top);
         }
     }
