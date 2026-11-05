@@ -17,6 +17,7 @@ namespace CompInfo
             Shield = "", Open = "", Back = "", Forward = "", Folder = "", Settings = "",
             Circle = "", Dash = "", More = "", Info = "", Cloud = "", Upload = "",
             Power = "", Lock = "", Person = "", Theme = "", Play = "";
+        public const string Sun = "\uE706", Moon = "\uE708";
 
         static string family;
 
@@ -60,6 +61,15 @@ namespace CompInfo
     public static class Ui
     {
         public static readonly Font BaseFont = new Font("Segoe UI", 10f);
+
+        static ToolTip tips;
+
+        // Tooltip with the key combination of a button: Ui.Keys(save, "Ctrl+S").
+        public static void Keys(Control c, string keys)
+        {
+            if (tips == null) tips = new ToolTip();
+            tips.SetToolTip(c, c.Text.Trim() + "   (" + keys + ")");
+        }
 
         public static Button Primary(string text, string glyph, Font font)
         {
@@ -241,7 +251,7 @@ namespace CompInfo
 
         public static void Error(IWin32Window owner, string text)
         {
-            Ask(owner, "Ошибка", text, Glyph.Warning, Theme.Bad, "OK");
+            Ask(owner, L.T("Ошибка"), text, Glyph.Warning, Theme.Bad, "OK");
         }
 
         public static void Info(IWin32Window owner, string title, string text)
@@ -372,6 +382,66 @@ namespace CompInfo
             AutoSizeMode = AutoSizeMode.GrowAndShrink;
             KeyPreview = true;
             KeyDown += delegate (object o, KeyEventArgs k) { if (k.KeyCode == Keys.Escape) Close(); };
+        }
+    }
+
+    // A row of buttons where exactly one is chosen (theme, language).
+    public class Segmented : Control
+    {
+        readonly string[] items, tips;
+        readonly bool glyphs;
+        int selected, hover = -1;
+        readonly ToolTip tip = new ToolTip();
+        public event Action<int> Changed;
+
+        public Segmented(string[] items, bool glyphs, string[] tips, int selected)
+        {
+            this.items = items;
+            this.glyphs = glyphs;
+            this.tips = tips;
+            this.selected = selected;
+            Cursor = Cursors.Hand;
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
+        }
+
+        int At(int x) { return Math.Max(0, Math.Min(items.Length - 1, x * items.Length / Math.Max(1, Width))); }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            int i = At(e.X);
+            if (i != hover) { hover = i; Invalidate(); tip.SetToolTip(this, tips[i]); }
+            base.OnMouseMove(e);
+        }
+
+        protected override void OnMouseLeave(EventArgs e) { hover = -1; Invalidate(); base.OnMouseLeave(e); }
+
+        protected override void OnMouseClick(MouseEventArgs e)
+        {
+            int i = At(e.X);
+            if (i != selected) { selected = i; Invalidate(); if (Changed != null) Changed(i); }
+            base.OnMouseClick(e);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            e.Graphics.Clear(Theme.Sidebar);
+            int em = Font.Height;
+            using (Pen border = new Pen(Theme.Border))
+            {
+                for (int i = 0; i < items.Length; i++)
+                {
+                    int x0 = i * (Width - 1) / items.Length, x1 = (i + 1) * (Width - 1) / items.Length;
+                    Rectangle r = new Rectangle(x0, 0, x1 - x0, Height - 1);
+                    Color back = i == selected ? Theme.Accent : i == hover ? Theme.SidebarHover : Theme.Surface;
+                    Color fore = i == selected ? Theme.OnAccent : Theme.Text;
+                    using (SolidBrush b = new SolidBrush(back)) e.Graphics.FillRectangle(b, r);
+                    e.Graphics.DrawRectangle(border, r);
+                    if (glyphs) Glyph.Draw(e.Graphics, items[i], r, fore, em * 0.8f);
+                    else
+                        using (Font f = new Font(Font.FontFamily, 8.5f, i == selected ? FontStyle.Bold : FontStyle.Regular))
+                            TextRenderer.DrawText(e.Graphics, items[i], f, r, fore, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+                }
+            }
         }
     }
 

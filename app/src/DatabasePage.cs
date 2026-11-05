@@ -23,24 +23,26 @@ namespace CompInfo
         int sortColumn = 0;
         bool descending;
 
-        static readonly string[] Columns = { "Имя компьютера", "IP-адрес", "Серийный номер", "Пользователь", "Собрано", "Облако", "ESET", "Комментарий" };
+        static string[] Columns { get { return new[] { L.T("Имя компьютера"), L.T("IP-адрес"), L.T("Серийный номер"), L.T("Пользователь"), L.T("Собрано"), L.T("Облако"), "ESET", L.T("Комментарий") }; } }
 
         public DatabasePage()
         {
             Key = "database";
-            Title = "База устройств";
-            Description = "Записи, сохранённые в этой копии программы. Двойной щелчок или Enter открывает карточку компьютера.";
+            Title = L.T("База устройств");
+            Description = L.T("Записи, сохранённые в этой копии программы. Двойной щелчок или Enter открывает карточку компьютера.");
             Icon = Glyph.Database;
             int em = Font.Height;
 
             search.Width = em * 16;
             search.Margin = new Padding(0, em / 6, em / 2, 0);
-            Ui.SetCue(search, "Поиск: имя, серийный номер, пользователь…");
+            Ui.SetCue(search, L.T("Поиск: имя, серийный номер, пользователь…"));
             search.TextChanged += delegate { Fill(); };
-            Button reload = Ui.Secondary("Обновить", Glyph.Refresh, Font);
+            Button reload = Ui.Secondary(L.T("Обновить"), Glyph.Refresh, Font);
             reload.Click += delegate { Reload(); };
-            Button export = Ui.Secondary("Экспорт в CSV", Glyph.Export, Font);
+            Button export = Ui.Secondary(L.T("Экспорт в CSV"), Glyph.Export, Font);
             export.Click += delegate { Export(); };
+            Ui.Keys(reload, "F5");
+            Ui.Keys(export, "Ctrl+E");
             count.AutoSize = true;
             count.ForeColor = Theme.Muted;
             count.Dock = DockStyle.Bottom;
@@ -76,7 +78,7 @@ namespace CompInfo
             };
             grid.Resize += delegate { FitColumns(); };
 
-            footer = Ui.Paragraph("Подсвечен этот компьютер. Красный IP-адрес — такой же адрес есть у другой записи.", Font, Theme.Muted);
+            footer = Ui.Paragraph(L.T("Подсвечен этот компьютер. Красный IP-адрес — такой же адрес есть у другой записи."), Font, Theme.Muted);
             footer.Dock = DockStyle.Bottom;
 
             Controls.Add(grid);
@@ -90,6 +92,23 @@ namespace CompInfo
         {
             Reload();
             search.Focus();
+        }
+
+        public override bool Shortcut(Keys keys)
+        {
+            if (keys == Keys.F5) { Reload(); return true; }
+            if (keys == (Keys.Control | Keys.F)) { search.Focus(); search.SelectAll(); return true; }
+            if (keys == (Keys.Control | Keys.E)) { Export(); return true; }
+            // From the search box, arrows move through the table without leaving the keyboard.
+            if (search.Focused && (keys == Keys.Down || keys == Keys.Up || keys == Keys.Enter) && grid.Rows.Count > 0)
+            {
+                int i = grid.CurrentRow == null ? 0 : grid.CurrentRow.Index;
+                if (keys == Keys.Enter) { OpenCard(i); return true; }
+                i = Math.Max(0, Math.Min(grid.Rows.Count - 1, i + (keys == Keys.Down ? 1 : -1)));
+                Select(i);
+                return true;
+            }
+            return false;
         }
 
         void Reload()
@@ -109,9 +128,9 @@ namespace CompInfo
                 ipCounts[ip] = ipCounts.TryGetValue(ip, out n) ? n + 1 : 1;
             }
             if (warnings.Count > 0)
-                notes.Set(Glyph.Warning, "Пропущены файлы, которые не удалось прочитать (" + warnings.Count + "): " + string.Join("; ", warnings), Theme.Warn);
+                notes.Set(Glyph.Warning, L.T("Пропущены файлы, которые не удалось прочитать (") + warnings.Count + "): " + string.Join("; ", warnings), Theme.Warn);
             else notes.Clear();
-            lastSync = string.IsNullOrEmpty(cloud.LastSyncAt) ? "не было" : Fmt.Date(cloud.LastSyncAt);
+            lastSync = string.IsNullOrEmpty(cloud.LastSyncAt) ? L.T("не было") : Fmt.Date(cloud.LastSyncAt);
             Fill();
             if (selected != null)
             {
@@ -137,7 +156,7 @@ namespace CompInfo
         static string EsetShort(object value)
         {
             if (value == null) return "—";
-            return value is bool && (bool)value ? "да" : "нет";
+            return value is bool && (bool)value ? L.T("да") : L.T("нет");
         }
 
         static int CloudOrder(string status)
@@ -207,23 +226,23 @@ namespace CompInfo
                 string ip = (d.Text("ip") ?? "").Trim();
                 // Short values keep the table readable in a small window; the full ones are in tooltips and the card.
                 string collected = Fmt.Date(d.Text("collectedAt"));
-                string cloudShort = r.CloudStatus == CloudState.Synced ? "да" : r.CloudStatus == CloudState.Changed ? "изменено" : "нет";
+                string cloudShort = r.CloudStatus == CloudState.Synced ? L.T("да") : r.CloudStatus == CloudState.Changed ? L.T("изменено") : L.T("нет");
                 int index = grid.Rows.Add(d.Text("hostname"), ip, d.Text("serial"), d.Text("username"), collected.Length > 10 ? collected.Substring(0, 10) : collected,
                     cloudShort, EsetShort(d["esetInstalled"]), d.Text("comment"));
                 grid.Rows[index].Cells[4].ToolTipText = collected;
-                grid.Rows[index].Cells[5].ToolTipText = r.CloudStatus;
+                grid.Rows[index].Cells[5].ToolTipText = L.T(r.CloudStatus);
                 DataGridViewRow row = grid.Rows[index];
                 if (me != null && me.Matches(d))
                 {
                     row.DefaultCellStyle.BackColor = Theme.GoodLight;
                     row.Cells[0].Style.Font = new Font(Font, FontStyle.Bold);
-                    row.Cells[0].ToolTipText = "Этот компьютер";
+                    row.Cells[0].ToolTipText = L.T("Этот компьютер");
                 }
                 int same;
                 if (ip.Length > 0 && ipCounts.TryGetValue(ip, out same) && same > 1)
                 {
                     row.Cells[1].Style.ForeColor = Theme.Bad;
-                    row.Cells[1].ToolTipText = "Этот IP-адрес есть ещё у " + (same - 1) + " записи(ей)";
+                    row.Cells[1].ToolTipText = L.T("Этот IP-адрес есть ещё у ") + (same - 1) + L.T(" записи(ей)");
                 }
                 row.Cells[5].Style.ForeColor = r.CloudStatus == CloudState.Synced ? Theme.Good : r.CloudStatus == CloudState.Changed ? Theme.Warn : Theme.Muted;
                 object eset = d["esetInstalled"];
@@ -234,7 +253,7 @@ namespace CompInfo
                 grid.Columns[i].HeaderCell.SortGlyphDirection = i == sortColumn ? (descending ? SortOrder.Descending : SortOrder.Ascending) : SortOrder.None;
             grid.ResumeLayout();
             FitColumns();
-            count.Text = (needle.Length > 0 ? "Найдено: " + shown.Count + " из " + all.Count : "Записей: " + all.Count) + "   ·   синхронизация: " + lastSync;
+            count.Text = (needle.Length > 0 ? L.T("Найдено: ") + shown.Count + L.T(" из ") + all.Count : L.T("Записей: ") + all.Count) + L.T("   ·   синхронизация: ") + lastSync;
         }
 
         bool fitting;
@@ -325,10 +344,10 @@ namespace CompInfo
             try
             {
                 int n = CsvExport.Write(AppPaths.Data, path, CloudState.ForDisplay(AppPaths.Root), ';');
-                if (Ui.Ask(FindForm(), "Экспорт в CSV", "Экспортировано устройств: " + n + "\n\n" + path, Glyph.Check, Theme.Good, "Открыть папку", "Закрыть") == 0)
+                if (Ui.Ask(FindForm(), L.T("Экспорт в CSV"), L.T("Экспортировано устройств: ") + n + "\n\n" + path, Glyph.Check, Theme.Good, L.T("Открыть папку"), L.T("Закрыть")) == 0)
                     Ui.ShowInExplorer(path);
             }
-            catch (Exception e) { Ui.Error(FindForm(), "Экспорт не выполнен: " + e.Message); }
+            catch (Exception e) { Ui.Error(FindForm(), L.T("Экспорт не выполнен: ") + e.Message); }
         }
     }
 
@@ -345,14 +364,14 @@ namespace CompInfo
         public int Index;
         public bool Changed;
 
-        static readonly string[][] Labels =
+        static string[][] Labels { get { return new[]
         {
-            new[] { "hostname", "Имя компьютера" }, new[] { "computerId", "ID компьютера" }, new[] { "computerIdSource", "Источник ID" },
-            new[] { "serial", "Серийный номер" }, new[] { "smbiosUuid", "UUID" }, new[] { "windowsMachineGuid", "ID установки Windows" },
-            new[] { "manufacturer", "Производитель" }, new[] { "model", "Модель" }, new[] { "windows", "Windows" },
-            new[] { "partOfDomain", "Член домена" }, new[] { "domain", "Домен / группа" }, new[] { "ip", "IP-адрес" }, new[] { "mac", "MAC-адрес" },
-            new[] { "username", "Пользователь" }, new[] { "esetInstalled", "ESET" }, new[] { "createdAt", "Создана" }, new[] { "collectedAt", "Собрана" },
-        };
+            new[] { "hostname", L.T("Имя компьютера") }, new[] { "computerId", L.T("ID компьютера") }, new[] { "computerIdSource", L.T("Источник ID") },
+            new[] { "serial", L.T("Серийный номер") }, new[] { "smbiosUuid", "UUID" }, new[] { "windowsMachineGuid", L.T("ID установки Windows") },
+            new[] { "manufacturer", L.T("Производитель") }, new[] { "model", L.T("Модель") }, new[] { "windows", "Windows" },
+            new[] { "partOfDomain", L.T("Член домена") }, new[] { "domain", L.T("Домен / группа") }, new[] { "ip", L.T("IP-адрес") }, new[] { "mac", L.T("MAC-адрес") },
+            new[] { "username", L.T("Пользователь") }, new[] { "esetInstalled", "ESET" }, new[] { "createdAt", L.T("Создана") }, new[] { "collectedAt", L.T("Собрана") },
+        }; } }
 
         public RecordDialog(List<RecordFile> records, int index, CloudState cloud)
         {
@@ -361,7 +380,7 @@ namespace CompInfo
             Index = index;
             Ui.Dialog(this);
             int em = Font.Height;
-            Text = "Карточка компьютера";
+            Text = L.T("Карточка компьютера");
             FormBorderStyle = FormBorderStyle.Sizable;
             KeyPreview = true;
             ClientSize = new Size(em * 38, em * 34);
@@ -381,13 +400,13 @@ namespace CompInfo
             comment.MaxLength = 500;
             comment.TextChanged += delegate { saveComment.Enabled = comment.Text != (Current.Data.Text("comment") ?? ""); };
 
-            saveComment = Ui.Primary("Сохранить комментарий", Glyph.Save, Font);
+            saveComment = Ui.Primary(L.T("Сохранить комментарий"), Glyph.Save, Font);
             saveComment.Click += delegate { SaveComment(); };
-            previous = Ui.Secondary("Предыдущая", Glyph.Back, Font);
+            previous = Ui.Secondary(L.T("Предыдущая"), Glyph.Back, Font);
             previous.Click += delegate { Step(-1); };
-            next = Ui.Secondary("Следующая", Glyph.Forward, Font);
+            next = Ui.Secondary(L.T("Следующая"), Glyph.Forward, Font);
             next.Click += delegate { Step(1); };
-            Button close = Ui.Secondary("Закрыть", null, Font);
+            Button close = Ui.Secondary(L.T("Закрыть"), null, Font);
             close.Click += delegate { Close(); };
             CancelButton = close;
 
@@ -401,7 +420,7 @@ namespace CompInfo
             commentRow.Controls.Add(saveComment);
             commentRow.Dock = DockStyle.Bottom;
             commentRow.Padding = new Padding(0, em / 3, 0, 0);
-            Label commentLabel = Ui.Text("Комментарий", Font, Theme.Muted);
+            Label commentLabel = Ui.Text(L.T("Комментарий"), Font, Theme.Muted);
             commentLabel.Dock = DockStyle.Bottom;
             commentLabel.Padding = new Padding(0, em / 2, 0, em / 4);
             Panel commentBox = new Panel();
@@ -432,8 +451,8 @@ namespace CompInfo
         {
             int target = Index + step;
             if (target < 0 || target >= records.Count) return;
-            if (saveComment.Enabled && Ui.Ask(this, "Карточка компьютера", "Комментарий изменён, но не сохранён. Перейти без сохранения?", Glyph.Warning, Theme.Warn,
-                "Перейти", "Остаться") != 0) return;
+            if (saveComment.Enabled && Ui.Ask(this, L.T("Карточка компьютера"), L.T("Комментарий изменён, но не сохранён. Перейти без сохранения?"), Glyph.Warning, Theme.Warn,
+                L.T("Перейти"), L.T("Остаться")) != 0) return;
             Display(target);
         }
 
@@ -443,7 +462,7 @@ namespace CompInfo
             RecordFile r = Current;
             JsonObject d = r.Data;
             int em = Font.Height;
-            Text = "Карточка компьютера — " + (d.Text("hostname") ?? r.FileName) + " (" + (index + 1) + " из " + records.Count + ")";
+            Text = L.T("Карточка компьютера — ") + (d.Text("hostname") ?? r.FileName) + " (" + (index + 1) + L.T(" из ") + records.Count + ")";
             table.SuspendLayout();
             table.Controls.Clear();
             table.RowStyles.Clear();
@@ -458,8 +477,8 @@ namespace CompInfo
             // Fields this version does not know are shown too, so nothing is hidden.
             foreach (string name in d.Names)
                 if (!known.Contains(name)) AddField(name, d.Text(name) ?? "");
-            AddField("Облако", r.CloudStatus + "   (последняя синхронизация копии: " + (string.IsNullOrEmpty(cloud.LastSyncAt) ? "не было" : Fmt.Date(cloud.LastSyncAt)) + ")");
-            AddField("Файл", r.FileName);
+            AddField(L.T("Облако"), L.T(r.CloudStatus) + L.T("   (последняя синхронизация копии: ") + (string.IsNullOrEmpty(cloud.LastSyncAt) ? L.T("не было") : Fmt.Date(cloud.LastSyncAt)) + ")");
+            AddField(L.T("Файл"), r.FileName);
             table.ResumeLayout();
             comment.Text = d.Text("comment") ?? "";
             comment.Select(comment.Text.Length, 0);
@@ -473,7 +492,7 @@ namespace CompInfo
         {
             if (name == "esetInstalled") return ComputerSnapshot.EsetText(d[name]);
             if (name == "createdAt" || name == "collectedAt") return Fmt.Date(d.Text(name));
-            if (name == "partOfDomain") { object v = d[name]; return v == null ? "" : (v is bool && (bool)v ? "да" : "нет"); }
+            if (name == "partOfDomain") { object v = d[name]; return v == null ? "" : (v is bool && (bool)v ? L.T("да") : L.T("нет")); }
             return d.Text(name) ?? "";
         }
 
@@ -510,15 +529,15 @@ namespace CompInfo
                 records[Index] = updated;
                 Changed = true;
                 Display(Index);
-                status.Set(Glyph.Check, "Комментарий сохранён. При следующей синхронизации он попадёт в облако.", Theme.Good);
+                status.Set(Glyph.Check, L.T("Комментарий сохранён. При следующей синхронизации он попадёт в облако."), Theme.Good);
             }
-            catch (Exception e) { status.Set(Glyph.Warning, "Не удалось сохранить комментарий: " + e.Message, Theme.Bad); }
+            catch (Exception e) { status.Set(Glyph.Warning, L.T("Не удалось сохранить комментарий: ") + e.Message, Theme.Bad); }
         }
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
-            if (saveComment.Enabled && Ui.Ask(this, "Карточка компьютера", "Комментарий изменён, но не сохранён. Закрыть без сохранения?", Glyph.Warning, Theme.Warn,
-                "Закрыть", "Остаться") != 0) e.Cancel = true;
+            if (saveComment.Enabled && Ui.Ask(this, L.T("Карточка компьютера"), L.T("Комментарий изменён, но не сохранён. Закрыть без сохранения?"), Glyph.Warning, Theme.Warn,
+                L.T("Закрыть"), L.T("Остаться")) != 0) e.Cancel = true;
             base.OnFormClosing(e);
         }
     }

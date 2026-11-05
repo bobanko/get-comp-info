@@ -102,32 +102,4 @@ namespace CompInfo
             c.HandleCreated += apply;
         }
     }
-
-    // Small preferences of this copy of the program (app-settings.json next to it).
-    public static class Settings
-    {
-        static string Path { get { return AppPaths.File("app-settings.json"); } }
-
-        public static string Get(string name, string fallback)
-        {
-            try
-            {
-                if (!File.Exists(Path)) return fallback;
-                string v = Files.ReadRecord(Path).Text(name);
-                return string.IsNullOrEmpty(v) ? fallback : v;
-            }
-            catch (Exception) { return fallback; }
-        }
-
-        public static void Set(string name, string value)
-        {
-            try
-            {
-                JsonObject o = File.Exists(Path) ? Files.ReadRecord(Path) : new JsonObject();
-                o[name] = value;
-                Files.WriteJson(Path, o);
-            }
-            catch (Exception) { }   // a read-only flash drive simply keeps the default
-        }
-    }
 }

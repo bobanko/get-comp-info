@@ -26,7 +26,7 @@ namespace CompInfo
                 {
                     JsonObject error = Object == null ? null : Object["error"] as JsonObject;
                     string message = error == null ? null : error.Text("message");
-                    return string.IsNullOrEmpty(message) ? "Облако ответило кодом " + Status + "." : message;
+                    return string.IsNullOrEmpty(message) ? L.T("Облако ответило кодом ") + Status + "." : message;
                 }
             }
         }
@@ -69,7 +69,7 @@ namespace CompInfo
             }
             catch (WebException e)
             {
-                if (e.Response == null) throw new IOException("Облако недоступно (" + request.RequestUri + "): " + e.Message, e);
+                if (e.Response == null) throw new IOException(L.T("Облако недоступно (") + request.RequestUri + "): " + e.Message, e);
                 return (HttpWebResponse)e.Response;
             }
         }
@@ -128,7 +128,7 @@ namespace CompInfo
 
         public static string UserText(JsonObject me)
         {
-            return me.Text("name") + " <" + me.Text("email") + ">, роль " + me.Text("role");
+            return me.Text("name") + " <" + me.Text("email") + L.T(">, роль ") + me.Text("role");
         }
 
         // ---------- personal key ----------
@@ -180,15 +180,15 @@ namespace CompInfo
     // Comparison and merge of two versions of a record (sync-merge.ps1).
     public static class RecordDiff
     {
-        static readonly Dictionary<string, string> Labels = new Dictionary<string, string>
+        static Dictionary<string, string> Labels { get { return new Dictionary<string, string>
         {
-            { "computerId", "Идентификатор компьютера" }, { "computerIdSource", "Источник идентификатора" },
-            { "hostname", "Имя компьютера" }, { "ip", "IP-адрес" }, { "mac", "MAC-адрес" },
-            { "serial", "Серийный номер" }, { "smbiosUuid", "UUID" }, { "manufacturer", "Производитель" },
-            { "windowsMachineGuid", "ID установки Windows" }, { "partOfDomain", "Член домена" }, { "domain", "Домен / рабочая группа" },
-            { "model", "Модель" }, { "username", "Пользователь" }, { "comment", "Комментарий" },
-            { "windows", "Windows" }, { "esetInstalled", "ESET установлен" }, { "collectedAt", "Дата сбора" }, { "createdAt", "Дата создания" },
-        };
+            { "computerId", L.T("Идентификатор компьютера") }, { "computerIdSource", L.T("Источник идентификатора") },
+            { "hostname", L.T("Имя компьютера") }, { "ip", L.T("IP-адрес") }, { "mac", L.T("MAC-адрес") },
+            { "serial", L.T("Серийный номер") }, { "smbiosUuid", "UUID" }, { "manufacturer", L.T("Производитель") },
+            { "windowsMachineGuid", L.T("ID установки Windows") }, { "partOfDomain", L.T("Член домена") }, { "domain", L.T("Домен / рабочая группа") },
+            { "model", L.T("Модель") }, { "username", L.T("Пользователь") }, { "comment", L.T("Комментарий") },
+            { "windows", "Windows" }, { "esetInstalled", L.T("ESET установлен") }, { "collectedAt", L.T("Дата сбора") }, { "createdAt", L.T("Дата создания") },
+        }; } }
 
         public static string Label(string name)
         {
@@ -198,11 +198,11 @@ namespace CompInfo
 
         public static string ValueText(JsonObject record, string name)
         {
-            if (!record.Has(name)) return "(поле отсутствует)";
+            if (!record.Has(name)) return L.T("(поле отсутствует)");
             object v = record[name];
             if (v == null) return "(null)";
             string s = v as string;
-            if (s != null) return s.Length == 0 ? "(пустая строка)" : s;
+            if (s != null) return s.Length == 0 ? L.T("(пустая строка)") : s;
             return Json.Compact(v);
         }
 
@@ -290,7 +290,7 @@ namespace CompInfo
         public SyncCounts Run()
         {
             ReadLocal();
-            ui.Progress("Отправка изменений…");
+            ui.Progress(L.T("Отправка изменений…"));
             List<string> ids = new List<string>(local.Keys);
             ids.Sort(NameOrder);
             foreach (string id in ids)
@@ -306,14 +306,14 @@ namespace CompInfo
             bool missing = false;
             foreach (string id in state.Records.Keys)
                 if (!local.ContainsKey(id) && !skipped.ContainsKey(id)) { missing = true; break; }
-            ui.Progress("Загрузка базы из облака…");
+            ui.Progress(L.T("Загрузка базы из облака…"));
             Receive(missing);
 
             state.LastSyncAt = DateTime.Now.ToString("o");
             state.Save(root);
 
             try { Counts.NetworkProfiles = client.UpdateNetworkProfiles(root); }
-            catch (Exception e) { Counts.Errors.Add("Профили сети не загружены: " + e.Message); }
+            catch (Exception e) { Counts.Errors.Add(L.T("Профили сети не загружены: ") + e.Message); }
 
             // A newer program version is only a hint: failing to check it must not fail the sync.
             try
@@ -360,7 +360,7 @@ namespace CompInfo
                 local[id] = item;
             }
             foreach (KeyValuePair<string, List<string>> p in skipped)
-                Counts.Errors.Add("Несколько файлов с идентификатором " + p.Key + ": " + string.Join(", ", p.Value) + ". Оставьте один и повторите синхронизацию.");
+                Counts.Errors.Add(L.T("Несколько файлов с идентификатором ") + p.Key + ": " + string.Join(", ", p.Value) + L.T(". Оставьте один и повторите синхронизацию."));
         }
 
         void SetLocal(string id, string path, JsonObject record, int revision)
@@ -427,7 +427,7 @@ namespace CompInfo
                 if (r.Status == 409)
                 {
                     JsonObject current = (JsonObject)o["current"];
-                    string title = Title(item) + " | в облаке изменил(а) " + current.Text("updatedBy") + ", " + Fmt.Date(current.Text("updatedAt"));
+                    string title = Title(item) + L.T(" | в облаке изменил(а) ") + current.Text("updatedBy") + ", " + Fmt.Date(current.Text("updatedAt"));
                     JsonObject result;
                     string action = ui.ResolveConflict(title, record, (JsonObject)current["data"], out result);
                     if (action == "defer") { Counts.Deferred++; return; }
@@ -445,8 +445,8 @@ namespace CompInfo
                 if (r.Status == 410)
                 {
                     JsonObject current = o["current"] as JsonObject ?? new JsonObject();
-                    int choice = ui.DeletedInCloud(Title(item), "Запись удалена в облаке: " + current.Text("updatedBy") + ", " + Fmt.Date(current.Text("updatedAt")) +
-                        ".\nЛокальная копия изменена после последней синхронизации.");
+                    int choice = ui.DeletedInCloud(Title(item), L.T("Запись удалена в облаке: ") + current.Text("updatedBy") + ", " + Fmt.Date(current.Text("updatedAt")) +
+                        L.T(".\nЛокальная копия изменена после последней синхронизации."));
                     if (choice == 0) { restore = true; continue; }
                     if (choice == 1) { RemoveLocal(item.Id); Counts.Deleted++; return; }
                     Counts.Deferred++;
@@ -502,17 +502,17 @@ namespace CompInfo
                             Item occupant = null;
                             foreach (Item other in local.Values) if (string.Equals(other.Path, path, StringComparison.OrdinalIgnoreCase)) occupant = other;
                             string cloudHost = data.Text("hostname") ?? "";
-                            string mine = occupant == null ? "" : " (запись " + occupant.Id + ", " + (occupant.Record.Text("hostname") ?? "") + ")";
+                            string mine = occupant == null ? "" : L.T(" (запись ") + occupant.Id + ", " + (occupant.Record.Text("hostname") ?? "") + ")";
                             bool sameComputer = occupant != null && !string.IsNullOrEmpty(data.Text("serial")) &&
                                 string.Equals(data.Text("serial"), occupant.Record.Text("serial"), StringComparison.OrdinalIgnoreCase);
-                            Counts.Errors.Add(fileName + ": файл занят" + mine + ", запись " + id + (cloudHost.Length > 0 ? " (" + cloudHost + ")" : "") + " из облака не загружена." +
-                                (sameComputer ? " У них один серийный номер — похоже на дубликат одного компьютера: удалите лишнюю запись в веб-интерфейсе." : ""));
+                            Counts.Errors.Add(fileName + L.T(": файл занят") + mine + L.T(", запись ") + id + (cloudHost.Length > 0 ? " (" + cloudHost + ")" : "") + L.T(" из облака не загружена.") +
+                                (sameComputer ? L.T(" У них один серийный номер — похоже на дубликат одного компьютера: удалите лишнюю запись в веб-интерфейсе.") : ""));
                             continue;
                         }
                         // The saved file must be recognized as the same record on the next run.
                         if (Records.CloudId(data, fileName) != id)
                         {
-                            Counts.Errors.Add("Запись " + id + " из облака не загружена: без computerId её нельзя сохранить в файл с тем же идентификатором.");
+                            Counts.Errors.Add(L.T("Запись ") + id + L.T(" из облака не загружена: без computerId её нельзя сохранить в файл с тем же идентификатором."));
                             continue;
                         }
                     }
@@ -608,27 +608,27 @@ namespace CompInfo
             {
                 ZipFile.ExtractToDirectory(zipPath, extract);
                 string manifestPath = Path.Combine(extract, "manifest.json");
-                if (!File.Exists(manifestPath)) throw new InvalidDataException("В архиве нет manifest.json.");
+                if (!File.Exists(manifestPath)) throw new InvalidDataException(L.T("В архиве нет manifest.json."));
                 JsonObject manifest = Files.ReadRecord(manifestPath);
-                if (manifest.Text("version") != expectedVersion) throw new InvalidDataException("Архив содержит версию " + manifest.Text("version") + ", ожидалась " + expectedVersion + ".");
+                if (manifest.Text("version") != expectedVersion) throw new InvalidDataException(L.T("Архив содержит версию ") + manifest.Text("version") + L.T(", ожидалась ") + expectedVersion + ".");
                 IList files = manifest["files"] as IList;
-                if (files == null || files.Count == 0) throw new InvalidDataException("В manifest.json нет файлов.");
+                if (files == null || files.Count == 0) throw new InvalidDataException(L.T("В manifest.json нет файлов."));
                 List<string> names = new List<string>();
                 foreach (object f in files)
                 {
                     JsonObject file = (JsonObject)f;
                     string name = file.Text("path") ?? "";
                     string source = Path.Combine(extract, name);
-                    if (!IsProgramFile(name)) throw new InvalidDataException("Недопустимый файл в архиве: " + name);
-                    if (!File.Exists(source)) throw new InvalidDataException("В архиве нет файла " + name + ".");
+                    if (!IsProgramFile(name)) throw new InvalidDataException(L.T("Недопустимый файл в архиве: ") + name);
+                    if (!File.Exists(source)) throw new InvalidDataException(L.T("В архиве нет файла ") + name + ".");
                     if (new FileInfo(source).Length != Convert.ToInt64(file["size"]) || Sha256(source) != (file.Text("sha256") ?? "").ToLowerInvariant())
-                        throw new InvalidDataException("Файл " + name + " в архиве не совпадает с manifest.json.");
+                        throw new InvalidDataException(L.T("Файл ") + name + L.T(" в архиве не совпадает с manifest.json."));
                     names.Add(name);
                 }
                 foreach (string entry in Directory.GetFiles(extract, "*", SearchOption.AllDirectories))
                 {
                     string relative = entry.Substring(extract.Length + 1);
-                    if (relative != "manifest.json" && !names.Contains(relative)) throw new InvalidDataException("Лишний файл в архиве: " + relative);
+                    if (relative != "manifest.json" && !names.Contains(relative)) throw new InvalidDataException(L.T("Лишний файл в архиве: ") + relative);
                 }
 
                 string backup = Path.Combine(updateRoot, "backup-" + currentVersion + "-" + DateTime.Now.ToString("yyyyMMdd-HHmmss"));
@@ -647,7 +647,7 @@ namespace CompInfo
                         string temporary = Path.Combine(root, Guid.NewGuid().ToString("N") + ".tmp");
                         File.Copy(Path.Combine(extract, name), temporary);
                         Place(temporary, target);
-                        if (Sha256(target) != file.Text("sha256").ToLowerInvariant()) throw new IOException("Файл " + name + " записан с ошибкой.");
+                        if (Sha256(target) != file.Text("sha256").ToLowerInvariant()) throw new IOException(L.T("Файл ") + name + L.T(" записан с ошибкой."));
                     }
                     // The window program itself is never removed, even by a release without it.
                     foreach (string old in ProgramFiles(root))
@@ -663,9 +663,9 @@ namespace CompInfo
                     try { RestoreBackup(root, backup, names); }
                     catch (Exception restoreError)
                     {
-                        throw new IOException("Обновление не удалось (" + e.Message + "), и прежнюю версию восстановить не получилось: " + restoreError.Message + ". Файлы прежней версии лежат в " + backup);
+                        throw new IOException(L.T("Обновление не удалось (") + e.Message + L.T("), и прежнюю версию восстановить не получилось: ") + restoreError.Message + L.T(". Файлы прежней версии лежат в ") + backup);
                     }
-                    throw new IOException("Обновление не удалось, прежняя версия восстановлена: " + e.Message);
+                    throw new IOException(L.T("Обновление не удалось, прежняя версия восстановлена: ") + e.Message);
                 }
                 result.Installed = files.Count;
                 RemoveOldFiles(updateRoot, 2);

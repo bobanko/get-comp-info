@@ -46,7 +46,7 @@ namespace CompInfo
             info.CreateNoWindow = true;
             if (elevate)
             {
-                if (secrets != null && secrets.Length > 0) throw new InvalidOperationException("Секреты нельзя передать в отдельно повышенный процесс.");
+                if (secrets != null && secrets.Length > 0) throw new InvalidOperationException(L.T("Секреты нельзя передать в отдельно повышенный процесс."));
                 info.UseShellExecute = true;
                 info.Verb = "runas";
             }
@@ -61,7 +61,7 @@ namespace CompInfo
                 try { p = Process.Start(info); }
                 catch (Win32Exception e)
                 {
-                    if (e.NativeErrorCode == 1223) throw new OperationCanceledException("Права администратора не получены: запрос Windows был отклонён.");
+                    if (e.NativeErrorCode == 1223) throw new OperationCanceledException(L.T("Права администратора не получены: запрос Windows был отклонён."));
                     throw;
                 }
                 using (p)
@@ -75,7 +75,7 @@ namespace CompInfo
                     if (p.ExitCode != 0)
                     {
                         string message = File.Exists(errorFile) ? File.ReadAllText(errorFile, Encoding.UTF8).Trim() : "";
-                        throw new InvalidOperationException(message.Length > 0 ? message : "Команда Windows завершилась с кодом " + p.ExitCode + ".");
+                        throw new InvalidOperationException(message.Length > 0 ? message : L.T("Команда Windows завершилась с кодом ") + p.ExitCode + ".");
                     }
                     return File.Exists(outputFile) ? File.ReadAllText(outputFile, Encoding.UTF8).Trim() : "";
                 }

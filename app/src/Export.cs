@@ -18,9 +18,9 @@ namespace CompInfo
         // Returns the number of exported devices. Reads everything first: an invalid record never produces a partial file.
         public static int Write(string dataPath, string outputPath, CloudState state, char delimiter)
         {
-            if (!Directory.Exists(dataPath)) throw new DirectoryNotFoundException("Папка с данными не найдена: " + dataPath);
+            if (!Directory.Exists(dataPath)) throw new DirectoryNotFoundException(L.T("Папка с данными не найдена: ") + dataPath);
             string[] files = Directory.GetFiles(dataPath, "*.json");
-            if (files.Length == 0) throw new FileNotFoundException("В папке нет JSON-файлов: " + dataPath);
+            if (files.Length == 0) throw new FileNotFoundException(L.T("В папке нет JSON-файлов: ") + dataPath);
             Array.Sort(files, StringComparer.Create(CultureInfo.CurrentCulture, true));
 
             List<JsonObject> records = new List<JsonObject>();

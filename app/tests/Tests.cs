@@ -40,6 +40,8 @@ namespace CompInfo
             Run("program files and versions", ProgramFiles);
             Run("program update install", InstallRelease);
             Run("synchronization with a fake cloud", Synchronization);
+            Run("translations cover the interface", delegate { Translations(Path.Combine(fixtures, @"..\src")); });
+            Run("settings file", SettingsFile);
             Console.WriteLine(failures == 0 ? "All checks passed." : failures + " check(s) failed.");
             return failures == 0 ? 0 : 1;
         }
@@ -409,6 +411,67 @@ namespace CompInfo
                 finally { Directory.Delete(root, true); }
             }
         }
+        static void SettingsFile()
+        {
+            string dir = TempDir();
+            string saved = AppPaths.Root;
+            AppPaths.Root = dir;
+            try
+            {
+                File.WriteAllText(Path.Combine(dir, "app-settings.json"), "{\"theme\":\"dark\"}");
+                Check(Settings.Get("theme", "system") == "dark", "theme taken over from app-settings.json");
+                Settings.Set("language", "uk");
+                Settings.Set("domainUser", "CORP\\admin");
+                string ini = File.ReadAllText(Path.Combine(dir, "comp-info.ini"));
+                Check(ini.Contains("theme=dark") && ini.Contains("language=uk") && ini.Contains("domainUser=CORP\\admin") && ini.Contains("[settings]"), "ini written: " + ini);
+                File.WriteAllText(Path.Combine(dir, "comp-info.ini"), "; hand-edited\r\n[settings]\r\n Theme = light \r\nlanguage=en\r\n");
+                Check(Settings.Get("theme", "system") == "light" && Settings.Get("language", "") == "en" && Settings.Get("missing", "x") == "x", "hand-edited ini read");
+                Settings.Set("domainUser", "");
+                Check(!File.ReadAllText(Path.Combine(dir, "comp-info.ini")).Contains("domainUser="), "empty values are dropped");
+                L.Choice = "system"; L.ApplyChoice();
+                Check(Array.IndexOf(L.Codes, L.Code) >= 0, "system language mapped to a supported one");
+                L.Choice = "en"; L.ApplyChoice();
+                Check(L.Code == "en", "chosen language");
+            }
+            finally { AppPaths.Root = saved; L.Code = "ru"; L.Choice = "system"; Directory.Delete(dir, true); }
+        }
+
+        // Every L.T / L.F text of the program has Ukrainian and English versions with the same edges and placeholders.
+        static void Translations(string sources)
+        {
+            Dictionary<string, string[]> table = new Dictionary<string, string[]>(StringComparer.Ordinal);
+            for (int i = 0; i + 2 < Strings.All.Length; i += 3)
+            {
+                Check(!table.ContainsKey(Strings.All[i]), "translated twice: " + Strings.All[i]);
+                table[Strings.All[i]] = new[] { Strings.All[i + 1], Strings.All[i + 2] };
+            }
+            Check(Strings.All.Length % 3 == 0, "Strings.All must hold triples");
+            System.Text.RegularExpressions.Regex call = new System.Text.RegularExpressions.Regex("L\\.[TF]\\(\\s*\"((?:[^\"\\\\]|\\\\.)*)\"");
+            System.Text.RegularExpressions.Regex holes = new System.Text.RegularExpressions.Regex("\\{\\d+[^}]*\\}");
+            int used = 0;
+            foreach (string file in Directory.GetFiles(sources, "*.cs"))
+            {
+                foreach (System.Text.RegularExpressions.Match m in call.Matches(File.ReadAllText(file, Encoding.UTF8)))
+                {
+                    string key = System.Text.RegularExpressions.Regex.Unescape(m.Groups[1].Value);
+                    used++;
+                    string[] v;
+                    if (!table.TryGetValue(key, out v)) { Check(false, Path.GetFileName(file) + ": no translation for «" + key + "»"); continue; }
+                    foreach (string t in v)
+                    {
+                        Check(t.Length > 0, "empty translation of «" + key + "»");
+                        Check(t.Length - t.TrimStart().Length == key.Length - key.TrimStart().Length && t.Length - t.TrimEnd().Length == key.Length - key.TrimEnd().Length,
+                            "spaces at the edges differ: «" + key + "» / «" + t + "»");
+                        Check(holes.Matches(t).Count == holes.Matches(key).Count, "placeholders differ: «" + key + "» / «" + t + "»");
+                    }
+                }
+            }
+            Check(used > 300, "too few interface texts found: " + used);
+            L.Code = "en";
+            Check(L.T("Отмена") == "Cancel" && L.F("{0:N1} ГБ", 2.0).EndsWith("GB") && L.T("нет такой строки") == "нет такой строки", "lookup");
+            L.Code = "ru";
+        }
+
         // Real copy: every record the console version marked as synced must still be synced here.
         static int CheckData(string root)
         {

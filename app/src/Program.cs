@@ -21,11 +21,13 @@ namespace CompInfo
             ProgramUpdate.RemoveLeftovers();
 
             Theme.Choice = Option(args, "--theme", 1) ?? Settings.Get("theme", "system");
+            L.Choice = Option(args, "--language", 1) ?? Settings.Get("language", "system");
             string page = Option(args, "--page", 1);
             string shot = Option(args, "--screenshot", 1);
             if (shot != null)
             {
                 Theme.ApplyChoice();
+                L.ApplyChoice();
                 return Screenshot(new MainForm(), shot, Option(args, "--screenshot", 2), Option(args, "--screenshot", 3));
             }
 
@@ -35,6 +37,7 @@ namespace CompInfo
             while (true)
             {
                 Theme.ApplyChoice();
+                L.ApplyChoice();
                 MainForm form = new MainForm();
                 form.StartPage = page;
                 if (bounds.HasValue)
@@ -87,10 +90,10 @@ namespace CompInfo
                         string stem = System.IO.Path.ChangeExtension(file, null);
                         JsonObject local = Json.ParseObject("{\"computerId\":\"A1\",\"hostname\":\"FR-042-PC\",\"comment\":\"кабинет 12\",\"ip\":\"10.1.1.5\",\"collectedAt\":\"2026-11-04T10:00:00+02:00\"}");
                         JsonObject cloud = Json.ParseObject("{\"computerId\":\"A1\",\"hostname\":\"FR-042-PC\",\"comment\":\"кабинет 14, Петров\",\"ip\":\"10.1.1.5\",\"collectedAt\":\"2026-11-02T09:00:00+02:00\",\"model\":\"82YU\"}");
-                        SaveImage(new ConflictDialog("FR-042-PC — A1.json | в облаке изменил(а) admin@example, 2026-11-04 12:00", local, cloud), stem + "-conflict.png");
-                        SaveImage(new KeyDialog("https://example/api/client", false, "Ключ из cloud-key.txt не подошёл: ключ отозван."), stem + "-key.png");
-                        SaveImage(new AskDialog("Запись удалена в облаке", "PC — A1.json\n\nЗапись удалена в облаке: admin, 2026-11-04 12:00.", Glyph.Warning, Theme.Warn,
-                            new[] { "Восстановить в облаке", "Удалить локальную запись", "Отложить" }), stem + "-ask.png");
+                        SaveImage(new ConflictDialog("FR-042-PC — A1.json | " + L.T("в облаке изменил(а)") + " admin@example, 2026-11-04 12:00", local, cloud), stem + "-conflict.png");
+                        SaveImage(new KeyDialog("https://example/api/client", false, L.T("Ключ из cloud-key.txt не подошёл: ") + "revoked"), stem + "-key.png");
+                        SaveImage(new AskDialog(L.T("Запись удалена в облаке"), "PC — A1.json\n\n" + L.T("Запись удалена в облаке: ") + "admin, 2026-11-04 12:00.", Glyph.Warning, Theme.Warn,
+                            new[] { L.T("Восстановить в облаке"), L.T("Удалить локальную запись"), L.T("Отложить") }), stem + "-ask.png");
                     }
                     form.ReopenPage = null;
                     Environment.Exit(0);
@@ -120,8 +123,8 @@ namespace CompInfo
 
         static void Crash(Exception e)
         {
-            MessageBox.Show("Непредвиденная ошибка:\n\n" + (e != null ? e.Message : "неизвестно") +
-                "\n\nСообщите о ней разработчику. Подробности:\n" + (e != null ? e.GetType().Name : ""), "CHAGEAR Тулбокс", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(L.T("Непредвиденная ошибка:") + "\n\n" + (e != null ? e.Message : L.T("неизвестно")) +
+                "\n\n" + L.T("Сообщите о ней разработчику. Подробности:") + "\n" + (e != null ? e.GetType().Name : ""), L.T("CHAGEAR Тулбокс"), MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 }

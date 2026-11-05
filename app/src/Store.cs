@@ -46,7 +46,7 @@ namespace CompInfo
                 if (System.IO.File.Exists(item) || Directory.Exists(item))
                 {
                     if ((System.IO.File.GetAttributes(item) & FileAttributes.ReparsePoint) != 0)
-                        throw new IOException("Ссылки на файлы и папки не поддерживаются: " + item);
+                        throw new IOException(L.T("Ссылки на файлы и папки не поддерживаются: ") + item);
                 }
                 item = Path.GetDirectoryName(item);
             }
@@ -58,8 +58,8 @@ namespace CompInfo
             JsonObject o;
             try { o = Json.ParseObject(System.IO.File.ReadAllText(path, Encoding.UTF8)); }
             catch (FormatException e) { throw new FormatException(e.Message + " (" + path + ")"); }
-            catch (ArgumentException e) { throw new FormatException("Некорректный JSON: " + e.Message + " (" + path + ")"); }
-            catch (InvalidOperationException e) { throw new FormatException("Некорректный JSON: " + e.Message + " (" + path + ")"); }
+            catch (ArgumentException e) { throw new FormatException(L.T("Некорректный JSON: ") + e.Message + " (" + path + ")"); }
+            catch (InvalidOperationException e) { throw new FormatException(L.T("Некорректный JSON: ") + e.Message + " (" + path + ")"); }
             return o;
         }
 
@@ -143,7 +143,7 @@ namespace CompInfo
             List<RecordFile> result = new List<RecordFile>();
             if (!Directory.Exists(dataPath))
             {
-                if (warnings != null) warnings.Add("Папка с данными не найдена: " + dataPath);
+                if (warnings != null) warnings.Add(L.T("Папка с данными не найдена: ") + dataPath);
                 return result;
             }
             string[] files = Directory.GetFiles(dataPath, "*.json");
@@ -178,11 +178,11 @@ namespace CompInfo
         public static string ReadApiUrl(string root)
         {
             string path = System.IO.Path.Combine(root, "cloud-config.json");
-            if (!System.IO.File.Exists(path)) throw new FileNotFoundException("Не найден файл настроек облака: " + path);
+            if (!System.IO.File.Exists(path)) throw new FileNotFoundException(L.T("Не найден файл настроек облака: ") + path);
             string url = (Files.ReadRecord(path).Text("apiUrl") ?? "").Trim().TrimEnd('/');
             // Plain http is allowed only for a local development server.
             if (!Regex.IsMatch(url, "^(https://|http://(localhost|127\\.0\\.0\\.1)(:\\d+)?/)"))
-                throw new InvalidDataException("В cloud-config.json нужен адрес API, начинающийся с https://");
+                throw new InvalidDataException(L.T("В cloud-config.json нужен адрес API, начинающийся с https://"));
             return url;
         }
     }

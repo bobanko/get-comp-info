@@ -60,7 +60,7 @@ namespace CompInfo
         // Objects become JsonObject, arrays List<object>, numbers int/long/decimal/double.
         public static object Parse(string text)
         {
-            if (text == null) throw new FormatException("Пустой JSON.");
+            if (text == null) throw new FormatException(L.T("Пустой JSON."));
             if (text.Length > 0 && text[0] == '﻿') text = text.Substring(1);
             return Convert(NewSerializer().DeserializeObject(text));
         }
@@ -68,7 +68,7 @@ namespace CompInfo
         public static JsonObject ParseObject(string text)
         {
             JsonObject o = Parse(text) as JsonObject;
-            if (o == null) throw new FormatException("Ожидался JSON-объект.");
+            if (o == null) throw new FormatException(L.T("Ожидался JSON-объект."));
             return o;
         }
 
@@ -82,7 +82,7 @@ namespace CompInfo
                 foreach (KeyValuePair<string, object> p in map)
                 {
                     // PowerShell refuses such JSON too: its property names ignore case.
-                    if (!seen.Add(p.Key)) throw new FormatException("В JSON повторяются поля, различающиеся только регистром: " + p.Key);
+                    if (!seen.Add(p.Key)) throw new FormatException(L.T("В JSON повторяются поля, различающиеся только регистром: ") + p.Key);
                     o[p.Key] = Convert(p.Value);
                 }
                 return o;

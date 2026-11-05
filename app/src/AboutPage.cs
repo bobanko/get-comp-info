@@ -12,24 +12,27 @@ namespace CompInfo
         public const string WebSite = "chagear.top";
         public const string WebInterface = "comp-info.chagear.top";
 
-        static readonly string[] Sections =
+        static string[] Sections { get { return new[]
         {
-            "Где хранятся данные",
-            "Всё лежит рядом с программой: записи компьютеров — в папке data (один файл на компьютер), выгрузки CSV — в exports. " +
-            "Программа ничего не устанавливает и работает прямо с флешки, в том числе без интернета.",
-            "Облако",
-            "Синхронизация отправляет записи в общую базу и получает изменения коллег. Для неё нужен интернет и личный ключ доступа " +
-            "из веб-интерфейса. Записи, удалённые на флешке вручную, из облака не удаляются.",
-            "Права администратора",
-            "Программа запускается без них. Разрешение Windows (окно UAC) понадобится только для настройки сети, " +
-            "смены имени компьютера и работы с доменом — такие разделы отмечены в меню щитом.",
-        };
+            L.T("Где хранятся данные"),
+            L.T("Всё лежит рядом с программой: записи компьютеров — в папке data (один файл на компьютер), выгрузки CSV — в exports. ") +
+            L.T("Программа ничего не устанавливает и работает прямо с флешки, в том числе без интернета."),
+            L.T("Облако"),
+            L.T("Синхронизация отправляет записи в общую базу и получает изменения коллег. Для неё нужен интернет и личный ключ доступа ") +
+            L.T("из веб-интерфейса. Записи, удалённые на флешке вручную, из облака не удаляются."),
+            L.T("Права администратора"),
+            L.T("Программа запускается без них. Разрешение Windows (окно UAC) понадобится только для настройки сети, ") +
+            L.T("смены имени компьютера и работы с доменом — такие разделы отмечены в меню щитом."),
+            L.T("Клавиши"),
+            L.T("Ctrl+1…9 — разделы меню, Ctrl+0 — «О программе», Ctrl+Tab — следующий раздел. F5 — обновить или проверить заново, ") +
+            L.T("Ctrl+S — сохранить сбор, Ctrl+F — поиск в базе (стрелки и Enter — по таблице), Ctrl+E — экспорт в CSV, Ctrl+Enter — применить настройки сети, имени или домена."),
+        }; } }
 
         public AboutPage()
         {
             Key = "about";
-            Title = "О программе";
-            Description = "Версия, назначение программы и связь с разработчиком.";
+            Title = L.T("О программе");
+            Description = L.T("Версия, назначение программы и связь с разработчиком.");
             Icon = Glyph.Info;
             int em = Font.Height;
             AutoScroll = true;
@@ -57,12 +60,12 @@ namespace CompInfo
             text.Margin = Padding.Empty;
             t.Controls.Add(text, 1, 0);
 
-            text.Controls.Add(Line("CHAGEAR Тулбокс", new Font("Segoe UI Semibold", 16f), Theme.Text, width, 0));
-            text.Controls.Add(Line("Учёт компьютеров при подготовке и выдаче сотрудникам", Font, Theme.Text, width, 0));
-            text.Controls.Add(Line("Версия " + AppVersion.Text + (PowerShell.IsAdministrator() ? " · запущена с правами администратора" : ""), Font, Theme.Muted, width, em / 2));
-            text.Controls.Add(Line("Программа собирает сведения о компьютере (имя, серийный номер, сеть, ESET), хранит их на флешке и синхронизирует " +
-                "с облачной базой. Здесь же — настройка сети по профилям корпусов, имя компьютера и домен, быстрая проверка связи " +
-                "и серийные номера USB-накопителей.", Font, Theme.Text, width, em / 2));
+            text.Controls.Add(Line(L.T("CHAGEAR Тулбокс"), new Font("Segoe UI Semibold", 16f), Theme.Text, width, 0));
+            text.Controls.Add(Line(L.T("Учёт компьютеров при подготовке и выдаче сотрудникам"), Font, Theme.Text, width, 0));
+            text.Controls.Add(Line(L.T("Версия ") + AppVersion.Text + (PowerShell.IsAdministrator() ? L.T(" · запущена с правами администратора") : ""), Font, Theme.Muted, width, em / 2));
+            text.Controls.Add(Line(L.T("Программа собирает сведения о компьютере (имя, серийный номер, сеть, ESET), хранит их на флешке и синхронизирует ") +
+                L.T("с облачной базой. Здесь же — настройка сети по профилям корпусов, имя компьютера и домен, быстрая проверка связи ") +
+                L.T("и серийные номера USB-накопителей."), Font, Theme.Text, width, em / 2));
 
             Font bold = new Font(Font, FontStyle.Bold);
             for (int i = 0; i + 1 < Sections.Length; i += 2)
@@ -71,16 +74,16 @@ namespace CompInfo
                 text.Controls.Add(Line(Sections[i + 1], Font, Theme.Text, width, em / 2));
             }
 
-            text.Controls.Add(Line("Связь с разработчиком", bold, Theme.Text, width, 0));
-            Label copied = Line("← нажмите, чтобы скопировать", Font, Theme.Muted, width, 0);
+            text.Controls.Add(Line(L.T("Связь с разработчиком"), bold, Theme.Text, width, 0));
+            Label copied = Line(L.T("← нажмите, чтобы скопировать"), Font, Theme.Muted, width, 0);
             // Service computers have no mail client: a click copies the address instead of opening mailto.
             text.Controls.Add(LinkRow(Glyph.Person, Email, copied, delegate
             {
-                try { Clipboard.SetText(Email); copied.Text = "скопировано ✓"; } catch (Exception) { }
+                try { Clipboard.SetText(Email); copied.Text = L.T("скопировано ✓"); } catch (Exception) { }
             }));
-            text.Controls.Add(LinkRow(Glyph.Cloud, WebInterface, Line("веб-интерфейс базы", Font, Theme.Muted, width, 0), delegate { OpenSite(WebInterface); }));
+            text.Controls.Add(LinkRow(Glyph.Cloud, WebInterface, Line(L.T("веб-интерфейс базы"), Font, Theme.Muted, width, 0), delegate { OpenSite(WebInterface); }));
             text.Controls.Add(LinkRow(Glyph.Open, WebSite, null, delegate { OpenSite(WebSite); }));
-            text.Controls.Add(LinkRow(Glyph.Folder, "Открыть папку программы", null, delegate
+            text.Controls.Add(LinkRow(Glyph.Folder, L.T("Открыть папку программы"), null, delegate
             {
                 try { Process.Start("explorer.exe", "\"" + AppPaths.Root + "\""); } catch (Exception) { }
             }));

@@ -145,7 +145,7 @@ namespace CompInfo
                     if (metric < bestMetric) { bestMetric = metric; bestIndex = p.Key; }
                 }
             }
-            if (bestIndex < 0) throw new InvalidOperationException("Не найдено активное IPv4-подключение.");
+            if (bestIndex < 0) throw new InvalidOperationException(L.T("Не найдено активное IPv4-подключение."));
 
             Plan plan = new Plan();
             plan.AdapterIndex = (int)bestIndex;
@@ -160,13 +160,13 @@ namespace CompInfo
                 foreach (string s in Wmi.Strings(row, "ServerAddresses"))
                     if (!string.IsNullOrWhiteSpace(s) && !dns.Contains(s)) dns.Add(s);
 
-            Add(plan, "Свой IP", local);
-            Add(plan, "Основной шлюз", gateway);
+            Add(plan, L.T("Свой IP"), local);
+            Add(plan, L.T("Основной шлюз"), gateway);
             if (dns.Count == 0) Add(plan, "DNS", null);
             for (int i = 0; i < dns.Count; i++) Add(plan, "DNS " + (i + 1), dns[i]);
             // The domain host comes from the cloud network profiles (cached by synchronization).
-            if (profiles.DomainCheckHost != null && profiles.IsOfficeAddress(local)) Add(plan, "Домен", profiles.DomainCheckHost);
-            else Add(plan, "Интернет", "1.1.1.1");
+            if (profiles.DomainCheckHost != null && profiles.IsOfficeAddress(local)) Add(plan, L.T("Домен"), profiles.DomainCheckHost);
+            else Add(plan, L.T("Интернет"), "1.1.1.1");
             return plan;
         }
 
@@ -182,7 +182,7 @@ namespace CompInfo
         public static string Ping(string address, out string details)
         {
             details = "";
-            if (string.IsNullOrWhiteSpace(address)) return "адрес не настроен";
+            if (string.IsNullOrWhiteSpace(address)) return L.T("адрес не настроен");
             try
             {
                 using (Ping ping = new Ping())
@@ -190,7 +190,7 @@ namespace CompInfo
                     PingReply reply = ping.Send(address, 2000);
                     if (reply.Status == IPStatus.Success)
                     {
-                        details = string.Format("{0}, {1} мс, TTL={2}", reply.Address, reply.RoundtripTime, reply.Options != null ? reply.Options.Ttl : 0);
+                        details = string.Format(L.T("{0}, {1} мс, TTL={2}"), reply.Address, reply.RoundtripTime, reply.Options != null ? reply.Options.Ttl : 0);
                         return null;
                     }
                     return StatusText(reply.Status);
@@ -203,10 +203,10 @@ namespace CompInfo
         {
             switch (status)
             {
-                case IPStatus.TimedOut: return "нет ответа (истекло время ожидания)";
-                case IPStatus.DestinationHostUnreachable: return "узел недоступен";
-                case IPStatus.DestinationNetworkUnreachable: return "сеть недоступна";
-                default: return "нет ответа (" + status + ")";
+                case IPStatus.TimedOut: return L.T("нет ответа (истекло время ожидания)");
+                case IPStatus.DestinationHostUnreachable: return L.T("узел недоступен");
+                case IPStatus.DestinationNetworkUnreachable: return L.T("сеть недоступна");
+                default: return L.T("нет ответа (") + status + ")";
             }
         }
     }

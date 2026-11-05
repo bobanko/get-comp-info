@@ -32,6 +32,9 @@ namespace CompInfo
         // Called every time the page is opened.
         public virtual void Opened() { }
 
+        // A key combination the main window did not use (F5, Ctrl+S, ...): true when the page handled it.
+        public virtual bool Shortcut(Keys keys) { return false; }
+
         // A USB device was plugged in or removed.
         public virtual void DevicesChanged() { }
 
@@ -48,12 +51,12 @@ namespace CompInfo
         readonly Label description = new Label();
         Page current;
 
-        // Set when the window closes to be built again (theme change); the section to reopen.
+        // Set when the window closes to be built again (theme or language change); the section to reopen.
         public string ReopenPage;
 
         public MainForm()
         {
-            Text = "CHAGEAR Тулбокс " + AppVersion.Text + (PowerShell.IsAdministrator() ? " — администратор" : "");
+            Text = L.T("CHAGEAR Тулбокс") + " " + AppVersion.Text + (PowerShell.IsAdministrator() ? " — " + L.T("администратор") : "");
             Ui.WindowIcon(this);
             Font = Ui.BaseFont;
             BackColor = Theme.Back;
@@ -118,7 +121,7 @@ namespace CompInfo
             brand.Dock = DockStyle.Top;
             brand.Height = em * 3;
             ToolTip tip = new ToolTip();
-            tip.SetToolTip(brand, "Папка программы: " + AppPaths.Root);
+            tip.SetToolTip(brand, L.T("Папка программы:") + " " + AppPaths.Root);
             List<Control> stack = new List<Control>();
             stack.Add(brand);
             NavButton about = null;
@@ -129,6 +132,8 @@ namespace CompInfo
                 b.Height = em * 2;
                 Page target = p;
                 b.Click += delegate { Open(target); };
+                int number = pages.IndexOf(p) + 1;
+                tip.SetToolTip(b, (p.Title ?? "") + "   (Ctrl+" + (p is AboutPage ? 0 : number) + ")");
                 buttons.Add(b);
                 // «О программе» sits at the bottom, next to the theme switch.
                 if (p is AboutPage) { about = b; b.Dock = DockStyle.Bottom; } else stack.Add(b);
@@ -136,27 +141,26 @@ namespace CompInfo
             // Docked controls stack from the last added, so add them in reverse.
             for (int i = stack.Count - 1; i >= 0; i--) menu.Controls.Add(stack[i]);
 
-            NavButton theme = new NavButton(null);
-            theme.Text = ThemeTitle();
-            theme.Glyph = Glyph.Theme;
-            theme.Dock = DockStyle.Bottom;
-            theme.Height = em * 2;
-            theme.Click += delegate { NextTheme(); };
-            tip.SetToolTip(theme, "Сменить оформление: как в Windows, светлое, тёмное");
-            menu.Controls.Add(theme);
+            // Bottom: theme (system in the middle) and language switches, then «О программе».
+            string[] themes = { "light", "system", "dark" };
+            Segmented theme = new Segmented(new[] { Glyph.Sun, Glyph.Theme, Glyph.Moon }, true,
+                new[] { L.T("Светлая тема"), L.T("Как в Windows"), L.T("Тёмная тема") }, Array.IndexOf(themes, Theme.Choice) < 0 ? 1 : Array.IndexOf(themes, Theme.Choice));
+            theme.Changed += delegate (int i) { Theme.Choice = themes[i]; Settings.Set("theme", themes[i]); Rebuild(); };
+            Segmented language = new Segmented(new[] { "УКР", "ENG", "РУС" }, false,
+                new[] { "Українська", "English", "Русский" }, Array.IndexOf(L.Codes, L.Code));
+            language.Changed += delegate (int i) { L.Choice = L.Codes[i]; Settings.Set("language", L.Codes[i]); Rebuild(); };
+            foreach (Segmented s in new[] { language, theme })
+            {
+                s.Dock = DockStyle.Bottom;
+                s.Height = em * 3 / 2;
+                Panel gap = new Panel();
+                gap.Dock = DockStyle.Bottom;
+                gap.Height = em / 3;
+                gap.BackColor = Theme.Sidebar;
+                menu.Controls.Add(gap);
+                menu.Controls.Add(s);
+            }
             menu.Controls.Add(about);
-        }
-
-        static string ThemeTitle()
-        {
-            return Theme.Choice == "dark" ? "Тема: тёмная" : Theme.Choice == "light" ? "Тема: светлая" : "Тема: как в Windows";
-        }
-
-        void NextTheme()
-        {
-            Theme.Choice = Theme.Choice == "system" ? "light" : Theme.Choice == "light" ? "dark" : "system";
-            Settings.Set("theme", Theme.Choice);
-            Rebuild();
         }
 
         // Builds the window again (colours are read while controls are built).
@@ -220,11 +224,35 @@ namespace CompInfo
             try { Process.Start(info); }
             catch (Win32Exception ex)
             {
-                if (ex.NativeErrorCode != 1223) Ui.Error(this, "Не удалось запустить программу с правами администратора: " + ex.Message);
+                if (ex.NativeErrorCode != 1223) Ui.Error(this, L.T("Не удалось запустить программу с правами администратора: ") + ex.Message);
                 return;
             }
             ReopenPage = null;
             Close();
+        }
+
+        // Keyboard: Ctrl+1…9 sections, Ctrl+0 «О программе», Ctrl+Tab / Ctrl+PageDown next section,
+        // Ctrl+Shift+Tab / Ctrl+PageUp previous; everything else (F5, Ctrl+S, Ctrl+F…) goes to the open section.
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            Keys key = keyData & Keys.KeyCode;
+            bool ctrl = (keyData & Keys.Control) != 0, shift = (keyData & Keys.Shift) != 0, alt = (keyData & Keys.Alt) != 0;
+            if (ctrl && !alt && !shift && key >= Keys.D0 && key <= Keys.D9)
+            {
+                int n = key - Keys.D0;
+                Page p = n == 0 ? pages[pages.Count - 1] : n <= pages.Count - 1 ? pages[n - 1] : null;
+                if (p != null) Open(p);
+                return true;
+            }
+            if (ctrl && !alt && (key == Keys.Tab || key == Keys.PageDown || key == Keys.PageUp) && current != null)
+            {
+                int step = key == Keys.PageUp || (key == Keys.Tab && shift) ? -1 : 1;
+                int i = (pages.IndexOf(current) + step + pages.Count) % pages.Count;
+                Open(pages[i]);
+                return true;
+            }
+            if (current != null && current.Shortcut(keyData)) return true;
+            return base.ProcessCmdKey(ref msg, keyData);
         }
 
         protected override void WndProc(ref Message m)
@@ -256,7 +284,7 @@ namespace CompInfo
                     int colorIndex = 0;
                     int top = (em * 3 / 2 - big.Height) / 2;
                     TextFormatFlags flags = TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix;
-                    foreach (char ch in "CHAGEAR ТУЛБОКС")
+                    foreach (char ch in "CHAGEAR " + L.T("ТУЛБОКС"))
                     {
                         if (ch == ' ')
                         {
@@ -274,7 +302,7 @@ namespace CompInfo
                         colorIndex++;
                         x += size.Width;
                     }
-                    string version = "версия " + AppVersion.Text + (PowerShell.IsAdministrator() ? " · админ" : "");
+                    string version = L.T("версия") + " " + AppVersion.Text + (PowerShell.IsAdministrator() ? " · " + L.T("админ") : "");
                     TextRenderer.DrawText(e.Graphics, version, Font, new Point(em / 3, em * 3 / 2 + em / 8), Theme.Muted, flags);
                 }
             }

@@ -34,7 +34,7 @@ namespace CompInfo
         public static Dictionary<string, object> First(string scope, string wql)
         {
             List<Dictionary<string, object>> rows = Query(scope, wql);
-            if (rows.Count == 0) throw new InvalidOperationException("WMI не вернул данные: " + wql);
+            if (rows.Count == 0) throw new InvalidOperationException(L.T("WMI не вернул данные: ") + wql);
             return rows[0];
         }
 
@@ -165,14 +165,14 @@ namespace CompInfo
         public static bool CheckEset()
         {
             try { return Wmi.Query(Wmi.Cimv2, "SELECT Name FROM Win32_Service WHERE Name='ekrn'").Count > 0; }
-            catch (Exception e) { throw new InvalidOperationException("Проверка ESET не удалась: " + e.Message, e); }
+            catch (Exception e) { throw new InvalidOperationException(L.T("Проверка ESET не удалась: ") + e.Message, e); }
         }
 
         public static string EsetText(object value)
         {
-            if (value == null) return "Не проверено";
-            if (value is bool && (bool)value) return "Установлен";
-            return "Не установлен";
+            if (value == null) return L.T("Не проверено");
+            if (value is bool && (bool)value) return L.T("Установлен");
+            return L.T("Не установлен");
         }
 
         // First IPv4 address that is not link-local and not on a loopback, virtual or VPN interface.

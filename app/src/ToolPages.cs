@@ -16,13 +16,14 @@ namespace CompInfo
         public UsbPage()
         {
             Key = "usb";
-            Title = "USB-накопители";
-            Description = "Серийные номера подключённых флешек и USB-дисков. Список обновляется сам, когда накопитель подключают или отключают.";
+            Title = L.T("USB-накопители");
+            Description = L.T("Серийные номера подключённых флешек и USB-дисков. Список обновляется сам, когда накопитель подключают или отключают.");
             Icon = Glyph.Usb;
             int em = Font.Height;
 
-            Button refresh = Ui.Secondary("Обновить", Glyph.Refresh, Font);
+            Button refresh = Ui.Secondary(L.T("Обновить"), Glyph.Refresh, Font);
             refresh.Click += delegate { Reload(); };
+            Ui.Keys(refresh, "F5");
             FlowLayoutPanel toolbar = Ui.Row();
             toolbar.Controls.Add(refresh);
             toolbar.Dock = DockStyle.Top;
@@ -30,10 +31,10 @@ namespace CompInfo
 
             grid = Ui.Grid(Font);
             grid.Dock = DockStyle.Fill;
-            grid.Columns.Add("disk", "Диск");
-            grid.Columns.Add("name", "Название");
-            grid.Columns.Add("size", "Объём");
-            grid.Columns.Add("serial", "Серийный номер");
+            grid.Columns.Add("disk", L.T("Диск"));
+            grid.Columns.Add("name", L.T("Название"));
+            grid.Columns.Add("size", L.T("Объём"));
+            grid.Columns.Add("serial", L.T("Серийный номер"));
             DataGridViewButtonColumn copy = new DataGridViewButtonColumn();
             copy.HeaderText = "";
             copy.FlatStyle = FlatStyle.Flat;
@@ -64,7 +65,13 @@ namespace CompInfo
             Controls.Add(status);
         }
 
-        public override void Opened() { Reload(); }
+        public override void Opened() { Reload(); grid.Focus(); }
+
+        public override bool Shortcut(Keys keys)
+        {
+            if (keys == Keys.F5) { Reload(); return true; }
+            return false;
+        }
 
         public override void DevicesChanged()
         {
@@ -86,8 +93,8 @@ namespace CompInfo
                 foreach (UsbDisk d in disks)
                 {
                     bool has = d.Serial.Length > 0;
-                    int i = grid.Rows.Add("Диск " + d.Number, d.Name, string.Format("{0:N1} ГБ", d.Size / 1073741824.0),
-                        has ? d.Serial : "устройство не сообщает номер", has ? "Копировать" : "");
+                    int i = grid.Rows.Add(L.T("Диск ") + d.Number, d.Name, string.Format(L.T("{0:N1} ГБ"), d.Size / 1073741824.0),
+                        has ? d.Serial : L.T("устройство не сообщает номер"), has ? L.T("Копировать") : "");
                     DataGridViewRow row = grid.Rows[i];
                     row.Tag = d;
                     if (!has)
@@ -98,12 +105,12 @@ namespace CompInfo
                         row.Cells[4].Style.BackColor = row.Cells[4].Style.SelectionBackColor = Theme.Surface;
                     }
                 }
-                if (disks.Count == 0) status.Set(Glyph.Info, "USB-накопители не найдены. Подключите флешку.", Theme.Warn);
-                else status.Set(Glyph.Info, "Кнопка «Копировать», двойной щелчок или Ctrl+C копирует серийный номер.", Theme.Muted);
+                if (disks.Count == 0) status.Set(Glyph.Info, L.T("USB-накопители не найдены. Подключите флешку."), Theme.Warn);
+                else status.Set(Glyph.Info, L.T("Кнопка «Копировать», двойной щелчок или Ctrl+C копирует серийный номер."), Theme.Muted);
             }
             catch (Exception e)
             {
-                status.Set(Glyph.Warning, "Не удалось получить список USB-накопителей: " + e.Message, Theme.Bad);
+                status.Set(Glyph.Warning, L.T("Не удалось получить список USB-накопителей: ") + e.Message, Theme.Bad);
             }
             finally
             {
@@ -119,9 +126,9 @@ namespace CompInfo
             try
             {
                 Clipboard.SetText(d.Serial);
-                status.Set(Glyph.Check, "Серийный номер скопирован: " + d.Serial, Theme.Good);
+                status.Set(Glyph.Check, L.T("Серийный номер скопирован: ") + d.Serial, Theme.Good);
             }
-            catch (Exception e) { status.Set(Glyph.Warning, "Не удалось скопировать: " + e.Message, Theme.Bad); }
+            catch (Exception e) { status.Set(Glyph.Warning, L.T("Не удалось скопировать: ") + e.Message, Theme.Bad); }
         }
     }
 
@@ -140,13 +147,14 @@ namespace CompInfo
         public PingPage()
         {
             Key = "ping";
-            Title = "Быстрый ping";
-            Description = "Свой IP, шлюз, DNS, затем домен (в сети корпуса) или интернет. Один запрос на узел, до 2 секунд, остановка при первом сбое.";
+            Title = L.T("Быстрый ping");
+            Description = L.T("Свой IP, шлюз, DNS, затем домен (в сети корпуса) или интернет. Один запрос на узел, до 2 секунд, остановка при первом сбое.");
             Icon = Glyph.Ping;
             int em = Font.Height;
 
-            run = Ui.Primary("Проверить ещё раз", Glyph.Refresh, Font);
+            run = Ui.Primary(L.T("Проверить ещё раз"), Glyph.Refresh, Font);
             run.Click += delegate { Run(); };
+            Ui.Keys(run, "F5");
             FlowLayoutPanel toolbar = Ui.Row();
             toolbar.Controls.Add(run);
             toolbar.Dock = DockStyle.Top;
@@ -168,9 +176,9 @@ namespace CompInfo
             state.Width = em * 2;
             state.DefaultCellStyle.NullValue = null;
             grid.Columns.Add(state);
-            grid.Columns.Add("target", "Узел");
-            grid.Columns.Add("address", "Адрес");
-            grid.Columns.Add("result", "Результат");
+            grid.Columns.Add("target", L.T("Узел"));
+            grid.Columns.Add("address", L.T("Адрес"));
+            grid.Columns.Add("result", L.T("Результат"));
             grid.Columns[1].AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
             grid.Columns[2].AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
             grid.Columns[3].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
@@ -187,6 +195,12 @@ namespace CompInfo
 
         public override void Opened() { Run(); }
 
+        public override bool Shortcut(Keys keys)
+        {
+            if (keys == Keys.F5) { Run(); return true; }
+            return false;
+        }
+
         void SetRow(int index, int state, string text)
         {
             DataGridViewRow row = grid.Rows[index];
@@ -202,27 +216,27 @@ namespace CompInfo
             run.Enabled = false;
             grid.Rows.Clear();
             summary.Clear();
-            adapter.Set(Glyph.More, "Определение активного адаптера и основного маршрута…", Theme.Muted);
+            adapter.Set(Glyph.More, L.T("Определение активного адаптера и основного маршрута…"), Theme.Muted);
             try
             {
                 NetworkProfiles profiles = NetworkProfiles.Read(AppPaths.File("network-profiles.json"));
                 QuickPing.Plan plan = await Task.Run(delegate { return QuickPing.Prepare(profiles); });
-                adapter.Set(Glyph.Network, "Адаптер: " + plan.AdapterName + " (индекс " + plan.AdapterIndex + ")", Theme.Text);
-                foreach (QuickPing.Target t in plan.Targets) grid.Rows.Add(icons[Waiting], t.Label, t.Address ?? "не настроен", "");
+                adapter.Set(Glyph.Network, L.T("Адаптер: ") + plan.AdapterName + L.T(" (индекс ") + plan.AdapterIndex + ")", Theme.Text);
+                foreach (QuickPing.Target t in plan.Targets) grid.Rows.Add(icons[Waiting], t.Label, t.Address ?? L.T("не настроен"), "");
                 grid.ClearSelection();
                 for (int i = 0; i < plan.Targets.Count; i++)
                 {
                     QuickPing.Target t = plan.Targets[i];
-                    SetRow(i, Running, "отправка запроса, ожидание ответа…");
+                    SetRow(i, Running, L.T("отправка запроса, ожидание ответа…"));
                     string details = null;
                     string error = await Task.Run(delegate { string d; string e = QuickPing.Ping(t.Address, out d); details = d; return e; });
-                    if (error == null) { SetRow(i, Ok, "ответил: " + details); continue; }
+                    if (error == null) { SetRow(i, Ok, L.T("ответил: ") + details); continue; }
                     SetRow(i, Failed, error);
-                    for (int j = i + 1; j < plan.Targets.Count; j++) SetRow(j, Skipped, "не проверялся");
-                    summary.Set(Glyph.Warning, "Проверка остановлена на узле «" + t.Label + "». Следующие узлы не проверялись.", Theme.Warn);
+                    for (int j = i + 1; j < plan.Targets.Count; j++) SetRow(j, Skipped, L.T("не проверялся"));
+                    summary.Set(Glyph.Warning, L.T("Проверка остановлена на узле «") + t.Label + L.T("». Следующие узлы не проверялись."), Theme.Warn);
                     return;
                 }
-                summary.Set(Glyph.Check, "Все узлы ответили.", Theme.Good);
+                summary.Set(Glyph.Check, L.T("Все узлы ответили."), Theme.Good);
             }
             catch (Exception e)
             {

@@ -24,9 +24,9 @@ namespace CompInfo
         public CollectPage()
         {
             Key = "collect";
-            Title = "Сбор информации о компьютере";
-            NavTitle = "Сбор информации";
-            Description = "Имя, серийный номер, сеть и другие сведения об этом компьютере сохраняются в базу на флешке.";
+            Title = L.T("Сбор информации о компьютере");
+            NavTitle = L.T("Сбор информации");
+            Description = L.T("Имя, серийный номер, сеть и другие сведения об этом компьютере сохраняются в базу на флешке.");
             Icon = Glyph.Computer;
             int em = Font.Height;
 
@@ -38,9 +38,9 @@ namespace CompInfo
             state.Margin = new Padding(0, 0, 0, em / 2);
 
             grid = Ui.Grid(Font);
-            grid.Columns.Add("field", "Поле");
-            grid.Columns.Add("current", "Сейчас на компьютере");
-            grid.Columns.Add("saved", "Сохранено в базе");
+            grid.Columns.Add("field", L.T("Поле"));
+            grid.Columns.Add("current", L.T("Сейчас на компьютере"));
+            grid.Columns.Add("saved", L.T("Сохранено в базе"));
             grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
             grid.Columns[0].FillWeight = 24;
             grid.Columns[1].FillWeight = 38;
@@ -49,7 +49,7 @@ namespace CompInfo
             foreach (DataGridViewColumn c in grid.Columns) c.SortMode = DataGridViewColumnSortMode.NotSortable;
             grid.Margin = new Padding(0, 0, 0, em / 2);
 
-            Label commentLabel = Ui.Text("Комментарий (необязательно): кабинет, ответственный, особенности", Font, Theme.Text);
+            Label commentLabel = Ui.Text(L.T("Комментарий (необязательно): кабинет, ответственный, особенности"), Font, Theme.Text);
             commentLabel.Margin = new Padding(0, 0, 0, em / 4);
             comment.MaxLength = 500;
             comment.Margin = new Padding(0, 0, 0, em / 2);
@@ -59,16 +59,18 @@ namespace CompInfo
                 if (k.KeyCode == Keys.Enter && save.Enabled) { k.SuppressKeyPress = true; Save(); }
             };
 
-            save = Ui.Primary("Сохранить в базу", Glyph.Save, Font);
+            save = Ui.Primary(L.T("Сохранить в базу"), Glyph.Save, Font);
             save.Click += delegate { Save(); };
-            again = Ui.Secondary("Собрать заново", Glyph.Refresh, Font);
+            again = Ui.Secondary(L.T("Собрать заново"), Glyph.Refresh, Font);
             again.Click += delegate { Collect(); };
+            Ui.Keys(save, "Ctrl+S");
+            Ui.Keys(again, "F5");
             FlowLayoutPanel actions = Ui.Row();
             actions.Controls.Add(save);
             actions.Controls.Add(again);
             actions.Margin = new Padding(0, 0, 0, em / 3);
 
-            showFile.Text = "Показать файл в папке";
+            showFile.Text = L.T("Показать файл в папке");
             showFile.AutoSize = true;
             showFile.LinkColor = showFile.ActiveLinkColor = Theme.Info;
             showFile.Margin = new Padding(em + em / 3, 0, 0, 0);
@@ -102,6 +104,14 @@ namespace CompInfo
         public override void Opened()
         {
             if (!started) { started = true; Collect(); }
+            else comment.Focus();
+        }
+
+        public override bool Shortcut(Keys keys)
+        {
+            if (keys == Keys.F5) { Collect(); return true; }
+            if (keys == (Keys.Control | Keys.S)) { if (save.Enabled) Save(); return true; }
+            return false;
         }
 
         void SetBusy(bool value)
@@ -120,7 +130,7 @@ namespace CompInfo
             grid.Rows.Clear();
             result.Clear();
             showFile.Visible = false;
-            state.Set(Glyph.More, "Собираем информацию о компьютере…", Theme.Muted);
+            state.Set(Glyph.More, L.T("Собираем информацию о компьютере…"), Theme.Muted);
             SetBusy(true);
             string dataPath = AppPaths.Data;
             try
@@ -128,30 +138,32 @@ namespace CompInfo
                 Collection c = await Task.Run(delegate { return Collection.Start(dataPath); });
                 if (c.Legacy != null)
                 {
-                    string text = "Найдена старая запись без UUID и серийного номера с таким же именем компьютера:\n\n" +
+                    string text = L.T("Найдена старая запись без UUID и серийного номера с таким же именем компьютера:\n\n") +
                         System.IO.Path.GetFileName(c.Legacy.Path) + "\n" +
-                        "Имя: " + c.Legacy.Record.Text("hostname") + "\nСобрана: " + Fmt.Date(c.Legacy.Record.Text("collectedAt")) +
-                        "\nКомментарий: " + (c.Legacy.Record.Text("comment") ?? "") +
-                        "\n\nЭто запись именно этого компьютера? Если да, она будет обновлена и привязана к этой установке Windows.";
-                    if (Ui.Ask(FindForm(), "Старая запись", text, Glyph.Info, Theme.Info, "Да, это этот компьютер", "Нет") != 0)
+                        L.T("Имя: ") + c.Legacy.Record.Text("hostname") + L.T("\nСобрана: ") + Fmt.Date(c.Legacy.Record.Text("collectedAt")) +
+                        L.T("\nКомментарий: ") + (c.Legacy.Record.Text("comment") ?? "") +
+                        L.T("\n\nЭто запись именно этого компьютера? Если да, она будет обновлена и привязана к этой установке Windows.");
+                    if (Ui.Ask(FindForm(), L.T("Старая запись"), text, Glyph.Info, Theme.Info, L.T("Да, это этот компьютер"), L.T("Нет")) != 0)
                     {
-                        state.Set(Glyph.Info, "Сбор отменён: старую запись не привязали. Нажмите «Собрать заново», чтобы решить ещё раз.", Theme.Warn);
+                        state.Set(Glyph.Info, L.T("Сбор отменён: старую запись не привязали. Нажмите «Собрать заново», чтобы решить ещё раз."), Theme.Warn);
                         return;
                     }
                     c.BindLegacy(dataPath);
                 }
                 if (c.PreviousError != null)
                 {
-                    state.Set(Glyph.Warning, "Не удалось прочитать сохранённую запись этого компьютера: " + c.PreviousError, Theme.Bad);
+                    state.Set(Glyph.Warning, L.T("Не удалось прочитать сохранённую запись этого компьютера: ") + c.PreviousError, Theme.Bad);
                     return;
                 }
                 collection = c;
                 comment.Text = c.PreviousComment;
                 ShowComparison();
+                comment.Focus();
+                comment.SelectionStart = comment.Text.Length;
             }
             catch (Exception e)
             {
-                state.Set(Glyph.Warning, "Не удалось собрать информацию: " + e.Message, Theme.Bad);
+                state.Set(Glyph.Warning, L.T("Не удалось собрать информацию: ") + e.Message, Theme.Bad);
             }
             finally { SetBusy(false); }
         }
@@ -162,7 +174,7 @@ namespace CompInfo
             List<Collection.Field> fields = c.Compare(c.Build(comment.Text, ""));
             bool hasPrevious = c.Previous != null;
             grid.Columns[2].Visible = hasPrevious;
-            grid.Columns[1].HeaderText = hasPrevious ? "Сейчас на компьютере" : "Значение";
+            grid.Columns[1].HeaderText = hasPrevious ? L.T("Сейчас на компьютере") : L.T("Значение");
             int changes = 0;
             if (grid.Rows.Count != fields.Count) { grid.Rows.Clear(); foreach (Collection.Field f in fields) grid.Rows.Add(); }
             for (int i = 0; i < fields.Count; i++)
@@ -183,19 +195,19 @@ namespace CompInfo
             grid.ClearSelection();
 
             if (!hasPrevious)
-                state.Set(Glyph.Info, "Этого компьютера ещё нет в базе — будет создана новая запись.", Theme.Info);
+                state.Set(Glyph.Info, L.T("Этого компьютера ещё нет в базе — будет создана новая запись."), Theme.Info);
             else if (changes == 0)
-                state.Set(Glyph.Check, "Запись уже есть в базе и совпадает с текущими данными, сохранять нечего. Предыдущий сбор: " +
+                state.Set(Glyph.Check, L.T("Запись уже есть в базе и совпадает с текущими данными, сохранять нечего. Предыдущий сбор: ") +
                     Fmt.Date(c.Previous.Text("collectedAt")) + ".", Theme.Good);
             else
-                state.Set(Glyph.Warning, "Запись уже есть в базе. Изменения (" + changes + ") выделены — сохраните, чтобы обновить запись. Предыдущий сбор: " +
+                state.Set(Glyph.Warning, L.T("Запись уже есть в базе. Изменения (") + changes + L.T(") выделены — сохраните, чтобы обновить запись. Предыдущий сбор: ") +
                     Fmt.Date(c.Previous.Text("collectedAt")) + ".", Theme.Warn);
             SetBusy(false);
         }
 
         static string Shown(string value)
         {
-            return string.IsNullOrEmpty(value) ? "(не указано)" : value;
+            return string.IsNullOrEmpty(value) ? L.T("(не указано)") : value;
         }
 
         void Save()
@@ -206,12 +218,12 @@ namespace CompInfo
                 JsonObject saved = collection.Save(comment.Text);
                 collection.Previous = saved;
                 ShowComparison();
-                result.Set(Glyph.Check, "Сохранено " + DateTime.Now.ToString("HH:mm") + ": " + System.IO.Path.GetFileName(collection.FilePath), Theme.Good);
+                result.Set(Glyph.Check, L.T("Сохранено ") + DateTime.Now.ToString("HH:mm") + ": " + System.IO.Path.GetFileName(collection.FilePath), Theme.Good);
                 showFile.Visible = true;
             }
             catch (Exception e)
             {
-                result.Set(Glyph.Warning, "Не удалось сохранить: " + e.Message, Theme.Bad);
+                result.Set(Glyph.Warning, L.T("Не удалось сохранить: ") + e.Message, Theme.Bad);
             }
         }
     }

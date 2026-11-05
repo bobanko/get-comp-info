@@ -39,9 +39,9 @@ namespace CompInfo
             good = bad = false;
             switch (a.Status)
             {
-                case "Disabled": bad = true; return "отключён — будет включён";
-                case "Up": good = true; return "включён";
-                case "Disconnected": return "включён, нет подключения";
+                case "Disabled": bad = true; return L.T("отключён — будет включён");
+                case "Up": good = true; return L.T("включён");
+                case "Disconnected": return L.T("включён, нет подключения");
                 default: return a.Status;
             }
         }
@@ -90,9 +90,9 @@ namespace CompInfo
         {
             List<string[]> lines = new List<string[]>();
             foreach (Dictionary<string, object> row in Wmi.Query(Wmi.Net, "SELECT IPAddress, PrefixLength FROM MSFT_NetIPAddress WHERE AddressFamily=2 AND InterfaceIndex=" + index))
-                lines.Add(new[] { "IPv4", Wmi.Str(row, "IPAddress") + " (маска " + NetworkProfiles.MaskFromPrefix((int)Wmi.Num(row, "PrefixLength")) + ")" });
+                lines.Add(new[] { "IPv4", Wmi.Str(row, "IPAddress") + L.T(" (маска ") + NetworkProfiles.MaskFromPrefix((int)Wmi.Num(row, "PrefixLength")) + ")" });
             foreach (Dictionary<string, object> row in Wmi.Query(Wmi.Net, "SELECT NextHop FROM MSFT_NetRoute WHERE AddressFamily=2 AND DestinationPrefix='0.0.0.0/0' AND InterfaceIndex=" + index))
-                lines.Add(new[] { "Шлюз", Wmi.Str(row, "NextHop") });
+                lines.Add(new[] { L.T("Шлюз"), Wmi.Str(row, "NextHop") });
             int n = 1;
             foreach (Dictionary<string, object> row in Wmi.Query(Wmi.Net, "SELECT ServerAddresses FROM MSFT_DNSClientServerAddress WHERE AddressFamily=2 AND InterfaceIndex=" + index))
                 foreach (string s in Wmi.Strings(row, "ServerAddresses")) lines.Add(new[] { "DNS " + n++, s });
@@ -110,7 +110,7 @@ namespace CompInfo
         public string InternetPrefix = "IF";
         public string DomainPrefix = "FR";
 
-        public const string NoDomain = "Домен не задан: синхронизируйтесь с облаком, чтобы загрузить профили сети (в веб-интерфейсе — страница «Сеть», поле «Домен»).";
+        public static string NoDomain { get { return L.T("Домен не задан: синхронизируйтесь с облаком, чтобы загрузить профили сети (в веб-интерфейсе — страница «Сеть», поле «Домен»)."); } }
 
         public static ComputerPolicy Load()
         {
@@ -143,11 +143,11 @@ namespace CompInfo
         // Null when the name is valid, otherwise the reason.
         public static string Issue(string name, string prefix, ComputerPolicy p)
         {
-            if (prefix != p.InternetPrefix && prefix != p.DomainPrefix) return "Неизвестный тип сети.";
-            if (name.Length > 15) return "Полное имя должно содержать не больше 15 символов.";
+            if (prefix != p.InternetPrefix && prefix != p.DomainPrefix) return L.T("Неизвестный тип сети.");
+            if (name.Length > 15) return L.T("Полное имя должно содержать не больше 15 символов.");
             string start = Regex.Escape(prefix + "-" + p.UnitCode + "-");
             if (!Regex.IsMatch(name, "^" + start + "[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?$"))
-                return "Нужно имя " + prefix + "-" + p.UnitCode + "-...: латиница, цифры и дефис; окончание без дефиса по краям.";
+                return L.T("Нужно имя ") + prefix + "-" + p.UnitCode + L.T("-...: латиница, цифры и дефис; окончание без дефиса по краям.");
             return null;
         }
 
@@ -258,8 +258,8 @@ namespace CompInfo
 
         public static void AssertAllowed(ComputerState s)
         {
-            if (s.DomainRole >= 4) throw new InvalidOperationException("Изменения на контроллере домена не поддерживаются.");
-            if (s.HasUnfinishedChange) throw new InvalidOperationException("Есть незавершённое изменение. Сначала перезагрузите компьютер и проверьте результат.");
+            if (s.DomainRole >= 4) throw new InvalidOperationException(L.T("Изменения на контроллере домена не поддерживаются."));
+            if (s.HasUnfinishedChange) throw new InvalidOperationException(L.T("Есть незавершённое изменение. Сначала перезагрузите компьютер и проверьте результат."));
         }
 
         // DNS knows the domain controllers and one of them answers. Returns their names.
@@ -292,7 +292,7 @@ namespace CompInfo
             string name = parts[parts.Length - 1].Trim();
             if ((parts.Length > 1 && (parts.Length != 2 || !(parts[0] == "." || string.Equals(parts[0], computerName, StringComparison.OrdinalIgnoreCase)))) ||
                 name.Contains("@") || name.Length == 0)
-                throw new InvalidOperationException("Укажите локальную учётную запись: .\\имя или ИМЯ-ПК\\имя.");
+                throw new InvalidOperationException(L.T("Укажите локальную учётную запись: .\\имя или ИМЯ-ПК\\имя."));
             using (PrincipalContext machine = new PrincipalContext(ContextType.Machine))
             using (UserPrincipal user = UserPrincipal.FindByIdentity(machine, IdentityType.SamAccountName, name))
             using (GroupPrincipal admins = GroupPrincipal.FindByIdentity(machine, IdentityType.Sid, "S-1-5-32-544"))
@@ -304,11 +304,11 @@ namespace CompInfo
                     foreach (Principal member in admins.GetMembers(false))
                         using (member) if (member.Sid == user.Sid) ok = true;
                 }
-                if (!ok) throw new InvalidOperationException("Нужен включённый локальный пользователь, непосредственно входящий в группу администраторов.");
+                if (!ok) throw new InvalidOperationException(L.T("Нужен включённый локальный пользователь, непосредственно входящий в группу администраторов."));
             }
             IntPtr token;
             if (!LogonUser(name, computerName, password, 2, 0, out token))
-                throw new InvalidOperationException("Локальный вход не подтверждён (код " + Marshal.GetLastWin32Error() + "). Проверьте пароль и право локального входа.");
+                throw new InvalidOperationException(L.T("Локальный вход не подтверждён (код ") + Marshal.GetLastWin32Error() + L.T("). Проверьте пароль и право локального входа."));
             CloseHandle(token);
             return name;
         }
@@ -326,7 +326,7 @@ namespace CompInfo
         public static bool Apply(Request r, ComputerPolicy p)
         {
             if (p.DomainName == null && (r.Operation != "Rename" || ComputerState.Read().PartOfDomain)) throw new InvalidOperationException(ComputerPolicy.NoDomain);
-            if (!PowerShell.IsAdministrator()) throw new InvalidOperationException("Нужны права локального администратора.");
+            if (!PowerShell.IsAdministrator()) throw new InvalidOperationException(L.T("Нужны права локального администратора."));
             ComputerState state = ComputerState.Read();
             AssertAllowed(state);
             string prefix = null;
@@ -337,28 +337,28 @@ namespace CompInfo
                 if (issue != null) throw new InvalidOperationException(issue);
             }
             if (state.PartOfDomain && !string.Equals(state.Domain, p.DomainName, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("Компьютер состоит в другом домене. Автоматический перенос не поддерживается.");
+                throw new InvalidOperationException(L.T("Компьютер состоит в другом домене. Автоматический перенос не поддерживается."));
             if (r.Operation == "Rename" && state.PartOfDomain && prefix != p.DomainPrefix)
-                throw new InvalidOperationException("Сначала выведите компьютер из домена, затем назначайте имя интернет-сети.");
+                throw new InvalidOperationException(L.T("Сначала выведите компьютер из домена, затем назначайте имя интернет-сети."));
             if (r.Operation == "Rename" && string.Equals(state.Name, r.Name, StringComparison.OrdinalIgnoreCase)) return false;
             if (r.Operation == "Join")
             {
-                if (state.PartOfDomain) throw new InvalidOperationException("Компьютер уже состоит в домене.");
-                if (prefix != p.DomainPrefix) throw new InvalidOperationException("Для домена требуется префикс доменной сети.");
+                if (state.PartOfDomain) throw new InvalidOperationException(L.T("Компьютер уже состоит в домене."));
+                if (prefix != p.DomainPrefix) throw new InvalidOperationException(L.T("Для домена требуется префикс доменной сети."));
                 if (state.ProductType == 1)
                 {
                     string edition;
                     using (RegistryKey k = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion")) edition = Convert.ToString(k.GetValue("EditionID"));
                     if (!Regex.IsMatch(edition ?? "", "^(Professional|Enterprise|Education|IoTEnterprise|Ultimate)", RegexOptions.IgnoreCase))
-                        throw new InvalidOperationException("Эта редакция Windows не поддерживается для ввода в домен.");
+                        throw new InvalidOperationException(L.T("Эта редакция Windows не поддерживается для ввода в домен."));
                 }
             }
-            if (r.Operation == "Leave" && !state.PartOfDomain) throw new InvalidOperationException("Компьютер уже находится в рабочей группе.");
+            if (r.Operation == "Leave" && !state.PartOfDomain) throw new InvalidOperationException(L.T("Компьютер уже находится в рабочей группе."));
             if (r.Operation == "Leave") CheckLocalAdministrator(r.LocalUser, r.LocalPassword, state.Name);
             bool needsDomain = r.Operation != "Rename" || state.PartOfDomain;
             if (needsDomain)
             {
-                if (string.IsNullOrEmpty(r.DomainUser)) throw new InvalidOperationException("Нужны доменные учётные данные.");
+                if (string.IsNullOrEmpty(r.DomainUser)) throw new InvalidOperationException(L.T("Нужны доменные учётные данные."));
                 TestDomain(p.DomainName);
             }
             string targetName = r.Operation == "Leave" ? state.Name : r.Name;
@@ -389,7 +389,7 @@ namespace CompInfo
             Dictionary<string, object> bios = Wmi.First(Wmi.Cimv2, "SELECT SerialNumber FROM Win32_BIOS");
             Identity.Result identity = Identity.Find(Wmi.Str(product, "UUID"), (Wmi.Str(bios, "SerialNumber") ?? "").Trim(), Identity.WindowsInstallationId(), dataPath);
             if (identity.Path == null && Identity.FindUnboundLegacy(dataPath, Environment.MachineName).Count > 0)
-                throw new InvalidOperationException("Есть старая запись без устойчивого ID. Сначала выполните «Сбор информации» и подтвердите её привязку, затем изменяйте имя.");
+                throw new InvalidOperationException(L.T("Есть старая запись без устойчивого ID. Сначала выполните «Сбор информации» и подтвердите её привязку, затем изменяйте имя."));
         }
 
         public static void Restart()

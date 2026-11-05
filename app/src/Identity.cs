@@ -35,10 +35,10 @@ namespace CompInfo
             using (RegistryKey hive = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, view))
             using (RegistryKey key = hive.OpenSubKey(@"SOFTWARE\Microsoft\Cryptography"))
             {
-                if (key == null) throw new InvalidOperationException("Не удалось прочитать идентификатор установки Windows.");
+                if (key == null) throw new InvalidOperationException(L.T("Не удалось прочитать идентификатор установки Windows."));
                 id = NormalizeUuid(key.GetValue("MachineGuid"));
             }
-            if (id == null) throw new InvalidOperationException("Идентификатор установки Windows отсутствует. Сбор остановлен: имя компьютера как ID не используется.");
+            if (id == null) throw new InvalidOperationException(L.T("Идентификатор установки Windows отсутствует. Сбор остановлен: имя компьютера как ID не используется."));
             return id;
         }
 
@@ -72,7 +72,7 @@ namespace CompInfo
             else if (source == "serial") id = serial.Trim();
             else
             {
-                if (installationId == null) throw new InvalidOperationException("Нет устойчивого идентификатора компьютера.");
+                if (installationId == null) throw new InvalidOperationException(L.T("Нет устойчивого идентификатора компьютера."));
                 id = "WINDOWS-" + installationId;
             }
             string newId = id;
@@ -84,7 +84,7 @@ namespace CompInfo
                 {
                     JsonObject record;
                     try { record = Files.ReadRecord(file); }
-                    catch (Exception e) { throw new InvalidDataException("Не удалось проверить запись " + System.IO.Path.GetFileName(file) + ": " + e.Message); }
+                    catch (Exception e) { throw new InvalidDataException(L.T("Не удалось проверить запись ") + System.IO.Path.GetFileName(file) + ": " + e.Message); }
                     string recordUuid = NormalizeUuid(record["smbiosUuid"]);
                     bool sameInstallation = installationId != null && NormalizeUuid(record["windowsMachineGuid"]) == installationId &&
                         (uuid == null || recordUuid == null || uuid == recordUuid);
@@ -101,7 +101,7 @@ namespace CompInfo
                     }
                 }
             }
-            if (matches.Count > 1) throw new InvalidDataException("Найдено несколько записей этого компьютера. Сначала устраните дубликаты в базе.");
+            if (matches.Count > 1) throw new InvalidDataException(L.T("Найдено несколько записей этого компьютера. Сначала устраните дубликаты в базе."));
             Result result = new Result();
             result.InstallationId = installationId;
             if (matches.Count == 1)

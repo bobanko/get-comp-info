@@ -30,7 +30,7 @@ namespace CompInfo
             if (c.Identity.Path == null)
             {
                 List<Identity.Match> legacy = CompInfo.Identity.FindUnboundLegacy(dataPath, c.Snapshot.Hostname);
-                if (legacy.Count > 1) throw new InvalidDataException("Несколько старых записей с таким именем. Сначала устраните дубликаты.");
+                if (legacy.Count > 1) throw new InvalidDataException(L.T("Несколько старых записей с таким именем. Сначала устраните дубликаты."));
                 if (legacy.Count == 1) c.Legacy = legacy[0];
             }
             c.ResolvePath(dataPath);
@@ -108,26 +108,26 @@ namespace CompInfo
                 return parts.Count > 0 ? string.Join(" ", parts) : "";
             }
             if (name == "esetInstalled") return ComputerSnapshot.EsetText(r[name]);
-            if (name == "partOfDomain") { object v = r[name]; return v == null ? "" : (v is bool && (bool)v ? "да" : "нет"); }
+            if (name == "partOfDomain") { object v = r[name]; return v == null ? "" : (v is bool && (bool)v ? L.T("да") : L.T("нет")); }
             return r.Text(name) ?? "";
         }
 
-        static readonly string[][] FieldNames =
+        static string[][] FieldNames { get { return new[]
         {
-            new[] { "computerId", "ID компьютера" },
-            new[] { "hostname", "Имя компьютера" },
-            new[] { "windowsMachineGuid", "ID установки Windows" },
-            new[] { "partOfDomain", "Член домена" },
-            new[] { "domain", "Домен / группа" },
-            new[] { "ip", "IP-адрес" },
-            new[] { "mac", "MAC-адрес" },
-            new[] { "serial", "Серийный номер" },
-            new[] { "computer", "Компьютер" },
-            new[] { "username", "Пользователь" },
-            new[] { "comment", "Комментарий" },
+            new[] { "computerId", L.T("ID компьютера") },
+            new[] { "hostname", L.T("Имя компьютера") },
+            new[] { "windowsMachineGuid", L.T("ID установки Windows") },
+            new[] { "partOfDomain", L.T("Член домена") },
+            new[] { "domain", L.T("Домен / группа") },
+            new[] { "ip", L.T("IP-адрес") },
+            new[] { "mac", L.T("MAC-адрес") },
+            new[] { "serial", L.T("Серийный номер") },
+            new[] { "computer", L.T("Компьютер") },
+            new[] { "username", L.T("Пользователь") },
+            new[] { "comment", L.T("Комментарий") },
             new[] { "windows", "Windows" },
             new[] { "esetInstalled", "ESET" },
-        };
+        }; } }
 
         public List<Field> Compare(JsonObject current)
         {
