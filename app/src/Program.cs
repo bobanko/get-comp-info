@@ -22,6 +22,7 @@ namespace CompInfo
 
             Theme.Choice = Option(args, "--theme", 1) ?? Settings.Get("theme", "system");
             L.Choice = Option(args, "--language", 1) ?? Settings.Get("language", "system");
+            Theme.ColorBlind = (Option(args, "--colorblind", 1) ?? Settings.Get("colorblind", "off")) == "on";
             string page = Option(args, "--page", 1);
             string shot = Option(args, "--screenshot", 1);
             if (shot != null)

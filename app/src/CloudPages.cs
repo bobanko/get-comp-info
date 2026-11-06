@@ -336,7 +336,7 @@ namespace CompInfo
 
             Label head = Ui.Paragraph(title, new Font("Segoe UI Semibold", 10.5f), Theme.Text);
             Label hint = Ui.Paragraph(L.T("Запись изменили и здесь, и в облаке. Различия выделены. Щёлкните значение, которое нужно оставить, ") +
-                L.T("или выберите версию целиком. Для разных дат более новая — зелёная."), Font, Theme.Muted);
+                L.T(Theme.ColorBlind ? "или выберите версию целиком. Для разных дат более новая — синяя." : "или выберите версию целиком. Для разных дат более новая — зелёная."), Font, Theme.Muted);
             hint.Padding = new Padding(0, em / 4, 0, em / 2);
 
             grid = Ui.Grid(Font);

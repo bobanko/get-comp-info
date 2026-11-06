@@ -121,7 +121,14 @@ namespace CompInfo
             brand.Dock = DockStyle.Top;
             brand.Height = em * 3;
             ToolTip tip = new ToolTip();
-            tip.SetToolTip(brand, L.T("Папка программы:") + " " + AppPaths.Root);
+            tip.SetToolTip(brand, L.T("Папка программы:") + " " + AppPaths.Root + "\n" +
+                L.T(Theme.ColorBlind ? "Нажмите, чтобы выключить режим для дальтоников" : "Нажмите, чтобы включить режим для дальтоников"));
+            brand.Click += delegate
+            {
+                Theme.ColorBlind = !Theme.ColorBlind;
+                Settings.Set("colorblind", Theme.ColorBlind ? "on" : "off");
+                Rebuild();
+            };
             List<Control> stack = new List<Control>();
             stack.Add(brand);
             NavButton about = null;
@@ -272,6 +279,7 @@ namespace CompInfo
             public Brand()
             {
                 SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
+                Cursor = Cursors.Hand;
             }
 
             protected override void OnPaint(PaintEventArgs e)

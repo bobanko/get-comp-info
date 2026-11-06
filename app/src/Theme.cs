@@ -12,6 +12,9 @@ namespace CompInfo
     public static class Theme
     {
         public static bool Dark;
+        // Colour-blind mode: "good" is blue and "bad" is orange instead of green and red,
+        // and the brand letters use the Okabe–Ito palette. A click on the brand switches it.
+        public static bool ColorBlind;
         public static Color Back, Surface, Sidebar, SidebarHover, SidebarSelected, Border, Text, Muted,
             Accent, AccentHover, AccentDown, AccentDisabled, AccentSoft, OnAccent,
             Good, GoodLight, Warn, WarnLight, Bad, BadLight, Info, Selection, HeaderBack;
@@ -45,6 +48,19 @@ namespace CompInfo
                 Accent = C(0x6C9BFF); OnAccent = C(0x0B1020); AccentSoft = C(0x1D2A45);
                 Good = C(0x57C47F); GoodLight = C(0x173323); Warn = C(0xE8B04F); WarnLight = C(0x3A2C12); Bad = C(0xF2837A); BadLight = C(0x3D1C1A);
                 Rainbow = new[] { C(0xFF6B6B), C(0xFFD43B), C(0x51CF66), C(0x3BC9DB), C(0x6C9BFF), C(0xE599F7) };
+            }
+            if (ColorBlind)
+            {
+                if (!dark)
+                {
+                    Good = C(0x0A6EA8); GoodLight = C(0xE1F0FA); Warn = C(0x7A6400); WarnLight = C(0xFBF6D9); Bad = C(0xC24E00); BadLight = C(0xFDEEE3);
+                    Rainbow = new[] { C(0xD55E00), C(0xB07800), C(0x00805D), C(0x0E7FB8), C(0x0060A0), C(0xB5578A) };
+                }
+                else
+                {
+                    Good = C(0x4FA8F0); GoodLight = C(0x132A40); Warn = C(0xE3C74A); WarnLight = C(0x37310F); Bad = C(0xF28C3F); BadLight = C(0x3D2414);
+                    Rainbow = new[] { C(0xFF8A3D), C(0xF0B429), C(0x2BC79A), C(0x56B4E9), C(0x4D9BE6), C(0xE09BC4) };
+                }
             }
             Sidebar = Surface;
             SidebarHover = HeaderBack;

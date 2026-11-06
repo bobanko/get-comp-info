@@ -86,7 +86,9 @@ namespace CompInfo
             };
             grid.Resize += delegate { FitColumns(); };
 
-            footer = Ui.Paragraph(L.T("Подсвечен этот компьютер. Красным — повторы имени, IP или серийного номера, жёлтым — имя не по правилам, зелёным — собрано за 7 дней."), Font, Theme.Muted);
+            footer = Ui.Paragraph(L.T(Theme.ColorBlind
+                ? "Подсвечен этот компьютер. Оранжевым — повторы имени, IP или серийного номера, жёлтым — имя не по правилам, синим — собрано за 7 дней."
+                : "Подсвечен этот компьютер. Красным — повторы имени, IP или серийного номера, жёлтым — имя не по правилам, зелёным — собрано за 7 дней."), Font, Theme.Muted);
             footer.Dock = DockStyle.Bottom;
 
             Controls.Add(grid);
