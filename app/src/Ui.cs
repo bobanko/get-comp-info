@@ -272,13 +272,16 @@ namespace CompInfo
             Ask(owner, title, text, Glyph.Info, Theme.Info, "OK");
         }
 
-        static Bitmap gearImage, faceImage;
+        static Bitmap gearImage, faceImage, faceRuImage;
 
         // Plain gear (96 px) for the small picture in the window header, as in the small icon sizes.
         public static Bitmap AppImage { get { return gearImage ?? (gearImage = Resource("CompInfo.brand.png")); } }
 
         // The bearded gear itself (256 px) for «О программе».
         public static Bitmap FaceImage { get { return faceImage ?? (faceImage = Resource("CompInfo.face.png")); } }
+
+        // The alternative picture of «О программе», shown only with the Russian interface.
+        public static Bitmap FaceRuImage { get { return faceRuImage ?? (faceRuImage = Resource("CompInfo.face-ru.png")); } }
 
         // Pictures embedded by tools\build.BAT (made by tools\make-icon.BAT).
         static Bitmap Resource(string name)

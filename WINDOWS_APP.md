@@ -40,7 +40,8 @@
 
 Иконка — `app\icon-source.png`; `tools\make-icon.BAT` делает из неё `app\app.ico` (в размерах до 32 px — простая
 шестерёнка без лица, она рисуется в `tools\MakeIcon.cs`), `app\brand.png` (та же шестерёнка в шапке окна)
-и `app\face.png` (картинка в «О программе»).
+и `app\face.png` (картинка в «О программе»). При русском интерфейсе «О программе» показывает другую картинку —
+`app\face-ru.png`, её тот же скрипт делает из `app\face-ru-source.png`.
 
 ## comp-info.ini
 

@@ -10,3 +10,6 @@ if not exist obj mkdir obj
 "%CSC%" /nologo /optimize+ /codepage:65001 /target:exe /out:obj\MakeIcon.exe /r:System.Drawing.dll tools\MakeIcon.cs
 if errorlevel 1 exit /b 1
 obj\MakeIcon.exe app\icon-source.png app\app.ico %1 --gear-small --gear-png=app\brand.png --face-png=app\face.png
+if errorlevel 1 exit /b 1
+rem The alternative picture of «О программе», shown only with the Russian interface.
+obj\MakeIcon.exe app\face-ru-source.png --face-png=app\face-ru.png

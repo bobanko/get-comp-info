@@ -2,6 +2,7 @@
 // keeps its transparency (or removes a white background with soft edges), crops empty margins and writes an ICO with all sizes Windows uses.
 // --cli adds a dark tile with a ">_" prompt in the lower-left corner.
 // Usage: MakeIcon.exe <source.png> <out.ico> [preview.png] [--cli]
+//        MakeIcon.exe <source.png> --face-png=<file>   (only the 256 px picture, no icon)
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -29,11 +30,18 @@ static class MakeIcon
             else if (a.StartsWith("--face-png=")) FacePng = a.Substring(11);
             else pos.Add(a);
         }
-        if (pos.Count < 2) { Console.Error.WriteLine("MakeIcon.exe <source.png> <out.ico> [preview.png] [--cli]"); return 2; }
+        if (pos.Count < 2 && !(pos.Count == 1 && FacePng != null)) { Console.Error.WriteLine("MakeIcon.exe <source.png> <out.ico> [preview.png] [--cli]"); return 2; }
 
         // A picture that already has transparency is used as is; otherwise the white background is cut out.
         using (Bitmap raw = new Bitmap(pos[0]))
             Source = CropSquare(HasTransparency(raw) ? FromPixels(Pixels(raw), raw.Width, raw.Height) : RemoveBackground(raw));
+
+        if (pos.Count == 1)
+        {
+            using (Bitmap f = Scale(Source, 256)) f.Save(FacePng, ImageFormat.Png);
+            Console.WriteLine("Picture: " + FacePng);
+            return 0;
+        }
 
         int[] sizes = { 16, 20, 24, 32, 40, 48, 64, 96, 128, 256 };
         List<byte[]> pngs = new List<byte[]>();

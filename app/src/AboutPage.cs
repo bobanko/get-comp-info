@@ -49,7 +49,7 @@ namespace CompInfo
 
             int side = em * 7;
             PictureBox pic = new PictureBox();
-            pic.Image = Ui.FaceImage;
+            pic.Image = L.Code == "ru" ? Ui.FaceRuImage : Ui.FaceImage;
             pic.SizeMode = PictureBoxSizeMode.Zoom;
             pic.Size = new Size(side, side);
             pic.Margin = new Padding(0, 0, em, 0);
