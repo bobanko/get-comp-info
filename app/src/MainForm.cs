@@ -300,7 +300,22 @@ namespace CompInfo
                             int side = em * 3 / 2;
                             x += em / 8;
                             e.Graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-                            e.Graphics.DrawImage(Ui.AppImage, new Rectangle(x, 0, side, side));
+                            Bitmap gear = Ui.AppImage;
+                            if (Theme.ColorBlind)
+                            {
+                                // Black-and-white logo: the icon in shades of grey.
+                                using (System.Drawing.Imaging.ImageAttributes grey = new System.Drawing.Imaging.ImageAttributes())
+                                {
+                                    float r = 0.299f, g = 0.587f, b = 0.114f;
+                                    grey.SetColorMatrix(new System.Drawing.Imaging.ColorMatrix(new[]
+                                    {
+                                        new[] { r, r, r, 0f, 0f }, new[] { g, g, g, 0f, 0f }, new[] { b, b, b, 0f, 0f },
+                                        new[] { 0f, 0f, 0f, 1f, 0f }, new[] { 0f, 0f, 0f, 0f, 1f },
+                                    }));
+                                    e.Graphics.DrawImage(gear, new Rectangle(x, 0, side, side), 0, 0, gear.Width, gear.Height, GraphicsUnit.Pixel, grey);
+                                }
+                            }
+                            else e.Graphics.DrawImage(gear, new Rectangle(x, 0, side, side));
                             x += side + em / 8;
                             continue;
                         }
