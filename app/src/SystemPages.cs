@@ -71,13 +71,12 @@ namespace CompInfo
     // «Настройка сети»: static address by the office profiles or DHCP (setup-lan-adapter.ps1).
     public class LanPage : Page
     {
-        readonly FieldTable form = new FieldTable();
-        readonly ComboBox network = Ui.Combo();
-        readonly ComboBox segment = Ui.Combo();
         readonly ComboBox adapter = Ui.Combo();
-        readonly TextBox octet = Ui.Input(new TextBox());
+        // The address is built from left to right: network . segment . building . computer.
+        readonly TextBox first, second, third, host;
         readonly Label range;
-        readonly FlowLayoutPanel octetRow = Ui.Row();
+        readonly FlowLayoutPanel segmentList = new FlowLayoutPanel(), officeList = new FlowLayoutPanel();
+        readonly List<RadioButton> segmentButtons = new List<RadioButton>(), officeButtons = new List<RadioButton>();
         readonly StatusLine profilesNote = new StatusLine();
         readonly Label summary;
         readonly Button apply;
@@ -85,7 +84,7 @@ namespace CompInfo
         readonly Label applied;
         NetworkProfiles profiles = new NetworkProfiles();
         List<Adapter> adapters = new List<Adapter>();
-        bool running;
+        bool running, filling;
 
         class Item
         {
@@ -102,33 +101,73 @@ namespace CompInfo
             Icon = Glyph.Network;
             NeedsAdmin = true;
             int em = Font.Height;
-            Padding = new Padding(0);
             AutoScroll = true;
 
             profilesNote.Dock = DockStyle.Top;
             profilesNote.Padding = new Padding(0, 0, 0, em / 2);
-            network.Width = segment.Width = em * 20;
-            adapter.Width = em * 26;
-            adapter.DropDownWidth = em * 34;
-            octet.Width = em * 4;
-            octet.MaxLength = 3;
-            range = Ui.Text("", Font, Theme.Muted);
-            range.Margin = new Padding(em / 2, em / 6, 0, 0);
-            octetRow.Controls.Add(octet);
-            octetRow.Controls.Add(range);
-            form.Font = Font;
-            form.Add(L.T("Сеть"), network);
-            form.Add(L.T("Сегмент"), segment);
-            form.Add(L.T("Адаптер"), adapter);
-            form.Add(L.T("Последний октет"), octetRow);
-            network.SelectedIndexChanged += delegate { NetworkChanged(); };
-            segment.SelectedIndexChanged += delegate { UpdateSummary(); };
-            adapter.SelectedIndexChanged += delegate { UpdateSummary(); };
-            octet.TextChanged += delegate { UpdateSummary(); };
-            octet.KeyPress += delegate (object o, KeyPressEventArgs k) { if (!char.IsDigit(k.KeyChar) && !char.IsControl(k.KeyChar)) k.Handled = true; };
 
-            summary = Ui.Paragraph("", Font, Theme.Accent);
-            summary.Padding = new Padding(0, em / 2, 0, em / 2);
+            // Adapter first: everything below applies to it.
+            FlowLayoutPanel adapterRow = Ui.Row();
+            Label adapterLabel = Ui.Text(L.T("Адаптер"), Font, Theme.Muted);
+            adapterLabel.Margin = new Padding(0, em / 4, em / 2, 0);
+            adapter.Width = em * 28;
+            adapter.DropDownWidth = em * 36;
+            adapter.SelectedIndexChanged += delegate { UpdateSummary(); };
+            adapterRow.Controls.Add(adapterLabel);
+            adapterRow.Controls.Add(adapter);
+            adapterRow.Dock = DockStyle.Top;
+            adapterRow.Padding = new Padding(0, 0, 0, em);
+
+            // Octets in a row with dots between them, names above, choices below.
+            Font big = new Font(Ui.MonoFont.FontFamily, 15f);
+            first = Octet(big, true);
+            second = Octet(big, true);
+            third = Octet(big, true);
+            host = Octet(big, false);
+            host.MaxLength = 3;
+            host.TextChanged += delegate { UpdateSummary(); };
+            host.KeyPress += delegate (object o, KeyPressEventArgs k) { if (!char.IsDigit(k.KeyChar) && !char.IsControl(k.KeyChar)) k.Handled = true; };
+            range = Ui.Text("", Font, Theme.Muted);
+            range.Anchor = AnchorStyles.Left;
+            range.Margin = new Padding(em / 2, 0, 0, 0);
+
+            TableLayoutPanel ip = new TableLayoutPanel();
+            ip.AutoSize = true;
+            ip.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            ip.Dock = DockStyle.Top;
+            ip.ColumnCount = 8;
+            for (int c = 0; c < 8; c++) ip.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            string[] heads = { L.T("Сеть"), "", L.T("Сегмент"), "", L.T("Корпус"), "", L.T("Компьютер") };
+            for (int c = 0; c < heads.Length; c++)
+            {
+                if (heads[c].Length == 0) continue;
+                Label h = Ui.Text(heads[c], new Font("Segoe UI Semibold", 9f), Theme.Muted);
+                h.Margin = new Padding(0, 0, 0, em / 4);
+                ip.Controls.Add(h, c, 0);
+            }
+            ip.Controls.Add(first, 0, 1);
+            ip.Controls.Add(Dot(big), 1, 1);
+            ip.Controls.Add(second, 2, 1);
+            ip.Controls.Add(Dot(big), 3, 1);
+            ip.Controls.Add(third, 4, 1);
+            ip.Controls.Add(Dot(big), 5, 1);
+            ip.Controls.Add(host, 6, 1);
+            ip.Controls.Add(range, 7, 1);
+            foreach (FlowLayoutPanel list in new[] { segmentList, officeList })
+            {
+                list.FlowDirection = FlowDirection.TopDown;
+                list.WrapContents = false;
+                list.AutoSize = true;
+                list.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+                list.Margin = new Padding(0, em / 2, em, 0);
+            }
+            ip.Controls.Add(segmentList, 2, 2);
+            ip.Controls.Add(officeList, 4, 2);
+            // Building names are long: their list may run under the computer column.
+            ip.SetColumnSpan(officeList, 4);
+
+            summary = Ui.Paragraph("", Font, Theme.Text);
+            summary.Padding = new Padding(0, em, 0, em / 2);
             apply = Ui.Primary(L.T("Применить настройки"), PowerShell.IsAdministrator() ? Glyph.Check : Glyph.Shield, Font);
             apply.Click += delegate { Apply(); };
             Ui.Keys(apply, "Ctrl+Enter");
@@ -143,8 +182,54 @@ namespace CompInfo
             Controls.Add(status);
             Controls.Add(actions);
             Controls.Add(summary);
-            Controls.Add(form);
+            Controls.Add(ip);
+            Controls.Add(adapterRow);
             Controls.Add(profilesNote);
+        }
+
+        TextBox Octet(Font font, bool fixedValue)
+        {
+            int em = Font.Height;
+            TextBox box = Ui.Input(new TextBox());
+            box.Font = font;
+            box.TextAlign = HorizontalAlignment.Center;
+            box.Width = em * 4;
+            box.Margin = new Padding(0);
+            if (fixedValue)
+            {
+                // Filled in by the choices below; shown, not typed.
+                box.ReadOnly = true;
+                box.TabStop = false;
+                box.BackColor = Theme.HeaderBack;
+                box.Cursor = Cursors.Default;
+            }
+            return box;
+        }
+
+        Label Dot(Font font)
+        {
+            Label dot = Ui.Text(".", font, Theme.Muted);
+            dot.Anchor = AnchorStyles.Bottom;
+            dot.Margin = new Padding(Font.Height / 6, 0, Font.Height / 6, 0);
+            return dot;
+        }
+
+        RadioButton Choice(string text, object value, FlowLayoutPanel list, List<RadioButton> group)
+        {
+            RadioButton r = new RadioButton();
+            r.Text = text;
+            r.Tag = value;
+            r.AutoSize = true;
+            r.ForeColor = Theme.Text;
+            r.Margin = new Padding(0, 0, 0, Font.Height / 6);
+            r.CheckedChanged += delegate
+            {
+                if (!r.Checked || filling) return;
+                if (group == officeButtons) OfficeChanged(); else UpdateSummary();
+            };
+            list.Controls.Add(r);
+            group.Add(r);
+            return r;
         }
 
         public override bool CanLeave()
@@ -163,26 +248,24 @@ namespace CompInfo
         public override void Opened()
         {
             if (running) return;
-            network.Focus();
             profiles = NetworkProfiles.Read(AppPaths.File("network-profiles.json"));
-            object selected = network.SelectedItem != null ? ((Item)network.SelectedItem).Text : null;
-            network.Items.Clear();
-            foreach (NetworkProfiles.Location l in profiles.Locations)
-            {
-                Item item = new Item();
-                item.Text = l.Name + "  [" + l.ThirdOctet + "]";
-                item.Value = l;
-                network.Items.Add(item);
-            }
-            Item dhcp = new Item();
-            dhcp.Text = L.T("Интернет — автоматически (DHCP)");
-            network.Items.Add(dhcp);
-            network.SelectedIndex = 0;
-            for (int i = 0; i < network.Items.Count; i++) if (((Item)network.Items[i]).Text == (string)selected) network.SelectedIndex = i;
+            string selected = null;
+            foreach (RadioButton r in officeButtons) if (r.Checked) selected = r.Text;
+            filling = true;
+            officeList.Controls.Clear();
+            officeButtons.Clear();
+            foreach (NetworkProfiles.Location l in profiles.Locations) Choice(l.Name + "   [" + l.ThirdOctet + "]", l, officeList, officeButtons);
+            Choice(L.T("Интернет — автоматически (DHCP)"), null, officeList, officeButtons);
+            RadioButton keep = officeButtons.Find(delegate (RadioButton r) { return r.Text == selected; });
+            (keep ?? officeButtons[0]).Checked = true;
+            filling = false;
+            first.Text = profiles.FirstOctet.ToString();
             if (profiles.Missing)
                 profilesNote.Set(Glyph.Warning, L.T("Профили корпусов не загружены: синхронизируйтесь с облаком, когда будет интернет. Сейчас доступна только автоматическая настройка."), Theme.Warn);
             else profilesNote.Clear();
+            OfficeChanged();
             LoadAdapters();
+            if (Office != null) host.Focus(); else adapter.Focus();
         }
 
         async void LoadAdapters()
@@ -210,39 +293,59 @@ namespace CompInfo
 
         NetworkProfiles.Location Office
         {
-            get { return network.SelectedItem == null ? null : ((Item)network.SelectedItem).Value as NetworkProfiles.Location; }
+            get
+            {
+                foreach (RadioButton r in officeButtons) if (r.Checked) return r.Tag as NetworkProfiles.Location;
+                return null;
+            }
         }
 
-        void NetworkChanged()
+        int? Segment
+        {
+            get
+            {
+                foreach (RadioButton r in segmentButtons) if (r.Checked) return (int)r.Tag;
+                return null;
+            }
+        }
+
+        void OfficeChanged()
         {
             NetworkProfiles.Location l = Office;
-            segment.Items.Clear();
+            int? previous = Segment;
+            filling = true;
+            segmentList.Controls.Clear();
+            segmentButtons.Clear();
             if (l != null)
             {
-                foreach (int s in l.Segments ?? profiles.Segments) segment.Items.Add(s);
-                if (segment.Items.Count > 0) segment.SelectedIndex = 0;
-                range.Text = L.T("от ") + l.FirstHostOctet + L.T(" до ") + l.LastHostOctet;
+                foreach (int s in l.Segments ?? profiles.Segments) Choice(s.ToString(), s, segmentList, segmentButtons);
+                RadioButton keep = segmentButtons.Find(delegate (RadioButton r) { return previous.HasValue && (int)r.Tag == previous.Value; });
+                if (keep == null && segmentButtons.Count > 0) keep = segmentButtons[0];
+                if (keep != null) keep.Checked = true;
+                range.Text = l.FirstHostOctet + "–" + l.LastHostOctet;
             }
-            form.Show(segment, l != null);
-            form.Show(octetRow, l != null);
+            else range.Text = "";
+            filling = false;
+            // DHCP: the address comes from the router, the octets are not used.
+            host.Enabled = l != null;
             UpdateSummary();
         }
 
-        // The settings to apply, or null with the reason in error.
+        // The settings to apply, or false with the reason in error.
         bool Plan(out string ip, out string gateway, out string error)
         {
             ip = gateway = error = null;
             NetworkProfiles.Location l = Office;
             if (adapter.SelectedItem == null) { error = L.T("Выберите адаптер."); return false; }
             if (l == null) return true;
-            if (segment.SelectedItem == null) { error = L.T("Выберите сегмент."); return false; }
+            if (!Segment.HasValue) { error = L.T("Выберите сегмент."); return false; }
             int last;
-            if (!int.TryParse(octet.Text, out last) || last < l.FirstHostOctet || last > l.LastHostOctet)
+            if (!int.TryParse(host.Text, out last) || last < l.FirstHostOctet || last > l.LastHostOctet)
             {
                 error = L.T("Введите последний октет от ") + l.FirstHostOctet + L.T(" до ") + l.LastHostOctet + ".";
                 return false;
             }
-            string prefix = profiles.FirstOctet + "." + segment.SelectedItem + "." + l.ThirdOctet;
+            string prefix = profiles.FirstOctet + "." + Segment.Value + "." + l.ThirdOctet;
             ip = prefix + "." + last;
             gateway = prefix + "." + l.GatewayOctet;
             return true;
@@ -250,12 +353,15 @@ namespace CompInfo
 
         void UpdateSummary()
         {
+            NetworkProfiles.Location l = Office;
+            second.Text = l != null && Segment.HasValue ? Segment.Value.ToString() : "—";
+            third.Text = l != null ? l.ThirdOctet.ToString() : "—";
+            if (l == null) host.Text = "";
             string ip, gateway, error;
             bool ok = Plan(out ip, out gateway, out error);
             apply.Enabled = ok && !running;
-            NetworkProfiles.Location l = Office;
             if (!ok) { summary.ForeColor = Theme.Muted; summary.Text = error; return; }
-            summary.ForeColor = Theme.Accent;
+            summary.ForeColor = Theme.Text;
             if (l == null)
             {
                 summary.Text = L.T("IP-адрес, маска, шлюз и DNS — автоматически от роутера (DHCP).\r\nСтатические IPv4-адреса, шлюз и вручную заданные DNS будут сброшены.");
@@ -303,7 +409,6 @@ namespace CompInfo
             }
         }
     }
-
     // «Имя компьютера» and «Домен» (set-computer-name.ps1, manage-computer-domain.ps1).
     public class ComputerPage : Page
     {

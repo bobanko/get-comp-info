@@ -36,6 +36,8 @@ namespace CompInfo
             Icon = Glyph.Info;
             int em = Font.Height;
             AutoScroll = true;
+            // AutoScroll owns a native scrollbar; opt it into the active theme too.
+            Theme.Native(this);
             int width = em * 30;
 
             TableLayoutPanel t = new TableLayoutPanel();

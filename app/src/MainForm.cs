@@ -380,7 +380,11 @@ namespace CompInfo
                     TextRenderer.DrawText(e.Graphics, Text, f, new Rectangle(em * 2, r.Top, Width - em * 2 - right, r.Height), selected ? Theme.Accent : Page == null ? Theme.Muted : Theme.Text,
                         TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
                 if (Page != null && Page.NeedsAdmin)
-                    CompInfo.Glyph.Draw(e.Graphics, CompInfo.Glyph.Shield, new Rectangle(Width - em * 3 / 2, r.Top, em, r.Height), Theme.Muted, em * 0.65f);
+                {
+                    // A green shield confirms that this restarted copy already has elevation.
+                    Color shieldColor = PowerShell.IsAdministrator() ? Theme.Good : Theme.Muted;
+                    CompInfo.Glyph.Draw(e.Graphics, CompInfo.Glyph.Shield, new Rectangle(Width - em * 3 / 2, r.Top, em, r.Height), shieldColor, em * 0.65f);
+                }
                 if (Focused && ShowFocusCues) ControlPaint.DrawFocusRectangle(e.Graphics, r);
             }
         }

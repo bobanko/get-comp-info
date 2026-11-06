@@ -399,6 +399,7 @@ namespace CompInfo
             "IP address, mask, gateway and DNS of the wired adapter by the building profiles from the cloud, or automatic setup (DHCP).",
             "Сеть", "Мережа", "Network",
             "Сегмент", "Сегмент", "Segment",
+            "Корпус", "Корпус", "Building",
             "Адаптер", "Адаптер", "Adapter",
             "Последний октет", "Останній октет", "Last octet",
             "Применить настройки", "Застосувати налаштування", "Apply settings",
