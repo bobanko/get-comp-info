@@ -206,6 +206,21 @@ try {
     finally { $handle.Dispose() }
     Assert-True ((Get-Snapshot $copy) -eq $before) 'A failed install must restore every file and remove added ones'
 
+    # ---------- The running window program is replaced through a rename ----------
+    $exeFiles = $newFiles.Clone()
+    $exeFiles['comp-info.exe'] = 'new exe'
+    Set-Release '2026.11.04.2' $exeFiles
+    $copy = New-ProgramCopy 'running-exe'
+    Write-Text "$copy\comp-info.exe" 'old exe'
+    $zip = Join-Path $testRoot 'running-exe.zip'
+    Copy-Item $script:packagePath $zip
+    # Like a running program: Windows lets it be renamed but not overwritten.
+    $handle = [IO.File]::Open("$copy\comp-info.exe", 'Open', 'Read', [IO.FileShare]::Read -bor [IO.FileShare]::Delete)
+    try { $null = Install-ProgramRelease -Root $copy -ZipPath $zip -ExpectedVersion '2026.11.04.2' -CurrentVersion '2026.10.24.1' -Attempts 2 }
+    finally { $handle.Dispose() }
+    Assert-True ((Read-Text "$copy\comp-info.exe") -eq 'new exe') 'A running comp-info.exe must be replaced'
+    Assert-True ((Read-Text "$copy\comp-info.exe.old") -eq 'old exe') 'The running comp-info.exe must be moved aside'
+
     # ---------- Development copies are not updated ----------
     $copy = New-ProgramCopy 'dev'
     New-Item -ItemType Directory -Path "$copy\.git" | Out-Null

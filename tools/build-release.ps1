@@ -34,10 +34,9 @@ if ($Version -ne $codeVersion) {
 
 $files = @(Invoke-Git @('ls-files') | Where-Object { $_ -notmatch '/' -and (Test-ProgramFileName $_) })
 
-# The window program (built by tools\build.BAT, not stored in Git) goes into releases only after the flash drives
-# run a version whose updater accepts comp-info.exe (Test-ProgramFileName, from 2026.11.05). Older updaters
-# refuse such an archive, so publish one release with this off first, then turn it on. See PROGRAM_UPDATE.md.
-$includeWindowsApp = $false
+# The window program (built by tools\build.BAT, not stored in Git). Updaters older than 2026.11.06.1 refuse
+# an archive with it; the cloud gives them the newest release without it first. See PROGRAM_UPDATE.md.
+$includeWindowsApp = $true
 if ($includeWindowsApp) {
     $exe = Join-Path $root 'comp-info.exe'
     if (-not (Test-Path -LiteralPath $exe)) { throw 'Нет comp-info.exe: сначала выполните tools\build.BAT.' }

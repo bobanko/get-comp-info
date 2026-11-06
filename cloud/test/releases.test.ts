@@ -149,6 +149,24 @@ describe('downloading releases', () => {
     expect((await consoleRequest(null, 'GET', '/program/latest')).status).toBe(401);
   });
 
+  it('gives updaters that reject comp-info.exe the newest release without it', async () => {
+    const { key } = await harvesterKey();
+    const withoutExe = nextVersion();
+    const withExe = nextVersion();
+    await publishVersion(withoutExe);
+    await publishVersion(withExe, { 'a.ps1': 'x', 'comp-info.exe': 'MZ' });
+    async function latestFor(userAgent: string | null) {
+      const headers: Record<string, string> = { Authorization: `Bearer ${key}` };
+      if (userAgent) headers['User-Agent'] = userAgent;
+      const response = await exports.default.fetch(new Request('https://comp-info.test/api/client/program/latest', { headers }));
+      return ((await response.json()) as { version: string }).version;
+    }
+    expect(await latestFor('comp-info/2026.11.04.1')).toBe(withoutExe);
+    expect(await latestFor(null)).toBe(withoutExe);
+    expect(await latestFor('comp-info/2026.11.06.1')).toBe(withExe);
+    expect(await latestFor('comp-info/2026.12.01.3')).toBe(withExe);
+  });
+
   it('lets admins list releases and roll back', async () => {
     const admin = await addUser('admin');
     const editor = await addUser('editor');

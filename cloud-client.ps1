@@ -701,6 +701,13 @@ function Install-ProgramRelease {
                 $target = Join-Path $Root $file.path
                 $temporary = Join-Path $Root ([guid]::NewGuid().ToString('N') + '.tmp')
                 Copy-Item -LiteralPath (Join-Path $extract $file.path) -Destination $temporary
+                if ($file.path -eq 'comp-info.exe' -and (Test-Path -LiteralPath $target)) {
+                    # The window program may be running: Windows refuses to overwrite it but allows a rename.
+                    # comp-info.exe removes the .old file on its next start.
+                    $old = "$target.old"
+                    if (Test-Path -LiteralPath $old) { Remove-Item -LiteralPath $old -Force }
+                    Move-Item -LiteralPath $target -Destination $old
+                }
                 Move-FileIntoPlace $temporary $target -Attempts $Attempts
                 if ((Get-FileSha256 $target) -ne ([string]$file.sha256).ToLowerInvariant()) { throw "Файл $($file.path) записан с ошибкой." }
             }

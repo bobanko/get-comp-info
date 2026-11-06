@@ -2,7 +2,7 @@ import { Hono, type Context } from 'hono';
 import { consoleAuth } from '../auth';
 import { listChanges, normalizeData, putDevice, validateDeviceId, type WriteResult } from '../devices';
 import { fail, readJsonObject } from '../http';
-import { getCurrentRelease, getReleasePackage } from '../releases';
+import { clientVersion, getReleaseFor, getReleasePackage } from '../releases';
 import { getSetting, NETWORK_KEY, type NetworkSettings } from '../settings';
 import type { AppEnv } from '../types';
 
@@ -44,7 +44,7 @@ consoleApi.put('/devices/:id', async (c) => {
 });
 
 consoleApi.get('/program/latest', async (c) => {
-  const release = await getCurrentRelease(c.env.DB);
+  const release = await getReleaseFor(c.env.DB, clientVersion(c.req.header('User-Agent')));
   if (!release) fail(404, 'no_release', 'В облаке ещё нет опубликованных версий программы.');
   return c.json(release);
 });

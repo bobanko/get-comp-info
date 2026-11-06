@@ -112,6 +112,43 @@ export async function getCurrentRelease(db: D1Database) {
   return row ? toRelease(row) : null;
 }
 
+// The first version whose updater accepts comp-info.exe in the archive; older ones reject such a release.
+export const FIRST_EXE_UPDATER = '2026.11.06.1';
+
+function compareVersions(a: string, b: string): number {
+  const x = a.split('.').map(Number);
+  const y = b.split('.').map(Number);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    const d = (x[i] ?? 0) - (y[i] ?? 0);
+    if (d !== 0) return d;
+  }
+  return 0;
+}
+
+function hasWindowsApp(row: ReleaseRow): boolean {
+  const manifest = JSON.parse(row.manifest) as Manifest;
+  return (manifest.files ?? []).some((file) => file.path.toLowerCase() === 'comp-info.exe');
+}
+
+// Version of the program that sent the request ("comp-info/2026.11.06.1" in User-Agent), or null.
+export function clientVersion(userAgent: string | undefined): string | null {
+  const match = /^comp-info\/(\d{4}\.\d{2}\.\d{2}\.\d{1,4})\b/.exec(userAgent ?? '');
+  return match ? match[1] : null;
+}
+
+// The release a console should install. An updater older than FIRST_EXE_UPDATER gets the newest release
+// (not newer than the current one) without comp-info.exe: it updates to that first and to the current one next.
+export async function getReleaseFor(db: D1Database, version: string | null) {
+  const current = await db.prepare(`SELECT ${RELEASE_COLUMNS} FROM program_releases WHERE is_current = 1`).first<ReleaseRow>();
+  if (!current) return null;
+  if ((version && compareVersions(version, FIRST_EXE_UPDATER) >= 0) || !hasWindowsApp(current)) return toRelease(current);
+  const { results } = await db.prepare(`SELECT ${RELEASE_COLUMNS} FROM program_releases`).all<ReleaseRow>();
+  const fallback = results
+    .filter((row) => compareVersions(row.version, current.version) <= 0 && !hasWindowsApp(row))
+    .sort((a, b) => compareVersions(b.version, a.version))[0];
+  return toRelease(fallback ?? current);
+}
+
 export async function listReleases(db: D1Database) {
   const { results } = await db.prepare(`SELECT ${RELEASE_COLUMNS} FROM program_releases ORDER BY published_at DESC`).all<ReleaseRow>();
   return results.map(toRelease);
