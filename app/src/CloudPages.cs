@@ -134,6 +134,7 @@ namespace CompInfo
             NavTitle = L.T("Синхронизация");
             Description = L.T("Отправляет новые и изменённые записи в облако и загружает базу из облака. Нужен интернет и личный ключ доступа.");
             Icon = Glyph.Sync;
+            NeedsInternet = true;
             int em = Font.Height;
 
             server = Ui.Paragraph("", Font, Theme.Muted);
@@ -450,6 +451,7 @@ namespace CompInfo
         {
             Key = "update";
             Title = L.T("Обновление программы");
+            NeedsInternet = true;
             NavTitle = L.T("Обновление");
             Description = L.T("Проверяет новую версию в облаке и устанавливает её в эту копию программы. Данные (папка data) не меняются.");
             Icon = Glyph.Update;
