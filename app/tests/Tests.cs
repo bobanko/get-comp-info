@@ -40,6 +40,7 @@ namespace CompInfo
             Run("cloud state", CloudStateFile);
             Run("computer names match PowerShell", ComputerNames);
             Run("security document scan", SecurityDocumentScan);
+            Run("standalone SUSpector", StandaloneSuspector);
             Run("record differences and merge", Differences);
             Run("program files and versions", ProgramFiles);
             Run("program update install", InstallRelease);
@@ -352,6 +353,21 @@ namespace CompInfo
                 Check(check.Level == SecurityLevel.Good && check.Summary.Contains("Проверено: 0") && check.Items.Count == 0, "empty document scan");
             }
             finally { Directory.Delete(dir, true); }
+        }
+
+        static void StandaloneSuspector()
+        {
+            string path = Path.GetFullPath(Path.Combine(here, @"..\SUSpector.exe"));
+            Check(File.Exists(path), "SUSpector.exe was built");
+            if (!File.Exists(path)) return;
+            System.Diagnostics.FileVersionInfo version = System.Diagnostics.FileVersionInfo.GetVersionInfo(path);
+            Check(version.FileVersion == AppVersion.Text && version.ProductName == "SUSpector", "SUSpector version and product metadata");
+            System.Reflection.Assembly assembly = System.Reflection.Assembly.LoadFrom(path);
+            Check(assembly.GetType("CompInfo.SuspectorProgram", false) != null && assembly.GetType("CompInfo.SecurityPage", false) != null,
+                "SUSpector contains the security application");
+            Check(assembly.GetType("CompInfo.MainForm", false) == null && assembly.GetType("CompInfo.DatabasePage", false) == null &&
+                assembly.GetType("CompInfo.SyncPage", false) == null && assembly.GetType("CompInfo.CloudClient", false) == null,
+                "SUSpector excludes the toolbox, device database and cloud UI");
         }
 
         static void Differences()
