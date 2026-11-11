@@ -288,18 +288,22 @@ namespace CompInfo
                 string desktop = Path.Combine(dir, "Desktop");
                 string telegram = Path.Combine(dir, "Downloads", "Telegram Desktop");
                 string whatsapp = Path.Combine(dir, "WhatsApp");
+                string claude = Path.Combine(dir, "AppData", "Roaming", "Claude", "Cache");
                 Directory.CreateDirectory(documents);
                 Directory.CreateDirectory(desktop);
                 Directory.CreateDirectory(telegram);
                 Directory.CreateDirectory(whatsapp);
+                Directory.CreateDirectory(claude);
                 string excel = Path.Combine(documents, "відомість.xlsx");
                 string powerpoint = Path.Combine(dir, "доповідь.pptx");
                 File.WriteAllText(excel, "fixture", Encoding.UTF8);
                 File.WriteAllText(powerpoint, "fixture", Encoding.UTF8);
                 string telegramFile = Path.Combine(telegram, "ДСК telegram.doc");
                 string whatsappFile = Path.Combine(whatsapp, "МОСІ whatsapp.doc");
+                string claudeFile = Path.Combine(claude, "ДСК Claude cache.doc");
                 File.WriteAllText(telegramFile, "fixture", Encoding.UTF8);
                 File.WriteAllText(whatsappFile, "fixture", Encoding.UTF8);
+                File.WriteAllText(claudeFile, "fixture", Encoding.UTF8);
                 string content = Path.Combine(desktop, "ДСК ordinary.docx");
                 using (ZipArchive zip = ZipFile.Open(content, ZipArchiveMode.Create))
                 {
@@ -312,33 +316,39 @@ namespace CompInfo
                 SecurityProgress finalProgress = progress[progress.Count - 1];
                 Check(progress.Count >= 3 && progress[0].Indeterminate && !finalProgress.Indeterminate,
                     "document scan reports discovery and inspection phases");
-                Check(finalProgress.Total == 6 && finalProgress.Checked == 6 && finalProgress.Matches == 6,
+                Check(finalProgress.Total == 7 && finalProgress.Checked == 7 && finalProgress.Matches == 7,
                     "document scan progress reaches the exact total");
-                bool word = false, excelType = false, powerpointType = false, counts = false, telegramTag = false, whatsappTag = false;
+                bool word = false, excelType = false, powerpointType = false, counts = false, telegramTag = false, whatsappTag = false, claudeTag = false;
+                bool onlyFiles = true;
                 foreach (SecurityDetail item in check.Items)
                 {
+                    if (item.FilePath.Length == 0) onlyFiles = false;
                     if (item.FilePath == named && item.FileType == "WORD") word = true;
                     if (item.FilePath == excel && item.FileType == "EXCEL" && item.Note.Contains("#документы")) excelType = true;
                     if (item.FilePath == powerpoint && item.FileType == "PPT") powerpointType = true;
-                    if (item.FilePath == content && item.Note.Contains("#десктоп") && item.Note.Contains("ДСК ×3") &&
+                    if (item.FilePath == content && item.Note.Contains("#Desktop") && item.Note.Contains("ДСК ×3") &&
                         item.Note.Contains("ДСК-ЕП ×2") &&
                         item.Note.Contains("МОСІ ×1") && item.Note.Contains("для службового користування ×1") &&
                         item.Note.Contains("таємно ×1") && item.Note.Contains("особливої важливості ×1")) counts = true;
                     if (item.FilePath == telegramFile && item.Note.Contains("#телеграм") && item.Note.Contains("#даунлоадс")) telegramTag = true;
-                    if (item.FilePath == whatsappFile && item.Note.Contains("#вотсап")) whatsappTag = true;
+                    if (item.FilePath == whatsappFile && item.Note.Contains("#WhatsApp")) whatsappTag = true;
+                    if (item.FilePath == claudeFile && item.Note.Contains("#Claude")) claudeTag = true;
                 }
                 Check(check.Level == SecurityLevel.Bad && check.Details.Contains(named) && check.Details.Contains(content), "name and Open XML content matches");
+                Check(check.Summary.Contains("Проверено: 7") && check.Summary.Contains("помечено как ДСК: 7"), "document totals in the main result");
                 Check(word && excelType && powerpointType, "Office file types in structured security details");
                 Check(counts, "all keyword occurrences and desktop tag");
-                Check(telegramTag && whatsappTag, "messenger and downloads tags");
+                Check(telegramTag && whatsappTag && claudeTag, "messenger, Claude and downloads tags");
+                Check(onlyFiles, "document detail table contains files only");
                 File.Delete(named);
                 File.Delete(excel);
                 File.Delete(powerpoint);
                 File.Delete(telegramFile);
                 File.Delete(whatsappFile);
+                File.Delete(claudeFile);
                 File.Delete(content);
                 check = SecurityAudit.CheckDocumentsAt(new[] { dir });
-                Check(check.Level == SecurityLevel.Good, "empty document scan");
+                Check(check.Level == SecurityLevel.Good && check.Summary.Contains("Проверено: 0") && check.Items.Count == 0, "empty document scan");
             }
             finally { Directory.Delete(dir, true); }
         }

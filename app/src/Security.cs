@@ -469,26 +469,15 @@ namespace CompInfo
 
         static SecurityCheck DocumentResult(DocumentScan scan)
         {
-            string coverage = L.F("Проверено документов Office: {0}. Недоступных папок: {1}.", scan.Files, scan.SkippedFolders) + "\r\n" +
-                L.T("Имена проверяются у всех форматов; содержимое — у современных файлов Word, Excel и PowerPoint.");
-            if (scan.RecycleChecked)
-                coverage += "\r\n" + (scan.RecycleError.Length == 0
-                    ? L.F("Корзина: проверено документов Office: {0}.", scan.RecycleFiles)
-                    : L.T("Корзина проверена частично: ") + scan.RecycleError);
+            string summary = L.F("Проверено: {0}; помечено как ДСК: {1}", scan.Files, scan.MatchCount);
             if (scan.MatchCount == 0)
-                return New(scan.RecycleError.Length == 0 ? SecurityLevel.Good : SecurityLevel.Warning,
-                    scan.RecycleError.Length == 0 ? L.T("ДСК-файлы по ключевым словам не найдены") : L.T("Совпадений не найдено, но корзина проверена не полностью"), coverage);
+                return New(scan.RecycleError.Length == 0 ? SecurityLevel.Good : SecurityLevel.Warning, summary, "");
             List<string> lines = new List<string>();
             foreach (DocumentMatch match in scan.Matches) lines.Add(match.DisplayPath + "  [" + match.Note + "]");
-            string details = string.Join("\r\n", lines.ToArray()) + "\r\n\r\n" + coverage;
-            if (scan.MatchLimit) details += "\r\n" + L.T("Показаны первые 200 совпадений.");
-            SecurityCheck check = New(SecurityLevel.Bad, L.F("Найдено совпадений: {0}", scan.MatchCount), details);
+            SecurityCheck check = New(SecurityLevel.Bad, summary, string.Join("\r\n", lines.ToArray()));
             check.Items.Clear();
             foreach (DocumentMatch match in scan.Matches)
                 check.Items.Add(new SecurityDetail(match.DisplayPath, match.Note, match.Path, match.Type));
-            foreach (string line in coverage.Split(new[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries))
-                check.Items.Add(new SecurityDetail(line, "", "", ""));
-            if (scan.MatchLimit) check.Items.Add(new SecurityDetail(L.T("Показаны первые 200 совпадений."), "", "", ""));
             return check;
         }
 
@@ -660,12 +649,21 @@ namespace CompInfo
             List<string> tags = new List<string>();
             string p = "\\" + (path ?? "").Replace('/', '\\').Trim('\\') + "\\";
             if (recycle) tags.Add(L.T("#корзина"));
+            if (IsClaudeLocation(p)) tags.Add("#Claude");
             if (ContainsPath(p, "telegram desktop") || ContainsPath(p, "telegram")) tags.Add(L.T("#телеграм"));
-            if (p.IndexOf("whatsapp", StringComparison.OrdinalIgnoreCase) >= 0) tags.Add(L.T("#вотсап"));
-            if (ContainsPath(p, "desktop") || ContainsPath(p, "рабочий стол") || ContainsPath(p, "робочий стіл")) tags.Add(L.T("#десктоп"));
+            if (p.IndexOf("whatsapp", StringComparison.OrdinalIgnoreCase) >= 0) tags.Add("#WhatsApp");
+            if (ContainsPath(p, "desktop") || ContainsPath(p, "рабочий стол") || ContainsPath(p, "робочий стіл")) tags.Add("#Desktop");
             if (ContainsPath(p, "documents") || ContainsPath(p, "документы") || ContainsPath(p, "документи")) tags.Add(L.T("#документы"));
             if (ContainsPath(p, "downloads") || ContainsPath(p, "загрузки") || ContainsPath(p, "завантаження")) tags.Add(L.T("#даунлоадс"));
             return tags;
+        }
+
+        static bool IsClaudeLocation(string path)
+        {
+            if (ContainsPath(path, ".claude")) return true;
+            if (!ContainsPath(path, "claude")) return false;
+            return path.IndexOf("\\appdata\\", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                ContainsPath(path, "cache") || ContainsPath(path, "code cache");
         }
 
         static bool ContainsPath(string path, string folder)

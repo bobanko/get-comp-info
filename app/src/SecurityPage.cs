@@ -376,7 +376,7 @@ namespace CompInfo
                     int width = textSize.Width + em * 2 / 3;
                     if (x + width > e.CellBounds.Right - em * 2) break;
                     Color fore, back;
-                    Badges.Colors(ChipKind(label), out fore, out back);
+                    ChipColors(label, out fore, out back);
                     Rectangle chip = new Rectangle(x, top, width, em + 2);
                     e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
                     using (System.Drawing.Drawing2D.GraphicsPath shape = Shapes.Round(chip, chip.Height / 2))
@@ -397,9 +397,20 @@ namespace CompInfo
         {
             if (label == L.T("#корзина").TrimStart('#')) return BadgeKind.Danger;
             if (label == L.T("#даунлоадс").TrimStart('#')) return BadgeKind.Warn;
-            if (label == L.T("#вотсап").TrimStart('#')) return BadgeKind.Ok;
-            if (label == L.T("#десктоп").TrimStart('#')) return BadgeKind.Muted;
+            if (label == "WhatsApp") return BadgeKind.Ok;
+            if (label == "Desktop") return BadgeKind.Muted;
             return BadgeKind.Ok;
+        }
+
+        static void ChipColors(string label, out Color fore, out Color back)
+        {
+            if (label == "Claude")
+            {
+                fore = Theme.Dark ? Color.FromArgb(232, 154, 125) : Color.FromArgb(166, 75, 49);
+                back = Theme.Dark ? Color.FromArgb(67, 42, 36) : Color.FromArgb(247, 229, 221);
+                return;
+            }
+            Badges.Colors(ChipKind(label), out fore, out back);
         }
 
         void SetDetailMode(bool files)
