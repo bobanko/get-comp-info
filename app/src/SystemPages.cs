@@ -73,10 +73,12 @@ namespace CompInfo
     {
         readonly ComboBox adapter = Ui.Combo();
         // The address is built from left to right: network . segment . building . computer.
-        readonly TextBox first, second, third, host;
+        readonly TextBox first, second, third;
+        readonly NumericUpDown host = new NumericUpDown();
         readonly Label range;
         readonly FlowLayoutPanel segmentList = new FlowLayoutPanel(), officeList = new FlowLayoutPanel();
         readonly List<RadioButton> segmentButtons = new List<RadioButton>(), officeButtons = new List<RadioButton>();
+        int officeNameWidth;
         readonly StatusLine profilesNote = new StatusLine();
         readonly Label summary;
         readonly Button apply;
@@ -123,10 +125,18 @@ namespace CompInfo
             first = Octet(big, true);
             second = Octet(big, true);
             third = Octet(big, true);
-            host = Octet(big, false);
-            host.MaxLength = 3;
+            host.Font = big;
+            host.TextAlign = HorizontalAlignment.Center;
+            host.Minimum = 0;
+            host.Maximum = 255;
+            host.Width = em * 5;
+            host.Margin = new Padding(0);
+            host.BorderStyle = BorderStyle.FixedSingle;
+            host.BackColor = Theme.BadLight;
+            host.ForeColor = Theme.Bad;
+            Theme.Native(host);
+            host.ValueChanged += delegate { UpdateSummary(); };
             host.TextChanged += delegate { UpdateSummary(); };
-            host.KeyPress += delegate (object o, KeyPressEventArgs k) { if (!char.IsDigit(k.KeyChar) && !char.IsControl(k.KeyChar)) k.Handled = true; };
             range = Ui.Text("", Font, Theme.Muted);
             range.Anchor = AnchorStyles.Left;
             range.Margin = new Padding(em / 2, 0, 0, 0);
@@ -219,6 +229,9 @@ namespace CompInfo
             RadioButton r = new RadioButton();
             r.Text = text;
             r.Tag = value;
+            r.Font = group == officeButtons
+                ? new Font(Ui.MonoFont.FontFamily, 11f)
+                : new Font(Font.FontFamily, Font.SizeInPoints + 1f);
             r.AutoSize = true;
             r.ForeColor = Theme.Text;
             r.Margin = new Padding(0, 0, 0, Font.Height / 6);
@@ -230,6 +243,11 @@ namespace CompInfo
             list.Controls.Add(r);
             group.Add(r);
             return r;
+        }
+
+        string OfficeColumns(string name, string octet, string hostRange)
+        {
+            return name.PadRight(officeNameWidth) + "   " + octet.PadLeft(8) + "   " + hostRange.PadLeft(10);
         }
 
         public override bool CanLeave()
@@ -254,7 +272,15 @@ namespace CompInfo
             filling = true;
             officeList.Controls.Clear();
             officeButtons.Clear();
-            foreach (NetworkProfiles.Location l in profiles.Locations) Choice(l.Name + "   [" + l.ThirdOctet + "]", l, officeList, officeButtons);
+            officeNameWidth = L.T("Название").Length;
+            foreach (NetworkProfiles.Location l in profiles.Locations) officeNameWidth = Math.Max(officeNameWidth, l.Name.Length);
+            Label officeHeader = Ui.Text(OfficeColumns(L.T("Название"), L.T("Октет"), L.T("Диапазон")),
+                new Font(Ui.MonoFont.FontFamily, 11f, FontStyle.Bold), Theme.Muted);
+            // Data rows start after the native radio glyph; align the header with their text.
+            officeHeader.Margin = new Padding(SystemInformation.MenuCheckSize.Width + Font.Height / 4, 0, 0, Font.Height / 4);
+            officeList.Controls.Add(officeHeader);
+            foreach (NetworkProfiles.Location l in profiles.Locations)
+                Choice(OfficeColumns(l.Name, l.ThirdOctet.ToString(), l.FirstHostOctet + "–" + l.LastHostOctet), l, officeList, officeButtons);
             Choice(L.T("Интернет — автоматически (DHCP)"), null, officeList, officeButtons);
             RadioButton keep = officeButtons.Find(delegate (RadioButton r) { return r.Text == selected; });
             (keep ?? officeButtons[0]).Checked = true;
@@ -356,7 +382,10 @@ namespace CompInfo
             NetworkProfiles.Location l = Office;
             second.Text = l != null && Segment.HasValue ? Segment.Value.ToString() : "—";
             third.Text = l != null ? l.ThirdOctet.ToString() : "—";
-            if (l == null) host.Text = "";
+            int last;
+            bool hostValid = l != null && int.TryParse(host.Text, out last) && last >= l.FirstHostOctet && last <= l.LastHostOctet;
+            host.BackColor = l == null ? Theme.HeaderBack : hostValid ? Theme.GoodLight : Theme.BadLight;
+            host.ForeColor = l == null ? Theme.Muted : hostValid ? Theme.Good : Theme.Bad;
             string ip, gateway, error;
             bool ok = Plan(out ip, out gateway, out error);
             apply.Enabled = ok && !running;
