@@ -40,11 +40,27 @@ namespace CompInfo
             disableOneDrive = Ui.Secondary(L.T("Отключить OneDrive"), Glyph.Power, Font);
             disableOneDrive.Visible = false;
             disableOneDrive.Click += delegate { DisableOneDrive(); };
-            FlowLayoutPanel toolbar = Ui.Row();
-            toolbar.Controls.Add(run);
-            toolbar.Controls.Add(disableOneDrive);
+            FlowLayoutPanel actions = Ui.Row();
+            actions.Controls.Add(run);
+            actions.Controls.Add(disableOneDrive);
+            actions.Anchor = AnchorStyles.Left;
+
+            TableLayoutPanel toolbar = new TableLayoutPanel();
+            toolbar.ColumnCount = 2;
+            toolbar.RowCount = 1;
+            toolbar.AutoSize = true;
+            toolbar.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            toolbar.GrowStyle = TableLayoutPanelGrowStyle.FixedSize;
             toolbar.Dock = DockStyle.Top;
             toolbar.Padding = new Padding(0, 0, 0, em / 2);
+            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            toolbar.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            status.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+            status.Margin = new Padding(em, 0, 0, 0);
+            status.MinimumSize = new Size(em * 12, run.Height);
+            toolbar.Controls.Add(actions, 0, 0);
+            toolbar.Controls.Add(status, 1, 0);
 
             progress.Style = ProgressBarStyle.Continuous;
             progress.Height = em / 3;
@@ -133,14 +149,11 @@ namespace CompInfo
                     split.SplitterDistance = split.Height * 3 / 5;
             };
 
-            status.Dock = DockStyle.Bottom;
-            status.Padding = new Padding(0, em / 2, 0, 0);
             status.Set(Glyph.Info, L.T("Нажмите «Запустить проверку». Полный поиск документов может занять несколько минут."), Theme.Info);
 
             Controls.Add(split);
             Controls.Add(progress);
             Controls.Add(toolbar);
-            Controls.Add(status);
         }
 
         public override void Opened() { if (!running) run.Focus(); }
