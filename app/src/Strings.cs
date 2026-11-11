@@ -594,7 +594,7 @@ namespace CompInfo
             "#даунлоадс", "#даунлоадс", "#downloads",
             "#телеграм", "#телеграм", "#telegram",
             "#корзина", "#кошик", "#recycle",
-            " · удалён: ", " · видалено: ", " · deleted: ",
+            "Удалён: ", "Видалено: ", "Deleted: ",
             "Windows Shell недоступен.", "Windows Shell недоступний.", "Windows Shell is unavailable.",
             "Не удалось открыть корзину Windows.", "Не вдалося відкрити кошик Windows.", "Could not open the Windows Recycle Bin.",
             "имя", "назва", "name",

@@ -28,11 +28,14 @@ namespace CompInfo
 
     public class SecurityDetail
     {
-        public string Text, Note, FilePath, FileType;
+        public string Text, Note, FilePath, FileType, ToolTip;
 
         public SecurityDetail(string text, string note, string filePath, string fileType)
+            : this(text, note, filePath, fileType, "") { }
+
+        public SecurityDetail(string text, string note, string filePath, string fileType, string toolTip)
         {
-            Text = text ?? ""; Note = note ?? ""; FilePath = filePath ?? ""; FileType = fileType ?? "";
+            Text = text ?? ""; Note = note ?? ""; FilePath = filePath ?? ""; FileType = fileType ?? ""; ToolTip = toolTip ?? "";
         }
     }
 
@@ -391,14 +394,15 @@ namespace CompInfo
 
         class DocumentMatch
         {
-            public string Path, DisplayPath, Note, Type;
+            public string Path, DisplayPath, Note, Type, ToolTip;
 
             public DocumentMatch(string path, List<KeywordHit> hits)
                 : this(path, path, hits, false, "") { }
 
             public DocumentMatch(string path, string displayPath, List<KeywordHit> hits, bool recycle, string deletedAt)
             {
-                Path = path; DisplayPath = displayPath; Note = MatchNote(displayPath, hits, recycle, deletedAt);
+                Path = path; DisplayPath = displayPath; Note = MatchNote(displayPath, hits, recycle);
+                ToolTip = MatchToolTip(hits, deletedAt);
                 Type = DocumentType(displayPath);
             }
         }
@@ -477,7 +481,7 @@ namespace CompInfo
             SecurityCheck check = New(SecurityLevel.Bad, summary, string.Join("\r\n", lines.ToArray()));
             check.Items.Clear();
             foreach (DocumentMatch match in scan.Matches)
-                check.Items.Add(new SecurityDetail(match.DisplayPath, match.Note, match.Path, match.Type));
+                check.Items.Add(new SecurityDetail(match.DisplayPath, match.Note, match.Path, match.Type, match.ToolTip));
             return check;
         }
 
@@ -632,16 +636,21 @@ namespace CompInfo
             return count;
         }
 
-        static string MatchNote(string path, List<KeywordHit> hits, bool recycle, string deletedAt)
+        static string MatchNote(string path, List<KeywordHit> hits, bool recycle)
         {
             List<string> tags = LocationTags(path, recycle);
-            List<string> keywords = new List<string>();
-            foreach (KeywordHit hit in hits) keywords.Add(DisplayKeyword(hit.Keyword) + " ×" + hit.Count);
+            int total = 0;
+            foreach (KeywordHit hit in hits) total += hit.Count;
             string tagText = string.Join(" ", tags.ToArray());
-            string keywordText = string.Join(" · ", keywords.ToArray());
-            string note = tagText.Length > 0 ? tagText + " · " + keywordText : keywordText;
-            if (!string.IsNullOrEmpty(deletedAt)) note += L.T(" · удалён: ") + deletedAt;
-            return note;
+            return tagText.Length > 0 ? tagText + " · " + total : total.ToString();
+        }
+
+        static string MatchToolTip(List<KeywordHit> hits, string deletedAt)
+        {
+            List<string> lines = new List<string>();
+            foreach (KeywordHit hit in hits) lines.Add(DisplayKeyword(hit.Keyword) + " — " + hit.Count);
+            if (!string.IsNullOrEmpty(deletedAt)) lines.Add(L.T("Удалён: ") + deletedAt);
+            return string.Join("\r\n", lines.ToArray());
         }
 
         static List<string> LocationTags(string path, bool recycle)

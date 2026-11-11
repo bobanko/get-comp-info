@@ -326,10 +326,11 @@ namespace CompInfo
                     if (item.FilePath == named && item.FileType == "WORD") word = true;
                     if (item.FilePath == excel && item.FileType == "EXCEL" && item.Note.Contains("#документы")) excelType = true;
                     if (item.FilePath == powerpoint && item.FileType == "PPT") powerpointType = true;
-                    if (item.FilePath == content && item.Note.Contains("#Desktop") && item.Note.Contains("ДСК ×3") &&
-                        item.Note.Contains("ДСК-ЕП ×2") &&
-                        item.Note.Contains("МОСІ ×1") && item.Note.Contains("для службового користування ×1") &&
-                        item.Note.Contains("таємно ×1") && item.Note.Contains("особливої важливості ×1")) counts = true;
+                    if (item.FilePath == content && item.Note == "#Desktop · 10" &&
+                        item.ToolTip.Contains("ДСК — 3") && item.ToolTip.Contains("ДСК-ЕП — 2") &&
+                        item.ToolTip.Contains("МОСІ — 1") && item.ToolTip.Contains("для службового користування — 1") &&
+                        item.ToolTip.Contains("таємно — 1") && item.ToolTip.Contains("особливої важливості — 1") &&
+                        item.ToolTip.Contains("\r\n")) counts = true;
                     if (item.FilePath == telegramFile && item.Note.Contains("#телеграм") && item.Note.Contains("#даунлоадс")) telegramTag = true;
                     if (item.FilePath == whatsappFile && item.Note.Contains("#WhatsApp")) whatsappTag = true;
                     if (item.FilePath == claudeFile && item.Note.Contains("#Claude")) claudeTag = true;
@@ -337,7 +338,7 @@ namespace CompInfo
                 Check(check.Level == SecurityLevel.Bad && check.Details.Contains(named) && check.Details.Contains(content), "name and Open XML content matches");
                 Check(check.Summary.Contains("Проверено: 7") && check.Summary.Contains("помечено как ДСК: 7"), "document totals in the main result");
                 Check(word && excelType && powerpointType, "Office file types in structured security details");
-                Check(counts, "all keyword occurrences and desktop tag");
+                Check(counts, "total occurrence count with a line-by-line tooltip");
                 Check(telegramTag && whatsappTag && claudeTag, "messenger, Claude and downloads tags");
                 Check(onlyFiles, "document detail table contains files only");
                 File.Delete(named);

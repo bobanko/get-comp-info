@@ -348,6 +348,7 @@ namespace CompInfo
                 if (file)
                 {
                     row.Cells[0].ToolTipText = item.Text;
+                    row.Cells[2].ToolTipText = item.ToolTip;
                     row.Cells[3].ToolTipText = item.Text;
                     row.Cells[4].ToolTipText = L.T("Открыть");
                     row.Cells[5].ToolTipText = L.T("Папка");
