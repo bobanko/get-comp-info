@@ -67,13 +67,14 @@ namespace CompInfo
             int em = Font.Height;
             Rectangle screen = Screen.PrimaryScreen.WorkingArea;
             ClientSize = new Size(Math.Min(em * 56, screen.Width * 9 / 10), Math.Min(em * 34, screen.Height * 9 / 10));
-            MinimumSize = new Size(em * 44, em * 28);
+            MinimumSize = new Size(em * 44, em * 31);
 
             pages.Add(new CollectPage());
             pages.Add(new LanPage());
             pages.Add(new ComputerPage(false));
             pages.Add(new ComputerPage(true));
             pages.Add(new PingPage());
+            pages.Add(new SecurityPage());
             pages.Add(new DatabasePage());
             pages.Add(new UsbPage());
             pages.Add(new SyncPage());
@@ -141,7 +142,8 @@ namespace CompInfo
                 Page target = p;
                 b.Click += delegate { Open(target); };
                 int number = pages.IndexOf(p) + 1;
-                tip.SetToolTip(b, (p.Title ?? "") + "   (Ctrl+" + (p is AboutPage ? 0 : number) + ")");
+                string shortcut = p is AboutPage ? "   (Ctrl+0)" : number <= 9 ? "   (Ctrl+" + number + ")" : "";
+                tip.SetToolTip(b, (p.Title ?? "") + shortcut);
                 buttons.Add(b);
                 // «О программе» sits at the bottom, next to the theme switch.
                 if (p is AboutPage) { about = b; b.Dock = DockStyle.Bottom; } else stack.Add(b);

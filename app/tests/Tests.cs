@@ -4,6 +4,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Text;
 
 namespace CompInfo
@@ -25,6 +26,8 @@ namespace CompInfo
             Console.OutputEncoding = Encoding.UTF8;
             here = Path.GetDirectoryName(typeof(Tests).Assembly.Location);
             if (args.Length == 2 && args[0] == "--check-data") return CheckData(args[1]);
+            if (args.Length == 1 && args[0] == "--security-smoke") return SecuritySmoke();
+            if (args.Length == 1 && args[0] == "--recycle-smoke") return RecycleSmoke();
             string fixtures = args.Length > 0 ? args[0] : Path.Combine(here, @"..\app\tests");
             Run("JSON hashes match PowerShell", delegate { HashesMatchPowerShell(fixtures); });
             Run("JSON round trip", JsonRoundTrip);
@@ -36,6 +39,7 @@ namespace CompInfo
             Run("collected record", CollectedRecord);
             Run("cloud state", CloudStateFile);
             Run("computer names match PowerShell", ComputerNames);
+            Run("security document scan", SecurityDocumentScan);
             Run("record differences and merge", Differences);
             Run("program files and versions", ProgramFiles);
             Run("program update install", InstallRelease);
@@ -52,6 +56,23 @@ namespace CompInfo
             try { test(); }
             catch (Exception e) { failures++; Console.WriteLine("FAIL: " + name + ": " + e); }
             Console.WriteLine((failures == before ? "ok    " : "FAILED ") + name);
+        }
+
+        // Runs the read-only security review against the current computer. This is not part of the
+        // regular build because the document scan can take a while; it is useful before a release.
+        static int SecuritySmoke()
+        {
+            foreach (SecurityCheck check in SecurityAudit.Run(delegate (string title) { Console.WriteLine("checking " + title); }))
+                Console.WriteLine(check.Level + "\t" + check.Title + "\t" + check.Summary +
+                    (check.Level == SecurityLevel.Error ? "\t" + check.Details : ""));
+            return 0;
+        }
+
+        static int RecycleSmoke()
+        {
+            List<RecycleFile> files = RecycleBin.Files();
+            Console.WriteLine("Recycle Bin items available through Windows Shell: " + files.Count);
+            return 0;
         }
 
         static string TempDir()
@@ -244,6 +265,76 @@ namespace CompInfo
             foreach (string n in new[] { "IF-042-", "IF-042--A", "IF-042-A-", "IF-042-ivanov", "IF-043-A", "IF-042-A_B" })
                 Check(ComputerNaming.Issue(n, "IF", p) == bad, "invalid name " + n);
             Check(ComputerNaming.Issue("FR-042-IVANOV-PETR", "IF", p) == "Полное имя должно содержать не больше 15 символов.", "too long");
+            foreach (string name in new[] { "IF-042-PC", "ABC-123-WORK-1", "AA-000-A" })
+                Check(ComputerNaming.MatchesPolicy(name), "valid generic hostname policy: " + name);
+            foreach (string name in new[] { "A-123-PC", "ABCD-123-PC", "AA-12-PC", "AA-123-", "AA-123-A-", "aa-123-PC", "AA-123-A_B", "ABC-123-TOO-LONG" })
+                Check(!ComputerNaming.MatchesPolicy(name), "invalid generic hostname policy: " + name);
+        }
+
+        static void SecurityDocumentScan()
+        {
+            List<SecurityCheck> plan = SecurityAudit.Plan();
+            Check(plan.Count == 9 && plan[0].Key == "hostname" && plan[6].Key == "administrators" && plan[7].Key == "passwords" && plan[8].Key == "documents",
+                "fast security checks precede the document scan");
+            Check(SecurityAudit.AdministratorLevel(1) == SecurityLevel.Good && SecurityAudit.AdministratorLevel(2) == SecurityLevel.Good &&
+                SecurityAudit.AdministratorLevel(3) == SecurityLevel.Warning && SecurityAudit.AdministratorLevel(4) == SecurityLevel.Warning &&
+                SecurityAudit.AdministratorLevel(5) == SecurityLevel.Bad, "administrator account thresholds");
+            string dir = TempDir();
+            try
+            {
+                string named = Path.Combine(dir, "ТФД список.doc");
+                File.WriteAllText(named, "fixture", Encoding.UTF8);
+                string documents = Path.Combine(dir, "Documents");
+                string desktop = Path.Combine(dir, "Desktop");
+                string telegram = Path.Combine(dir, "Downloads", "Telegram Desktop");
+                string whatsapp = Path.Combine(dir, "WhatsApp");
+                Directory.CreateDirectory(documents);
+                Directory.CreateDirectory(desktop);
+                Directory.CreateDirectory(telegram);
+                Directory.CreateDirectory(whatsapp);
+                string excel = Path.Combine(documents, "відомість.xlsx");
+                string powerpoint = Path.Combine(dir, "доповідь.pptx");
+                File.WriteAllText(excel, "fixture", Encoding.UTF8);
+                File.WriteAllText(powerpoint, "fixture", Encoding.UTF8);
+                string telegramFile = Path.Combine(telegram, "ДСК telegram.doc");
+                string whatsappFile = Path.Combine(whatsapp, "МОСІ whatsapp.doc");
+                File.WriteAllText(telegramFile, "fixture", Encoding.UTF8);
+                File.WriteAllText(whatsappFile, "fixture", Encoding.UTF8);
+                string content = Path.Combine(desktop, "ДСК ordinary.docx");
+                using (ZipArchive zip = ZipFile.Open(content, ZipArchiveMode.Create))
+                {
+                    ZipArchiveEntry entry = zip.CreateEntry("word/document.xml");
+                    using (StreamWriter writer = new StreamWriter(entry.Open(), new UTF8Encoding(false)))
+                        writer.Write("<w:document><w:t>телефонний</w:t><w:t> довідник ДСК дск ДСК-ЕП дск-еп для службового користування МОСІ таємно особливої важливості</w:t></w:document>");
+                }
+                SecurityCheck check = SecurityAudit.CheckDocumentsAt(new[] { dir });
+                bool word = false, excelType = false, powerpointType = false, counts = false, telegramTag = false, whatsappTag = false;
+                foreach (SecurityDetail item in check.Items)
+                {
+                    if (item.FilePath == named && item.FileType == "WORD") word = true;
+                    if (item.FilePath == excel && item.FileType == "EXCEL" && item.Note.Contains("#документы")) excelType = true;
+                    if (item.FilePath == powerpoint && item.FileType == "PPT") powerpointType = true;
+                    if (item.FilePath == content && item.Note.Contains("#десктоп") && item.Note.Contains("ДСК ×3") &&
+                        item.Note.Contains("ДСК-ЕП ×2") &&
+                        item.Note.Contains("МОСІ ×1") && item.Note.Contains("для службового користування ×1") &&
+                        item.Note.Contains("таємно ×1") && item.Note.Contains("особливої важливості ×1")) counts = true;
+                    if (item.FilePath == telegramFile && item.Note.Contains("#телеграм") && item.Note.Contains("#даунлоадс")) telegramTag = true;
+                    if (item.FilePath == whatsappFile && item.Note.Contains("#вотсап")) whatsappTag = true;
+                }
+                Check(check.Level == SecurityLevel.Bad && check.Details.Contains(named) && check.Details.Contains(content), "name and Open XML content matches");
+                Check(word && excelType && powerpointType, "Office file types in structured security details");
+                Check(counts, "all keyword occurrences and desktop tag");
+                Check(telegramTag && whatsappTag, "messenger and downloads tags");
+                File.Delete(named);
+                File.Delete(excel);
+                File.Delete(powerpoint);
+                File.Delete(telegramFile);
+                File.Delete(whatsappFile);
+                File.Delete(content);
+                check = SecurityAudit.CheckDocumentsAt(new[] { dir });
+                Check(check.Level == SecurityLevel.Good, "empty document scan");
+            }
+            finally { Directory.Delete(dir, true); }
         }
 
         static void Differences()

@@ -148,6 +148,13 @@ namespace CompInfo
             return null;
         }
 
+        // Generic inventory policy used by the security review: AA-XXX-... or AAA-XXX-....
+        public static bool MatchesPolicy(string name)
+        {
+            return !string.IsNullOrEmpty(name) && name.Length <= 15 &&
+                Regex.IsMatch(name, "^[A-Z]{2,3}-[0-9]{3}-[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?$");
+        }
+
         public static string Suggested(string currentName, string prefix, ComputerPolicy p, string designation, string ip)
         {
             string suffix = "";
