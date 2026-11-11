@@ -60,23 +60,64 @@ namespace CompInfo
         // A filled green shield with a white check: administrator access is already available.
         public static void DrawAdminReady(Graphics g, Rectangle r)
         {
-            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            int x = r.Left + r.Width / 8, right = r.Right - r.Width / 8;
-            int top = r.Top + r.Height / 12, bottom = r.Bottom - r.Height / 10, mid = (x + right) / 2;
-            Point[] shield = { new Point(mid, top), new Point(right, top + r.Height / 5), new Point(right - r.Width / 12, bottom - r.Height / 4), new Point(mid, bottom), new Point(x + r.Width / 12, bottom - r.Height / 4), new Point(x, top + r.Height / 5) };
-            using (SolidBrush brush = new SolidBrush(CompInfo.Theme.Good)) g.FillPolygon(brush, shield);
-            using (Pen pen = new Pen(Color.White, Math.Max(2, r.Width / 8)))
-            {
-                pen.StartCap = pen.EndCap = System.Drawing.Drawing2D.LineCap.Round;
-                g.DrawLines(pen, new[] { new Point(x + r.Width * 3 / 10, r.Top + r.Height * 11 / 20), new Point(mid - r.Width / 12, r.Top + r.Height * 7 / 10), new Point(right - r.Width * 2 / 10, r.Top + r.Height * 2 / 5) });
-            }
+            int side = Math.Max(6, Math.Min(r.Width, r.Height));
+            using (Bitmap b = AdminReadyImage(side))
+                g.DrawImage(b, r.Left + (r.Width - side) / 2, r.Top + (r.Height - side) / 2, side, side);
         }
 
         public static Bitmap AdminReadyImage(int size)
         {
-            Bitmap b = new Bitmap(size, size);
-            using (Graphics g = Graphics.FromImage(b)) DrawAdminReady(g, new Rectangle(0, 0, size, size));
-            return b;
+            // Render the original Windows shield at high resolution and flood-fill the area it
+            // encloses. This preserves exactly the same curved silhouette as the grey icon.
+            int scale = 4, n = Math.Max(24, size * scale);
+            Bitmap mask = new Bitmap(n, n);
+            using (Graphics mg = Graphics.FromImage(mask))
+            {
+                mg.Clear(Color.Transparent);
+                Draw(mg, Shield, new Rectangle(0, 0, n, n), Color.White, n * 0.92f);
+            }
+
+            bool[,] outside = new bool[n, n];
+            Queue<Point> queue = new Queue<Point>();
+            Action<int, int> add = delegate (int x, int y)
+            {
+                if (x < 0 || y < 0 || x >= n || y >= n || outside[x, y] || mask.GetPixel(x, y).A > 24) return;
+                outside[x, y] = true;
+                queue.Enqueue(new Point(x, y));
+            };
+            for (int i = 0; i < n; i++) { add(i, 0); add(i, n - 1); add(0, i); add(n - 1, i); }
+            while (queue.Count > 0)
+            {
+                Point p = queue.Dequeue();
+                add(p.X - 1, p.Y); add(p.X + 1, p.Y); add(p.X, p.Y - 1); add(p.X, p.Y + 1);
+            }
+
+            Color green = Color.FromArgb(0x0B, 0x6E, 0x36);
+            Bitmap large = new Bitmap(n, n);
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                    if (!outside[x, y]) large.SetPixel(x, y, green);
+            mask.Dispose();
+
+            using (Graphics lg = Graphics.FromImage(large))
+            {
+                lg.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                Draw(lg, Shield, new Rectangle(0, 0, n, n), Color.White, n * 0.92f);
+                using (Pen check = new Pen(Color.White, Math.Max(4, n / 12)))
+                {
+                    check.StartCap = check.EndCap = System.Drawing.Drawing2D.LineCap.Round;
+                    lg.DrawLines(check, new[] { new Point(n * 31 / 100, n * 53 / 100), new Point(n * 45 / 100, n * 67 / 100), new Point(n * 70 / 100, n * 39 / 100) });
+                }
+            }
+
+            Bitmap result = new Bitmap(size, size);
+            using (Graphics rg = Graphics.FromImage(result))
+            {
+                rg.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                rg.DrawImage(large, new Rectangle(0, 0, size, size));
+            }
+            large.Dispose();
+            return result;
         }
     }
 

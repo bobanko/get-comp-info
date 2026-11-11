@@ -387,7 +387,7 @@ namespace CompInfo
                     // A green shield confirms that this restarted copy already has elevation.
                     Rectangle shield = new Rectangle(Width - em * 3 / 2, r.Top, em, r.Height);
                     if (PowerShell.IsAdministrator()) CompInfo.Glyph.DrawAdminReady(e.Graphics, shield);
-                    else CompInfo.Glyph.Draw(e.Graphics, CompInfo.Glyph.Shield, shield, Theme.Muted, em * 0.65f);
+                    else CompInfo.Glyph.Draw(e.Graphics, CompInfo.Glyph.Shield, shield, Theme.Muted, em * 0.9f);
                 }
                 if (Page != null && Page.NeedsInternet)
                 {
