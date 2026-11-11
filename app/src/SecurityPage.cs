@@ -158,6 +158,12 @@ namespace CompInfo
 
         public override void Opened() { if (!running) run.Focus(); }
 
+        public override bool CanLeave()
+        {
+            if (running) Ui.Info(FindForm(), L.T("Проверка выполняется"), L.T("Дождитесь окончания проверки."));
+            return !running;
+        }
+
         public override bool Shortcut(Keys keys)
         {
             if (keys == Keys.F5) { Run(); return true; }
