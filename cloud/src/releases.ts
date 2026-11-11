@@ -42,6 +42,10 @@ export function isProgramFile(path: string): boolean {
   return path === 'cloud-config.json' || path.toLowerCase() === 'comp-info.exe' || PROGRAM_FILE.test(path);
 }
 
+export function isSuspectorFile(path: string): boolean {
+  return path.toLowerCase() === 'suspector.exe';
+}
+
 function toRelease(row: ReleaseRow) {
   const manifest = JSON.parse(row.manifest) as Manifest;
   return {
@@ -58,7 +62,7 @@ function toRelease(row: ReleaseRow) {
 const RELEASE_COLUMNS = 'version, commit_sha, manifest, sha256, size, published_at, is_current';
 
 // Checks the archive against its manifest.json and returns the manifest.
-export async function validatePackage(bytes: Uint8Array): Promise<Manifest> {
+export async function validatePackage(bytes: Uint8Array, allowedFile: (path: string) => boolean = isProgramFile): Promise<Manifest> {
   if (bytes.byteLength > MAX_PACKAGE_BYTES) fail(413, 'too_large', 'Архив версии больше 1 МБ.');
   let entries;
   try {
@@ -88,7 +92,7 @@ export async function validatePackage(bytes: Uint8Array): Promise<Manifest> {
 
   const listed = new Set<string>();
   for (const file of manifest.files) {
-    if (typeof file?.path !== 'string' || !isProgramFile(file.path)) {
+    if (typeof file?.path !== 'string' || !allowedFile(file.path)) {
       fail(400, 'invalid_manifest', `Недопустимый файл в manifest.json: ${String(file?.path)}`);
     }
     if (listed.has(file.path.toLowerCase())) fail(400, 'invalid_manifest', `Файл указан дважды: ${file.path}`);
@@ -244,3 +248,67 @@ export async function storeRelease(db: D1Database, bytes: Uint8Array, tag: strin
   ]);
   return { version: manifest.version, sha256, size: bytes.byteLength, publishedAt };
 }
+
+// ---------- Standalone SUSpector releases ----------
+
+export async function getCurrentSuspectorRelease(db: D1Database) {
+  const row = await db.prepare(`SELECT ${RELEASE_COLUMNS} FROM suspector_releases WHERE is_current = 1`).first<ReleaseRow>();
+  return row ? toRelease(row) : null;
+}
+
+export async function getSuspectorPackage(db: D1Database, version: string): Promise<{ bytes: Uint8Array; sha256: string } | null> {
+  const row = await db
+    .prepare('SELECT package, sha256 FROM suspector_releases WHERE version = ?')
+    .bind(version)
+    .first<{ package: ArrayBuffer | number[]; sha256: string }>();
+  return row ? { bytes: new Uint8Array(row.package), sha256: row.sha256 } : null;
+}
+
+export async function storeSuspectorRelease(db: D1Database, bytes: Uint8Array, tag: string | null) {
+  const manifest = await validatePackage(bytes, isSuspectorFile);
+  if (tag !== null && tag !== `v${manifest.version}`) {
+    fail(400, 'tag_mismatch', `Тег ${tag} не совпадает с версией ${manifest.version} в manifest.json.`);
+  }
+  const existing = await db.prepare('SELECT version FROM suspector_releases WHERE version = ?').bind(manifest.version).first();
+  if (existing) fail(409, 'release_exists', `Версия SUSpector ${manifest.version} уже опубликована.`);
+  const sha256 = await sha256Hex(bytes);
+  const publishedAt = nowIso();
+  await db.batch([
+    db.prepare('UPDATE suspector_releases SET is_current = 0 WHERE is_current = 1'),
+    db
+      .prepare(
+        `INSERT INTO suspector_releases (version, commit_sha, manifest, package, sha256, size, published_at, is_current)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+      )
+      .bind(manifest.version, manifest.commit, JSON.stringify(manifest), bytes, sha256, bytes.byteLength, publishedAt),
+  ]);
+  return { version: manifest.version, sha256, size: bytes.byteLength, publishedAt };
+}
+
+// Public download API: SUSpector contains no database access and ordinary users have no Comp Info key.
+export const suspectorApi = new Hono<AppEnv>();
+
+suspectorApi.get('/latest', async (c) => {
+  const release = await getCurrentSuspectorRelease(c.env.DB);
+  if (!release) fail(404, 'no_release', 'SUSpector ещё не опубликован.');
+  return c.json(release);
+});
+
+suspectorApi.get('/:version/package', async (c) => {
+  const found = await getSuspectorPackage(c.env.DB, c.req.param('version'));
+  if (!found) fail(404, 'not_found', 'Такой версии SUSpector нет.');
+  return new Response(found.bytes, {
+    headers: {
+      'Content-Type': 'application/zip',
+      'Content-Length': String(found.bytes.byteLength),
+      'X-Content-SHA256': found.sha256,
+    },
+  });
+});
+
+export const suspectorReleaseApi = new Hono<AppEnv>();
+suspectorReleaseApi.use('*', releaseAuth);
+suspectorReleaseApi.post('/', async (c) => {
+  const bytes = new Uint8Array(await c.req.arrayBuffer());
+  return c.json(await storeSuspectorRelease(c.env.DB, bytes, c.get('releaseTag') ?? null), 201);
+});

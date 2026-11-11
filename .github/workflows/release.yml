@@ -36,6 +36,8 @@ jobs:
         run: |
           & powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/build-release.ps1 -Version $env:GITHUB_REF_NAME.TrimStart('v')
           if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/build-suspector-release.ps1 -Version $env:GITHUB_REF_NAME.TrimStart('v')
+          if ($LASTEXITCODE -ne 0) { throw 'SUSpector build failed' }
 
       - name: Publish to the cloud
         shell: pwsh
@@ -44,3 +46,4 @@ jobs:
           $tokenUrl = "$env:ACTIONS_ID_TOKEN_REQUEST_URL&audience=comp-info-release"
           $token = (Invoke-RestMethod -Uri $tokenUrl -Headers @{ Authorization = "bearer $env:ACTIONS_ID_TOKEN_REQUEST_TOKEN" }).value
           ./tools/publish-release.ps1 -Package "dist/comp-info-$version.zip" -Token $token
+          ./tools/publish-release.ps1 -Package "dist/SUSpector-$version.zip" -Token $token -ApiUrl 'https://comp-info.chagear.top/api/suspector-release'

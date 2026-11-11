@@ -15,11 +15,13 @@ function New-ReleasePackage {
         [Parameter(Mandatory)][string]$Version,
         [Parameter(Mandatory)][string]$Commit,
         [string[]]$Notes = @(),
+        [scriptblock]$FileValidator,
         [Parameter(Mandatory)][string]$OutputPath
     )
+    if ($null -eq $FileValidator) { $FileValidator = { param($name) Test-ProgramFileName $name } }
     Add-Type -AssemblyName System.IO.Compression
     $entries = @(foreach ($name in ($Files | Sort-Object -Unique)) {
-        if (-not (Test-ProgramFileName $name)) { throw "Файл не может входить в версию программы: $name" }
+        if (-not (& $FileValidator $name)) { throw "Файл не может входить в версию программы: $name" }
         $bytes = [IO.File]::ReadAllBytes((Join-Path $SourceRoot $name))
         [pscustomobject]@{ Path = $name; Bytes = $bytes; Sha256 = (Get-BytesSha256 $bytes) }
     })
