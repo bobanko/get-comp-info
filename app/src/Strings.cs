@@ -434,9 +434,9 @@ namespace CompInfo
             "Не удалось завершить настройку сети: ", "Не вдалося завершити налаштування мережі: ", "Could not finish the network setup: ",
 
             // ---------- Имя компьютера и домен: окно ----------
-            "Ввод компьютера в домен подразделения и вывод из него. Домен берётся из профилей сети в облаке. После изменения нужна перезагрузка.",
-            "Введення комп'ютера в домен підрозділу та виведення з нього. Домен береться з профілів мережі у хмарі. Після зміни потрібне перезавантаження.",
-            "Joining the computer to the unit's domain and removing it. The domain comes from the network profiles in the cloud. A restart is needed after the change.",
+            "Ввод компьютера в домен gu.gvardia.mvs и вывод в рабочую группу WORKGROUP. После изменения нужна перезагрузка.",
+            "Введення комп'ютера до домену gu.gvardia.mvs і виведення до робочої групи WORKGROUP. Після зміни потрібне перезавантаження.",
+            "Joining the computer to gu.gvardia.mvs and removing it to the WORKGROUP workgroup. A restart is needed after the change.",
             "Переименование по правилам: ", "Перейменування за правилами: ", "Renaming by the rules: ",
             "-… для интернета, ", "-… для інтернету, ", "-… for the internet, ",
             "-… для доменной сети. После изменения нужна перезагрузка.", "-… для доменної мережі. Після зміни потрібне перезавантаження.", "-… for the domain network. A restart is needed after the change.",

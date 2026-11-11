@@ -16,7 +16,7 @@ namespace CompInfo
             Copy = "", Save = "", Search = "", Check = "", Cross = "", Warning = "",
             Shield = "", Open = "", Back = "", Forward = "", Folder = "", Settings = "",
             Circle = "", Dash = "", More = "", Info = "", Cloud = "", Upload = "",
-            Power = "", Lock = "", Person = "", Theme = "", Play = "";
+            Power = "", Lock = "", Person = "", Theme = "", Play = "", Globe = "\uE774";
         public const string Sun = "\uE706", Moon = "\uE708";
 
         static string family;
@@ -55,6 +55,28 @@ namespace CompInfo
         {
             using (Font f = Font(pixels))
                 TextRenderer.DrawText(g, glyph, f, r, color, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+        }
+
+        // A filled green shield with a white check: administrator access is already available.
+        public static void DrawAdminReady(Graphics g, Rectangle r)
+        {
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            int x = r.Left + r.Width / 8, right = r.Right - r.Width / 8;
+            int top = r.Top + r.Height / 12, bottom = r.Bottom - r.Height / 10, mid = (x + right) / 2;
+            Point[] shield = { new Point(mid, top), new Point(right, top + r.Height / 5), new Point(right - r.Width / 12, bottom - r.Height / 4), new Point(mid, bottom), new Point(x + r.Width / 12, bottom - r.Height / 4), new Point(x, top + r.Height / 5) };
+            using (SolidBrush brush = new SolidBrush(CompInfo.Theme.Good)) g.FillPolygon(brush, shield);
+            using (Pen pen = new Pen(Color.White, Math.Max(2, r.Width / 8)))
+            {
+                pen.StartCap = pen.EndCap = System.Drawing.Drawing2D.LineCap.Round;
+                g.DrawLines(pen, new[] { new Point(x + r.Width * 3 / 10, r.Top + r.Height * 11 / 20), new Point(mid - r.Width / 12, r.Top + r.Height * 7 / 10), new Point(right - r.Width * 2 / 10, r.Top + r.Height * 2 / 5) });
+            }
+        }
+
+        public static Bitmap AdminReadyImage(int size)
+        {
+            Bitmap b = new Bitmap(size, size);
+            using (Graphics g = Graphics.FromImage(b)) DrawAdminReady(g, new Rectangle(0, 0, size, size));
+            return b;
         }
     }
 
@@ -103,6 +125,21 @@ namespace CompInfo
             b.FlatAppearance.BorderSize = 1;
             b.FlatAppearance.MouseOverBackColor = Theme.SidebarHover;
             b.FlatAppearance.MouseDownBackColor = Theme.Border;
+            return b;
+        }
+
+        // System-changing action: a shield until elevation is needed, then a confirmed-access badge.
+        public static Button AdminPrimary(string text, Font font)
+        {
+            bool admin = PowerShell.IsAdministrator();
+            Button b = Primary(text, admin ? null : Glyph.Shield, font);
+            if (admin)
+            {
+                b.Image = Glyph.AdminReadyImage((int)(font.Height * 0.95f));
+                b.TextImageRelation = TextImageRelation.ImageBeforeText;
+                b.ImageAlign = ContentAlignment.MiddleLeft;
+                b.Text = " " + text;
+            }
             return b;
         }
 

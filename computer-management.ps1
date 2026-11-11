@@ -54,11 +54,14 @@ function Test-ComputerAdministrator {
 }
 
 function Start-ComputerManagement {
-    param([string]$ScriptPath)
+    param([string]$ScriptPath, [switch]$Elevate)
+    if ($ScriptPath) { $script:computerManagementScriptPath = $ScriptPath }
+    if (-not $Elevate) { return $true }
     if (Test-ComputerAdministrator) { return $true }
+    if (-not $script:computerManagementScriptPath) { throw 'Не найден сценарий настройки для запуска с правами администратора.' }
     # This is an interactive wizard: it needs a visible elevated console.
     $process = Start-Process -FilePath 'powershell.exe' -Verb RunAs -WindowStyle Normal -Wait -PassThru -ArgumentList @(
-        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + $ScriptPath + '"'))
+        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + $script:computerManagementScriptPath + '"'))
     if ($process.ExitCode -notin @(0, 42)) { throw "Окно настройки завершилось с кодом $($process.ExitCode)." }
     return $false
 }

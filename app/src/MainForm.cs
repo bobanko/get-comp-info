@@ -16,6 +16,7 @@ namespace CompInfo
         public string Description;
         public string Icon;
         public bool NeedsAdmin;
+        public bool NeedsInternet;
 
         public Page()
         {
@@ -375,15 +376,23 @@ namespace CompInfo
                     using (SolidBrush b = new SolidBrush(Theme.Accent)) e.Graphics.FillRectangle(b, 0, r.Top + em / 3, 3, r.Height - em * 2 / 3);
                 Color iconColor = selected ? Theme.Accent : Theme.Muted;
                 CompInfo.Glyph.Draw(e.Graphics, Glyph, new Rectangle(em / 3, r.Top, em * 3 / 2, r.Height), iconColor, em * 0.9f);
-                int right = Page != null && Page.NeedsAdmin ? em * 3 / 2 : em / 3;
+                int right = em / 3;
+                if (Page != null && Page.NeedsAdmin) right += em * 3 / 2;
+                if (Page != null && Page.NeedsInternet) right += em * 3 / 2;
                 using (Font f = selected ? new Font(Font, FontStyle.Bold) : new Font(Font, FontStyle.Regular))
                     TextRenderer.DrawText(e.Graphics, Text, f, new Rectangle(em * 2, r.Top, Width - em * 2 - right, r.Height), selected ? Theme.Accent : Page == null ? Theme.Muted : Theme.Text,
                         TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
                 if (Page != null && Page.NeedsAdmin)
                 {
                     // A green shield confirms that this restarted copy already has elevation.
-                    Color shieldColor = PowerShell.IsAdministrator() ? Theme.Good : Theme.Muted;
-                    CompInfo.Glyph.Draw(e.Graphics, CompInfo.Glyph.Shield, new Rectangle(Width - em * 3 / 2, r.Top, em, r.Height), shieldColor, em * 0.65f);
+                    Rectangle shield = new Rectangle(Width - em * 3 / 2, r.Top, em, r.Height);
+                    if (PowerShell.IsAdministrator()) CompInfo.Glyph.DrawAdminReady(e.Graphics, shield);
+                    else CompInfo.Glyph.Draw(e.Graphics, CompInfo.Glyph.Shield, shield, Theme.Muted, em * 0.65f);
+                }
+                if (Page != null && Page.NeedsInternet)
+                {
+                    int offset = Page.NeedsAdmin ? em * 3 / 2 : 0;
+                    CompInfo.Glyph.Draw(e.Graphics, CompInfo.Glyph.Globe, new Rectangle(Width - em * 3 / 2 - offset, r.Top, em, r.Height), Theme.Info, em * 0.65f);
                 }
                 if (Focused && ShowFocusCues) ControlPaint.DrawFocusRectangle(e.Graphics, r);
             }

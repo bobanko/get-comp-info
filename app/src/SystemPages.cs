@@ -168,7 +168,7 @@ namespace CompInfo
 
             summary = Ui.Paragraph("", Font, Theme.Text);
             summary.Padding = new Padding(0, em, 0, em / 2);
-            apply = Ui.Primary(L.T("Применить настройки"), PowerShell.IsAdministrator() ? Glyph.Check : Glyph.Shield, Font);
+            apply = Ui.AdminPrimary(L.T("Применить настройки"), Font);
             apply.Click += delegate { Apply(); };
             Ui.Keys(apply, "Ctrl+Enter");
             FlowLayoutPanel actions = Ui.Row();
@@ -437,9 +437,10 @@ namespace CompInfo
             this.domainMode = domainMode;
             Key = domainMode ? "domain" : "name";
             Title = domainMode ? L.T("Домен") : L.T("Имя компьютера");
-            Description = domainMode ? L.T("Ввод компьютера в домен подразделения и вывод из него. Домен берётся из профилей сети в облаке. После изменения нужна перезагрузка.")
+            Description = domainMode ? L.T("Ввод компьютера в домен gu.gvardia.mvs и вывод в рабочую группу WORKGROUP. После изменения нужна перезагрузка.")
                 : L.T("Переименование по правилам: ") + policy.InternetPrefix + "-" + policy.UnitCode + L.T("-… для интернета, ") + policy.DomainPrefix + "-" + policy.UnitCode + L.T("-… для доменной сети. После изменения нужна перезагрузка.");
             Icon = domainMode ? Glyph.Domain : Glyph.Tag;
+            // The page opens normally; the shield marks that applying a change needs elevation.
             NeedsAdmin = true;
             int em = Font.Height;
             AutoScroll = true;
@@ -485,7 +486,7 @@ namespace CompInfo
             rememberTip.SetToolTip(remember, L.T("Пароль хранится рядом с программой лишь замаскированным, это не шифрование: тот, кто получит флешку, получит и эту учётную запись."));
             form.Add("", remember);
 
-            apply = Ui.Primary(L.T("Применить"), Glyph.Check, Font);
+            apply = Ui.AdminPrimary(L.T("Применить"), Font);
             apply.Click += delegate { Apply(); };
             Ui.Keys(apply, "Ctrl+Enter");
             FlowLayoutPanel actions = Ui.Row();
@@ -592,22 +593,10 @@ namespace CompInfo
                 return;
             }
             if (s.DomainRole >= 4) { state.Set(Glyph.Warning, L.T("Изменения на контроллере домена не поддерживаются."), Theme.Bad); return; }
-            if (policy.DomainName == null && (domainMode || s.PartOfDomain))
-            {
-                state.Set(Glyph.Warning, ComputerPolicy.NoDomain, Theme.Warn);
-                StateButton(L.T("Открыть синхронизацию"), Glyph.Sync, true, delegate { if (Main != null) Main.Open("sync"); });
-                return;
-            }
             if (domainMode) now.Text += L.T("\r\nДомен подразделения: ") + policy.DomainName;
             if (s.PartOfDomain && !string.Equals(s.Domain, policy.DomainName, StringComparison.OrdinalIgnoreCase))
             {
                 state.Set(Glyph.Warning, L.T("Компьютер состоит в другом домене. Автоматический перенос не поддерживается."), Theme.Bad);
-                return;
-            }
-            if (!admin)
-            {
-                state.Set(Glyph.Shield, L.T("Для изменения нужны права администратора. Программа перезапустится с ними и откроет этот раздел."), Theme.Info);
-                AdminButton();
                 return;
             }
             state.Clear();
@@ -683,6 +672,9 @@ namespace CompInfo
             string question = action + L.T("\n\nИмя: ") + s.Name + " → " + r.Name + L.T("\nДомен / рабочая группа: ") + s.Domain + " → " + targetDomain +
                 L.T("\n\nПотребуется перезагрузка. Новое состояние будет проверено при следующем открытии раздела.");
             if (Ui.Ask(FindForm(), Title, question, Glyph.Warning, Theme.Warn, L.T("Применить изменения"), L.T("Назад")) != 0) return;
+
+            // Viewing and filling the form does not need UAC. Ask only after the user has confirmed a real change.
+            if (!PowerShell.IsAdministrator()) { if (Main != null) Main.RestartAsAdministrator(Key); return; }
 
             running = true;
             apply.Enabled = false;

@@ -7,19 +7,19 @@ function Assert-Throws([scriptblock]$Action, [string]$Message) {
     try { & $Action | Out-Null } catch { $failed = $true }
     Assert-True $failed $Message
 }
-# The domain comes from the cached cloud network profiles; the checks use a made-up one.
+# The domain is fixed and does not depend on cached cloud profiles.
 $profilesRoot = Join-Path ([IO.Path]::GetTempPath()) ('policy-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $profilesRoot | Out-Null
-Assert-Throws { Get-ComputerPolicy -Root $profilesRoot } 'Policy without cached profiles must stop'
+Assert-True ((Get-ComputerPolicy -Root $profilesRoot).DomainName -eq 'gu.gvardia.mvs') 'Fixed domain missing'
 Set-Content -LiteralPath (Join-Path $profilesRoot 'network-profiles.json') -Encoding UTF8 -Value '{"value":{"domainCheckHost":"10.0.0.1"}}'
-Assert-Throws { Get-ComputerPolicy -Root $profilesRoot } 'An IP address must not become the domain'
+Assert-True ((Get-ComputerPolicy -Root $profilesRoot).DomainName -eq 'gu.gvardia.mvs') 'Cached profile changed fixed domain'
 Set-Content -LiteralPath (Join-Path $profilesRoot 'network-profiles.json') -Encoding UTF8 -Value '{"value":{"domainCheckHost":"dc.corp.example"}}'
-Assert-True ((Get-ComputerPolicy -Root $profilesRoot).DomainName -eq 'dc.corp.example') 'Domain check host fallback failed'
+Assert-True ((Get-ComputerPolicy -Root $profilesRoot).DomainName -eq 'gu.gvardia.mvs') 'Cached host changed fixed domain'
 Set-Content -LiteralPath (Join-Path $profilesRoot 'network-profiles.json') -Encoding UTF8 -Value '{"value":{"domainCheckHost":"dc.corp.example","domainName":"Corp.Example"}}'
 $readPolicy = ${function:Get-ComputerPolicy}
 function Get-ComputerPolicy { & $readPolicy -Root $profilesRoot }
 $policy = Get-ComputerPolicy
-Assert-True ($policy.DomainName -eq 'corp.example') 'Domain from profiles failed'
+Assert-True ($policy.DomainName -eq 'gu.gvardia.mvs') 'Configured domain changed'
 foreach ($suffix in @('A','TOC3','213-251','PETRENKO')) {
     Assert-True ($null -eq (Get-ComputerNameIssue "FR-042-$suffix" FR $policy)) "Valid name rejected: $suffix"
 }
@@ -56,7 +56,7 @@ function Test-ComputerDomainConnection { param($Domain) if (-not $script:domainV
 function Test-LocalAdministratorCredential { param($Credential, $ComputerName) if (-not $script:localValid -or -not $Credential) { throw 'Invalid local credential' }; $script:calls.Add('local'); return 'local-admin' }
 function Add-Computer {
     param($DomainName, $Credential, $NewName, [switch]$Force, [switch]$PassThru, $ErrorAction, [switch]$Restart)
-    Assert-True (-not $Restart -and $DomainName -eq 'corp.example' -and $Credential -and $NewName -eq 'FR-042-TOC3') 'Wrong join arguments'
+    Assert-True (-not $Restart -and $DomainName -eq 'gu.gvardia.mvs' -and $Credential -and $NewName -eq 'FR-042-TOC3') 'Wrong join arguments'
     $script:calls.Add('join'); [pscustomobject]@{ HasSucceeded = $script:commandSuccess }
 }
 function Remove-Computer {
@@ -72,7 +72,7 @@ function Rename-Computer {
 }
 $credential = [pscredential]::new('test', (ConvertTo-SecureString 'dummy-test-password' -AsPlainText -Force))
 Assert-True (Invoke-ComputerManagementChange Join 'FR-042-TOC3' $policy $credential) 'Join failed'
-Assert-True (($script:calls -join ',') -eq 'domain:corp.example,receipt:Join,join') 'Join preflight/order failed'
+Assert-True (($script:calls -join ',') -eq 'domain:gu.gvardia.mvs,receipt:Join,join') 'Join preflight/order failed'
 Assert-Throws { Invoke-ComputerManagementChange Rename 'FR-042-TOC4' $policy } 'Second pending operation was allowed'
 $script:state.Receipt = $null; $script:calls.Clear()
 $script:edition = 'Core'
@@ -89,7 +89,7 @@ Assert-Throws { Invoke-ComputerManagementChange Leave '' $policy $credential $cr
 Assert-True ($script:calls.Count -eq 0) 'Failed local login changed computer'
 $script:localValid = $true
 Assert-True (Invoke-ComputerManagementChange Leave '' $policy $credential $credential) 'Leave failed'
-Assert-True (($script:calls -join ',') -eq 'local,domain:corp.example,receipt:Leave,leave') 'Leave preflight/order failed'
+Assert-True (($script:calls -join ',') -eq 'local,domain:gu.gvardia.mvs,receipt:Leave,leave') 'Leave preflight/order failed'
 $script:state.Receipt = $null; $script:calls.Clear()
 Assert-Throws { Invoke-ComputerManagementChange Rename 'IF-042-TOC3' $policy $credential } 'IF name allowed while joined'
 Assert-True ($script:calls.Count -eq 0) 'Invalid rename changed computer'
@@ -128,7 +128,7 @@ Assert-True ([bool]$script:state.Receipt) 'Mismatch receipt cleared without ackn
 $script:choice = 1
 Assert-True (Confirm-ComputerWizardState $script:state) 'Explicit acknowledgement failed'
 
-# The interactive UAC handoff must target this script, with no passwords in arguments.
+# Opening the wizard does not request UAC; elevation is deferred to the confirmed change.
 $script:admin = $false
 function Start-Process {
     param($FilePath, $Verb, $WindowStyle, $ArgumentList, [switch]$Wait, [switch]$PassThru)
@@ -137,7 +137,8 @@ function Start-Process {
     Assert-True ($ArgumentList[-1] -eq '"C:\test folder\set-computer-name.ps1"') 'Script path not quoted'
     [pscustomobject]@{ ExitCode = 0 }
 }
-Assert-True (-not (Start-ComputerManagement 'C:\test folder\set-computer-name.ps1')) 'Parent should not run wizard again'
+Assert-True (Start-ComputerManagement 'C:\test folder\set-computer-name.ps1') 'Wizard should open without an early UAC prompt'
+$script:admin = $true
 
 # Drive the complete wizard with queued choices instead of a physical console.
 function Read-ComputerWizardChoice {
@@ -177,7 +178,7 @@ Assert-True (($script:calls -join ',') -eq 'summary,identity-check,apply:Rename:
 Assert-True ($script:summary -match 'IF-042-PETRENKO') 'Transliterated result missing from summary'
 Set-WizardInput @(0,0,0) @([pscustomobject]@{ Back = $false; Value = 'TOC3' })
 Invoke-ComputerManagementWizard Domain
-Assert-True (($script:calls -join ',') -eq 'domain:corp.example,summary,identity-check,apply:Join:FR-042-TOC3,offer-restart') 'Join wizard flow failed'
+Assert-True (($script:calls -join ',') -eq 'domain:gu.gvardia.mvs,summary,identity-check,apply:Join:FR-042-TOC3,offer-restart') 'Join wizard flow failed'
 # Escape on summary goes back to the text step; then back to network selection.
 Set-WizardInput @(0,-1,2) @([pscustomobject]@{ Back = $false; Value = 'TOC3' }, [pscustomobject]@{ Back = $true; Value = $null })
 Invoke-ComputerManagementWizard Rename
@@ -185,6 +186,6 @@ Assert-True (($script:calls -join ',') -eq 'summary') 'Back navigation applied c
 $script:state.PartOfDomain = $true; $script:state.Domain = $policy.DomainName; $script:state.Name = 'FR-042-TOC3'
 Set-WizardInput @(0,0,0,0) @()
 Invoke-ComputerManagementWizard Domain
-Assert-True (($script:calls -join ',') -eq 'local,domain:corp.example,summary,apply:Leave:,offer-restart') 'Leave wizard flow failed'
+Assert-True (($script:calls -join ',') -eq 'local,domain:gu.gvardia.mvs,summary,apply:Leave:,offer-restart') 'Leave wizard flow failed'
 Assert-True ($script:summary -match 'FR-042-TOC3 -> FR-042-TOC3' -and $script:summary -match 'WORKGROUP') 'Leave unexpectedly renamed computer'
 'Computer management checks passed (mocked system commands; no computer changes).'

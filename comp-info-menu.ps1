@@ -74,21 +74,6 @@ function Invoke-MenuScript {
         return
     }
 
-    if ($ScriptName -in @('set-computer-name.ps1', 'manage-computer-domain.ps1')) {
-        try {
-            if (Request-ComputerMenuElevation -MenuPath (Join-Path $PSScriptRoot 'comp-info-menu.ps1') -OpenScript $ScriptName) {
-                $script:shouldExit = $true
-                return
-            }
-        }
-        catch {
-            Write-Host "Не удалось открыть окно администратора: $($_.Exception.Message)" -ForegroundColor Red
-            Write-Host 'Нажмите любую клавишу, чтобы вернуться в меню.' -ForegroundColor DarkGray
-            [void][Console]::ReadKey($true)
-            return
-        }
-    }
-
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $scriptPath
     $exitCode = $LASTEXITCODE
 

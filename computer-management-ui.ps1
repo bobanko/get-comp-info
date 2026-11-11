@@ -202,6 +202,10 @@ function Invoke-ComputerManagementWizard {
                         "Локальный вход: $localName", 'Потребуется перезагрузка. Новое состояние будет проверено при следующем открытии мастера.'
                     ) -Items @('Применить изменения', 'Назад')
                     if ($choice -ne 0) { $step = if ($operation -eq 'Leave') { 2 } else { 1 }; continue }
+                    if (-not (Test-ComputerAdministrator)) {
+                        $elevated = Start-ComputerManagement -Elevate
+                        if (-not $elevated) { return }
+                    }
                     if ($operation -ne 'Leave') { Assert-InventoryReadyForRename }
                     if (Invoke-ComputerManagementChange -Operation $operation -Name $name -Policy $policy -DomainCredential $domainCredential -LocalCredential $localCredential) {
                         Request-ComputerWizardRestart -Lines @(

@@ -69,17 +69,9 @@ function Request-ComputerMenuElevation {
     return $script:transfer
 }
 foreach ($name in @('set-computer-name.ps1', 'manage-computer-domain.ps1')) {
-    $script:requestedScript = $name
-    $script:childCalls = 0; $script:shouldExit = $false; $script:transfer = $true
+    $script:childCalls = 0; $script:shouldExit = $false
     Invoke-MenuScript $name
-    Assert-True ($script:shouldExit -and $script:childCalls -eq 0) "Old menu did not exit after successful transfer: $name"
-    $script:shouldExit = $false; $script:denyUac = $true; $script:pauseCalls = 0
-    Invoke-MenuScript $name
-    Assert-True (-not $script:shouldExit -and $script:childCalls -eq 0 -and $script:pauseCalls -eq 1) "UAC cancellation closed the menu or started a wizard: $name"
-    $script:denyUac = $false
-    $script:shouldExit = $false; $script:transfer = $false
-    Invoke-MenuScript $name
-    Assert-True (-not $script:shouldExit -and $script:childCalls -eq 1) "Elevated menu did not reuse existing console: $name"
+    Assert-True (-not $script:shouldExit -and $script:childCalls -eq 1) "Wizard did not open without an early UAC request: $name"
 }
 Invoke-MenuScript 'quick-ping.ps1'
 Assert-True ($script:childCalls -eq 2 -and -not $script:shouldExit) 'Unrelated tools changed their launch behavior'

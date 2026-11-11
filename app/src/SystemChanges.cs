@@ -100,12 +100,11 @@ namespace CompInfo
         }
     }
 
-    // Naming rules of the unit (computer-policy.ps1). The domain is not kept in the public repository:
-    // it comes from the cloud network profiles (network-profiles.json), null until they are synchronized.
+    // Naming rules of the unit (computer-policy.ps1).
     public class ComputerPolicy
     {
         public string UnitCode = "042";
-        public string DomainName;
+        public string DomainName = "gu.gvardia.mvs";
         public string WorkgroupName = "WORKGROUP";
         public string InternetPrefix = "IF";
         public string DomainPrefix = "FR";
@@ -114,9 +113,7 @@ namespace CompInfo
 
         public static ComputerPolicy Load()
         {
-            ComputerPolicy p = new ComputerPolicy();
-            p.DomainName = NetworkProfiles.Read(AppPaths.File("network-profiles.json")).DomainName;
-            return p;
+            return new ComputerPolicy();
         }
     }
 
