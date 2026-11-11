@@ -84,7 +84,7 @@ namespace CompInfo
             details.Columns.Add(detailIcon);
             details.Columns.Add("type", L.T("Тип"));
             details.Columns.Add("match", L.T("Совпадение"));
-            details.Columns.Add("detail", L.T("Путь"));
+            details.Columns.Add("detail", L.T("Файл"));
             details.Columns.Add(ActionIconColumn(em * 2));
             details.Columns.Add(ActionIconColumn(em * 2));
             details.Columns[1].Width = em * 4;
@@ -94,8 +94,8 @@ namespace CompInfo
             details.Columns[2].DefaultCellStyle.WrapMode = DataGridViewTriState.True;
             details.Columns[3].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
             details.Columns[3].FillWeight = 60;
-            details.Columns[3].DefaultCellStyle.Font = Ui.MonoFont;
-            details.Columns[3].DefaultCellStyle.ForeColor = Theme.Muted;
+            details.Columns[3].DefaultCellStyle.Font = new Font("Segoe UI Semibold", 9f);
+            details.Columns[3].DefaultCellStyle.ForeColor = Theme.Text;
             details.Columns[3].DefaultCellStyle.WrapMode = DataGridViewTriState.True;
             details.RowTemplate.Height = em * 2;
             foreach (DataGridViewColumn column in details.Columns) column.SortMode = DataGridViewColumnSortMode.NotSortable;
@@ -338,14 +338,17 @@ namespace CompInfo
             {
                 bool file = item.FilePath.Length > 0;
                 string match = file ? item.Note : item.Text;
-                string path = file ? item.Text : "";
-                int index = details.Rows.Add(file ? FileIcon(item.FilePath) : null, item.FileType, match, path,
+                string fileName = file ? Path.GetFileName(item.Text) : "";
+                if (file && string.IsNullOrEmpty(fileName)) fileName = item.Text;
+                int index = details.Rows.Add(file ? FileIcon(item.FilePath) : null, item.FileType, match, fileName,
                     file ? openFileIcon : null, file ? openFolderIcon : null);
                 DataGridViewRow row = details.Rows[index];
                 row.Tag = item;
                 if (file) row.Cells[2].Tag = SecurityChips.Parse(match);
                 if (file)
                 {
+                    row.Cells[0].ToolTipText = item.Text;
+                    row.Cells[3].ToolTipText = item.Text;
                     row.Cells[4].ToolTipText = L.T("Открыть");
                     row.Cells[5].ToolTipText = L.T("Папка");
                 }
