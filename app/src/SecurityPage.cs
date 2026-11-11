@@ -171,6 +171,8 @@ namespace CompInfo
             progress.Minimum = 0;
             progress.Maximum = plan.Count;
             progress.Value = 0;
+            progress.Style = ProgressBarStyle.Continuous;
+            progress.MarqueeAnimationSpeed = 0;
             progress.Visible = true;
             status.Set(Glyph.More, L.T("Подготовка проверки…"), Theme.Muted);
             try
@@ -189,6 +191,14 @@ namespace CompInfo
                             row.Tag = check;
                             if (grid.CurrentRow == row) { ShowDetails(); UpdateActions(); }
                         }
+                        if (check.Key != "documents")
+                        {
+                            progress.Style = ProgressBarStyle.Continuous;
+                            progress.MarqueeAnimationSpeed = 0;
+                            progress.Minimum = 0;
+                            progress.Maximum = plan.Count;
+                            progress.Value = Math.Min(progress.Maximum, completedCount);
+                        }
                         status.Set(Glyph.More, L.T("Выполняется: ") + check.Title + "…", Theme.Muted);
                     });
                 };
@@ -206,10 +216,36 @@ namespace CompInfo
                             if (grid.CurrentRow == row) ShowDetails();
                         }
                         completedCount++;
+                        progress.Style = ProgressBarStyle.Continuous;
+                        progress.MarqueeAnimationSpeed = 0;
+                        progress.Minimum = 0;
+                        progress.Maximum = plan.Count;
                         progress.Value = Math.Min(progress.Maximum, completedCount);
                     });
                 };
-                List<SecurityCheck> checks = await Task.Run(delegate { return SecurityAudit.Run(started, completed); });
+                Action<SecurityProgress> detailedProgress = delegate (SecurityProgress scan)
+                {
+                    UpdateFromWorker(delegate
+                    {
+                        if (scan.Indeterminate)
+                        {
+                            progress.Style = ProgressBarStyle.Marquee;
+                            progress.MarqueeAnimationSpeed = 28;
+                            status.Set(Glyph.More, L.F("Поиск Office-файлов: найдено {0}. Составляется список…", scan.Found), Theme.Muted);
+                            return;
+                        }
+
+                        progress.Style = ProgressBarStyle.Continuous;
+                        progress.MarqueeAnimationSpeed = 0;
+                        progress.Minimum = 0;
+                        progress.Maximum = Math.Max(1, scan.Total);
+                        progress.Value = Math.Min(progress.Maximum, scan.Checked);
+                        status.Set(Glyph.More,
+                            L.F("Проверено {0} из {1} файлов; документов с совпадениями: {2}.", scan.Checked, scan.Total, scan.Matches),
+                            Theme.Muted);
+                    });
+                };
+                List<SecurityCheck> checks = await Task.Run(delegate { return SecurityAudit.Run(started, completed, detailedProgress); });
                 if (IsDisposed) return;
                 int bad = 0, warnings = 0;
                 foreach (SecurityCheck check in checks)

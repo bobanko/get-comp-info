@@ -307,7 +307,13 @@ namespace CompInfo
                     using (StreamWriter writer = new StreamWriter(entry.Open(), new UTF8Encoding(false)))
                         writer.Write("<w:document><w:t>телефонний</w:t><w:t> довідник ДСК дск ДСК-ЕП дск-еп для службового користування МОСІ таємно особливої важливості</w:t></w:document>");
                 }
-                SecurityCheck check = SecurityAudit.CheckDocumentsAt(new[] { dir });
+                List<SecurityProgress> progress = new List<SecurityProgress>();
+                SecurityCheck check = SecurityAudit.CheckDocumentsAt(new[] { dir }, delegate (SecurityProgress value) { progress.Add(value); });
+                SecurityProgress finalProgress = progress[progress.Count - 1];
+                Check(progress.Count >= 3 && progress[0].Indeterminate && !finalProgress.Indeterminate,
+                    "document scan reports discovery and inspection phases");
+                Check(finalProgress.Total == 6 && finalProgress.Checked == 6 && finalProgress.Matches == 6,
+                    "document scan progress reaches the exact total");
                 bool word = false, excelType = false, powerpointType = false, counts = false, telegramTag = false, whatsappTag = false;
                 foreach (SecurityDetail item in check.Items)
                 {

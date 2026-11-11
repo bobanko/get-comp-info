@@ -15,6 +15,17 @@ namespace CompInfo
 {
     public enum SecurityLevel { Good, Warning, Bad, Info, Error }
 
+    public class SecurityProgress
+    {
+        public bool Indeterminate;
+        public int Found, Checked, Total, Matches;
+
+        public SecurityProgress(bool indeterminate, int found, int checkedFiles, int total, int matches)
+        {
+            Indeterminate = indeterminate; Found = found; Checked = checkedFiles; Total = total; Matches = matches;
+        }
+    }
+
     public class SecurityDetail
     {
         public string Text, Note, FilePath, FileType;
@@ -109,28 +120,33 @@ namespace CompInfo
 
         public static List<SecurityCheck> Run(Action<string> progress)
         {
-            return Run(progress == null ? (Action<SecurityCheck>)null : delegate (SecurityCheck check) { progress(check.Title); }, null);
+            return Run(progress == null ? (Action<SecurityCheck>)null : delegate (SecurityCheck check) { progress(check.Title); }, null, null);
         }
 
         public static List<SecurityCheck> Run(Action<SecurityCheck> started, Action<SecurityCheck> completed)
+        {
+            return Run(started, completed, null);
+        }
+
+        public static List<SecurityCheck> Run(Action<SecurityCheck> started, Action<SecurityCheck> completed, Action<SecurityProgress> detailedProgress)
         {
             List<SecurityCheck> result = new List<SecurityCheck>();
             foreach (AuditStep step in Steps())
             {
                 SecurityCheck pending = new SecurityCheck(step.Key, step.Title, SecurityLevel.Info, L.T("Проверяется…"), "");
                 if (started != null) started(pending);
-                SecurityCheck check = Read(step);
+                SecurityCheck check = Read(step, detailedProgress);
                 result.Add(check);
                 if (completed != null) completed(check);
             }
             return result;
         }
 
-        static SecurityCheck Read(AuditStep step)
+        static SecurityCheck Read(AuditStep step, Action<SecurityProgress> detailedProgress)
         {
             try
             {
-                SecurityCheck check = step.Reader();
+                SecurityCheck check = step.Key == "documents" ? CheckDocuments(detailedProgress) : step.Reader();
                 check.Key = step.Key; check.Title = step.Title;
                 return check;
             }
@@ -302,7 +318,7 @@ namespace CompInfo
         public static SecurityCheck CheckOneDriveNow()
         {
             AuditStep step = new AuditStep("onedrive", "OneDrive", CheckOneDrive);
-            return Read(step);
+            return Read(step, null);
         }
 
         public static void DisableOneDriveSync()
@@ -367,7 +383,7 @@ namespace CompInfo
         class DocumentScan
         {
             public readonly List<DocumentMatch> Matches = new List<DocumentMatch>();
-            public int Files, SkippedFolders, RecycleFiles;
+            public int Files, SkippedFolders, RecycleFiles, MatchCount;
             public bool MatchLimit;
             public bool RecycleChecked;
             public string RecycleError = "";
@@ -395,22 +411,59 @@ namespace CompInfo
             public KeywordHit(string keyword, int count) { Keyword = keyword; Count = count; }
         }
 
+        class DocumentCandidate
+        {
+            public string Path, DisplayPath, FileName, Extension, DeletedAt;
+            public bool Recycle;
+
+            public DocumentCandidate(string path)
+            {
+                Path = DisplayPath = path; FileName = System.IO.Path.GetFileName(path); Extension = System.IO.Path.GetExtension(path);
+            }
+
+            public DocumentCandidate(RecycleFile file)
+            {
+                Path = file.Path; FileName = file.OriginalName; Extension = System.IO.Path.GetExtension(file.OriginalName);
+                DisplayPath = file.OriginalFolder.Length == 0 ? file.OriginalName : System.IO.Path.Combine(file.OriginalFolder, file.OriginalName);
+                DeletedAt = file.DeletedAt; Recycle = true;
+            }
+        }
+
         static SecurityCheck CheckDocuments()
         {
-            DocumentScan scan = ScanDocuments(ScanRoots());
-            ScanRecycleBin(scan);
-            return DocumentResult(scan);
+            return CheckDocuments(null);
+        }
+
+        static SecurityCheck CheckDocuments(Action<SecurityProgress> progress)
+        {
+            return DocumentResult(ScanDocuments(ScanRoots(), true, progress));
         }
 
         internal static SecurityCheck CheckDocumentsAt(IEnumerable<string> roots)
         {
-            return DocumentResult(ScanDocuments(roots));
+            return CheckDocumentsAt(roots, null);
         }
 
-        static DocumentScan ScanDocuments(IEnumerable<string> roots)
+        internal static SecurityCheck CheckDocumentsAt(IEnumerable<string> roots, Action<SecurityProgress> progress)
+        {
+            return DocumentResult(ScanDocuments(roots, false, progress));
+        }
+
+        static DocumentScan ScanDocuments(IEnumerable<string> roots, bool includeRecycle, Action<SecurityProgress> progress)
         {
             DocumentScan scan = new DocumentScan();
-            foreach (string root in roots) ScanDirectory(root, scan);
+            List<DocumentCandidate> candidates = new List<DocumentCandidate>();
+            if (progress != null) progress(new SecurityProgress(true, 0, 0, 0, 0));
+            foreach (string root in roots) CollectDirectory(root, scan, candidates, progress);
+            if (includeRecycle) CollectRecycleBin(scan, candidates, progress);
+            scan.Files = candidates.Count;
+            if (progress != null) progress(new SecurityProgress(false, scan.Files, 0, scan.Files, 0));
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                InspectDocument(candidates[i], scan);
+                if (progress != null && ((i + 1) % 10 == 0 || i + 1 == candidates.Count))
+                    progress(new SecurityProgress(false, scan.Files, i + 1, scan.Files, scan.MatchCount));
+            }
             return scan;
         }
 
@@ -422,14 +475,14 @@ namespace CompInfo
                 coverage += "\r\n" + (scan.RecycleError.Length == 0
                     ? L.F("Корзина: проверено документов Office: {0}.", scan.RecycleFiles)
                     : L.T("Корзина проверена частично: ") + scan.RecycleError);
-            if (scan.Matches.Count == 0)
+            if (scan.MatchCount == 0)
                 return New(scan.RecycleError.Length == 0 ? SecurityLevel.Good : SecurityLevel.Warning,
                     scan.RecycleError.Length == 0 ? L.T("ДСК-файлы по ключевым словам не найдены") : L.T("Совпадений не найдено, но корзина проверена не полностью"), coverage);
             List<string> lines = new List<string>();
             foreach (DocumentMatch match in scan.Matches) lines.Add(match.DisplayPath + "  [" + match.Note + "]");
             string details = string.Join("\r\n", lines.ToArray()) + "\r\n\r\n" + coverage;
             if (scan.MatchLimit) details += "\r\n" + L.T("Показаны первые 200 совпадений.");
-            SecurityCheck check = New(SecurityLevel.Bad, L.F("Найдено совпадений: {0}", scan.Matches.Count) + (scan.MatchLimit ? "+" : ""), details);
+            SecurityCheck check = New(SecurityLevel.Bad, L.F("Найдено совпадений: {0}", scan.MatchCount), details);
             check.Items.Clear();
             foreach (DocumentMatch match in scan.Matches)
                 check.Items.Add(new SecurityDetail(match.DisplayPath, match.Note, match.Path, match.Type));
@@ -439,7 +492,7 @@ namespace CompInfo
             return check;
         }
 
-        static void ScanRecycleBin(DocumentScan scan)
+        static void CollectRecycleBin(DocumentScan scan, List<DocumentCandidate> candidates, Action<SecurityProgress> progress)
         {
             scan.RecycleChecked = true;
             try
@@ -448,14 +501,9 @@ namespace CompInfo
                 {
                     string extension = Path.GetExtension(file.OriginalName);
                     if (!OfficeExtensions.Contains(extension) || !File.Exists(file.Path)) continue;
-                    scan.Files++;
                     scan.RecycleFiles++;
-                    List<KeywordHit> hits = FindKeywordHits(Path.GetFileNameWithoutExtension(file.OriginalName), file.Path,
-                        OpenXmlExtensions.Contains(extension));
-                    if (hits.Count == 0) continue;
-                    if (scan.Matches.Count >= 200) { scan.MatchLimit = true; continue; }
-                    string original = file.OriginalFolder.Length == 0 ? file.OriginalName : Path.Combine(file.OriginalFolder, file.OriginalName);
-                    scan.Matches.Add(new DocumentMatch(file.Path, original, hits, true, file.DeletedAt));
+                    candidates.Add(new DocumentCandidate(file));
+                    ReportCollected(progress, candidates.Count);
                 }
             }
             catch (Exception e) { scan.RecycleError = e.Message; }
@@ -475,7 +523,7 @@ namespace CompInfo
             "perflogs", "msocache", "config.msi"
         }, StringComparer.OrdinalIgnoreCase);
 
-        static void ScanDirectory(string root, DocumentScan scan)
+        static void CollectDirectory(string root, DocumentScan scan, List<DocumentCandidate> candidates, Action<SecurityProgress> progress)
         {
             Stack<string> pending = new Stack<string>();
             pending.Push(root);
@@ -488,10 +536,8 @@ namespace CompInfo
                     {
                         string extension = Path.GetExtension(file);
                         if (!OfficeExtensions.Contains(extension)) continue;
-                        scan.Files++;
-                        List<KeywordHit> hits = FindKeywordHits(Path.GetFileNameWithoutExtension(file), file, OpenXmlExtensions.Contains(extension));
-                        if (hits.Count > 0 && scan.Matches.Count < 200) scan.Matches.Add(new DocumentMatch(file, hits));
-                        else if (hits.Count > 0) scan.MatchLimit = true;
+                        candidates.Add(new DocumentCandidate(file));
+                        ReportCollected(progress, candidates.Count);
                     }
                     foreach (string child in Directory.GetDirectories(directory))
                     {
@@ -504,6 +550,23 @@ namespace CompInfo
                 catch (UnauthorizedAccessException) { scan.SkippedFolders++; }
                 catch (IOException) { scan.SkippedFolders++; }
             }
+        }
+
+        static void ReportCollected(Action<SecurityProgress> progress, int found)
+        {
+            if (progress != null && found % 25 == 0) progress(new SecurityProgress(true, found, 0, 0, 0));
+        }
+
+        static void InspectDocument(DocumentCandidate file, DocumentScan scan)
+        {
+            List<KeywordHit> hits = FindKeywordHits(Path.GetFileNameWithoutExtension(file.FileName), file.Path,
+                OpenXmlExtensions.Contains(file.Extension));
+            if (hits.Count == 0) return;
+            scan.MatchCount++;
+            if (scan.Matches.Count >= 200) { scan.MatchLimit = true; return; }
+            scan.Matches.Add(file.Recycle
+                ? new DocumentMatch(file.Path, file.DisplayPath, hits, true, file.DeletedAt)
+                : new DocumentMatch(file.Path, hits));
         }
 
         static bool IsTopLevel(string root, string child)
