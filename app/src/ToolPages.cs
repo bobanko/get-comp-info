@@ -93,7 +93,9 @@ namespace CompInfo
                 foreach (UsbDisk d in disks)
                 {
                     bool has = d.Serial.Length > 0;
-                    int i = grid.Rows.Add(L.T("Диск ") + d.Number, d.Name, string.Format(L.T("{0:N1} ГБ"), d.Size / 1073741824.0),
+                    string diskName = L.T("Диск ") + d.Number + (d.DriveLetters.Length > 0 ? " (" + d.DriveLetters + ")" : "");
+                    string name = d.VolumeName.Length > 0 ? d.VolumeName : d.Name;
+                    int i = grid.Rows.Add(diskName, name, string.Format(L.T("{0:N1} ГБ"), d.Size / 1073741824.0),
                         has ? d.Serial : L.T("устройство не сообщает номер"), has ? L.T("Копировать") : "");
                     DataGridViewRow row = grid.Rows[i];
                     row.Tag = d;

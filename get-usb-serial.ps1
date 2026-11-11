@@ -35,6 +35,15 @@ while ($true) {
             foreach ($disk in $disks) {
                 $usbSerial = Get-UsbDeviceSerialNumber -PnpDeviceId $deviceIds[[int]$disk.Number]
                 $disk | Add-Member -NotePropertyName UsbSerialNumber -NotePropertyValue $usbSerial -Force
+
+                $volumes = @()
+                foreach ($partition in @(Get-Partition -DiskNumber $disk.Number -ErrorAction SilentlyContinue | Where-Object { $_.DriveLetter })) {
+                    $letter = [string]$partition.DriveLetter
+                    $volume = Get-Volume -DriveLetter $letter -ErrorAction SilentlyContinue
+                    $label = if ($volume) { ([string]$volume.FileSystemLabel).Trim() } else { "" }
+                    $volumes += if ([string]::IsNullOrWhiteSpace($label)) { "$letter`:" } else { "$label ($letter`:)" }
+                }
+                $disk | Add-Member -NotePropertyName Volumes -NotePropertyValue $volumes -Force
             }
         }
         catch {
@@ -62,6 +71,9 @@ while ($true) {
         $prefix = if ($index -eq $selectedIndex) { ">" } else { " " }
         $color = if ($index -eq $selectedIndex) { "Magenta" } else { "Gray" }
         Write-Host ("{0} Диск {1}: {2}" -f $prefix, $disk.Number, $disk.FriendlyName) -ForegroundColor $color
+        if ($disk.Volumes.Count -gt 0) {
+            Write-Host ("  Том: {0}" -f ($disk.Volumes -join "; ")) -ForegroundColor DarkGray
+        }
         Write-Host ("  Объём: {0:N2} ГиБ" -f ($disk.Size / 1GB)) -ForegroundColor DarkGray
 
         $serial = ([string]$disk.UsbSerialNumber).Trim()

@@ -234,12 +234,30 @@ namespace CompInfo
         public string Name;
         public long Size;
         public string Serial;
+        public string VolumeName;
+        public string DriveLetters;
 
         public static List<UsbDisk> List()
         {
             Dictionary<long, string> deviceIds = new Dictionary<long, string>();
             foreach (Dictionary<string, object> row in Wmi.Query(Wmi.Cimv2, "SELECT Index, PNPDeviceID FROM Win32_DiskDrive"))
                 deviceIds[Wmi.Num(row, "Index")] = Wmi.Str(row, "PNPDeviceID") ?? "";
+            Dictionary<string, string> volumeLabels = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (Dictionary<string, object> row in Wmi.Query(Wmi.Storage, "SELECT DriveLetter, FileSystemLabel FROM MSFT_Volume"))
+            {
+                string letter = Wmi.Str(row, "DriveLetter");
+                if (!string.IsNullOrEmpty(letter)) volumeLabels[letter] = Wmi.Str(row, "FileSystemLabel") ?? "";
+            }
+            Dictionary<long, List<string>> driveLetters = new Dictionary<long, List<string>>();
+            foreach (Dictionary<string, object> row in Wmi.Query(Wmi.Storage, "SELECT DiskNumber, DriveLetter FROM MSFT_Partition"))
+            {
+                string letter = Wmi.Str(row, "DriveLetter");
+                if (string.IsNullOrEmpty(letter)) continue;
+                long number = Wmi.Num(row, "DiskNumber");
+                List<string> letters;
+                if (!driveLetters.TryGetValue(number, out letters)) { letters = new List<string>(); driveLetters[number] = letters; }
+                letters.Add(letter);
+            }
             List<UsbDisk> result = new List<UsbDisk>();
             foreach (Dictionary<string, object> row in Wmi.Query(Wmi.Storage, "SELECT Number, FriendlyName, Size, BusType FROM MSFT_Disk WHERE BusType=7"))
             {
@@ -249,6 +267,13 @@ namespace CompInfo
                 d.Size = Wmi.Num(row, "Size");
                 string id;
                 d.Serial = SerialFromDeviceId(deviceIds.TryGetValue(d.Number, out id) ? id : "");
+                List<string> letters;
+                if (driveLetters.TryGetValue(d.Number, out letters))
+                {
+                    d.DriveLetters = string.Join(", ", letters.ConvertAll(delegate (string letter) { return letter + ":"; }).ToArray());
+                    d.VolumeName = string.Join(", ", letters.ConvertAll(delegate (string letter) { return volumeLabels.ContainsKey(letter) ? volumeLabels[letter].Trim() : ""; }).FindAll(delegate (string label) { return label.Length > 0; }).ToArray());
+                }
+                else { d.DriveLetters = ""; d.VolumeName = ""; }
                 result.Add(d);
             }
             result.Sort(delegate (UsbDisk a, UsbDisk b) { return a.Number.CompareTo(b.Number); });
