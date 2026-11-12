@@ -61,7 +61,8 @@ SUSpector не входит в архив обновления основног�
 ## Обновления
 
 Для SUSpector собирается отдельный архив `dist\SUSpector-<версия>.zip`, содержащий только `SUSpector.exe` и `manifest.json`.
-GitHub Actions публикует его независимо от внутреннего пакета Comp Info в подписанном релизе по тегу.
+GitHub Actions публикует его независимо от внутреннего пакета Comp Info по собственному тегу `suspector-vВЕРСИЯ`;
+версия SUSpector своя — `app/SUSpector.version` (поднимает `tools\update-version.BAT suspector`), см. [PROGRAM_UPDATE.md](PROGRAM_UPDATE.md).
 Публичный API `/api/suspector` отдаёт только метаданные и этот архив; ключ Comp Info пользователю не нужен,
 а получить через него основную программу или данные базы невозможно.
 

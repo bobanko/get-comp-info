@@ -1,4 +1,5 @@
 # Builds the public standalone SUSpector package. It deliberately contains only SUSpector.exe.
+# SUSpector has its own version (app\SUSpector.version) and is released by a tag suspector-v<version>.
 [CmdletBinding()]
 param(
     [string]$Version,
@@ -22,9 +23,9 @@ function Invoke-Git {
     return $output
 }
 
-$codeVersion = $script:toolboxVersion
+$codeVersion = ([IO.File]::ReadAllText((Join-Path $root 'app\SUSpector.version'))).Trim()
 if (-not $Version) { $Version = $codeVersion }
-if ($Version -ne $codeVersion) { throw "Version $Version does not match console-ui.ps1 ($codeVersion)." }
+if ($Version -ne $codeVersion) { throw "Version $Version does not match app\SUSpector.version ($codeVersion)." }
 
 $exe = Join-Path $root 'SUSpector.exe'
 if (-not (Test-Path -LiteralPath $exe)) { throw 'SUSpector.exe is missing. Run tools\build.BAT first.' }
@@ -32,9 +33,12 @@ $built = (Get-Item -LiteralPath $exe).VersionInfo.FileVersion
 if ($built -ne $Version) { throw "SUSpector.exe is version $built, expected $Version." }
 
 $commit = ([string](Invoke-Git @('rev-parse', 'HEAD'))).Trim()
-$previousTag = Invoke-Git @('describe', '--tags', '--abbrev=0', '--match', 'v*', '--exclude', "v$Version", 'HEAD') -AllowFailure
+# What changed since the previous SUSpector release (before separate tags: since the last common v* tag),
+# only commits that touched the programs' code.
+$previousTag = Invoke-Git @('describe', '--tags', '--abbrev=0', '--match', 'suspector-v*', '--exclude', "suspector-v$Version", 'HEAD') -AllowFailure
+if (-not $previousTag) { $previousTag = Invoke-Git @('describe', '--tags', '--abbrev=0', '--match', 'v*', 'HEAD') -AllowFailure }
 $range = if ($previousTag) { @("$(([string]$previousTag).Trim())..HEAD") } else { @('-n', '20', 'HEAD') }
-$notes = @(Invoke-Git (@('log', '--pretty=format:%s') + $range) | Where-Object { $_ -and $_ -notmatch '^chore: version' })
+$notes = @(Invoke-Git (@('log', '--pretty=format:%s') + $range + @('--', 'app')) | Where-Object { $_ -and $_ -notmatch '^chore: (SUSpector )?version' })
 
 if (-not $OutputDirectory) { $OutputDirectory = Join-Path $root 'dist' }
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null

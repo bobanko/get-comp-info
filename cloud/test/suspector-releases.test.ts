@@ -14,7 +14,7 @@ function nextVersion(): string {
 
 async function githubToken(version: string): Promise<string> {
   const jwk = JSON.parse(env.TEST_GITHUB_PRIVATE_JWK) as JWK;
-  return new SignJWT({ repository: 'bobanko/get-comp-info', ref_type: 'tag', ref: `refs/tags/v${version}` })
+  return new SignJWT({ repository: 'bobanko/get-comp-info', ref_type: 'tag', ref: `refs/tags/suspector-v${version}` })
     .setProtectedHeader({ alg: 'RS256', kid: 'github-test' })
     .setIssuer('https://token.actions.githubusercontent.com')
     .setAudience('comp-info-release')

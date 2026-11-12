@@ -7,7 +7,8 @@
 
 ## Сборка
 
-`tools\build.BAT` собирает `youSBee.exe` в корень вместе с `comp-info.exe` и `SUSpector.exe`, той же версии.
+`tools\build.BAT yousbee` (или без аргументов — вместе с остальными) собирает `youSBee.exe` в корень.
+Версия своя — `app/youSBee.version`, поднимает `tools\update-version.BAT yousbee`.
 Окно, «О программе» (с языком и темой) и запуск общие с SUSpector — `app/src/Standalone.cs`; настройки — `youSBee.ini`
 рядом с программой (тема и язык). Проверка вёрстки без показа окна:
 
@@ -21,4 +22,7 @@ youSBee.exe --theme light --language uk --screenshot yousbee.png 1500
 
 ## Распространение
 
-Пока не публикуется: ни архива версии, ни кнопки «Обновление», ни страницы на chagear.top.
+Как HashPot: страница https://chagear.top/yousbee/ и ссылка https://chagear.top/download/youSBee.exe. Сборка сайта
+(`chagear-site`, `npm run deploy`) копирует собранный `youSBee.exe` и берёт версию из `app/youSBee.version`.
+Новая версия: `update-version.BAT yousbee`, `build.BAT yousbee`, коммит, затем заново опубликовать сайт.
+Кнопки «Обновление» в программе нет.

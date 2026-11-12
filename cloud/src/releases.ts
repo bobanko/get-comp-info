@@ -315,7 +315,8 @@ export async function getSuspectorPackage(db: D1Database, version: string): Prom
 
 export async function storeSuspectorRelease(db: D1Database, bytes: Uint8Array, tag: string | null) {
   const manifest = await validatePackage(bytes, isSuspectorFile);
-  if (tag !== null && tag !== `v${manifest.version}`) {
+  // SUSpector has its own version and its own tags: suspector-v<version>.
+  if (tag !== null && tag !== `suspector-v${manifest.version}`) {
     fail(400, 'tag_mismatch', `The tag ${tag} does not match the version ${manifest.version} in manifest.json.`);
   }
   const existing = await db.prepare('SELECT version FROM suspector_releases WHERE version = ?').bind(manifest.version).first();

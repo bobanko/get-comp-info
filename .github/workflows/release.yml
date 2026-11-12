@@ -1,10 +1,11 @@
-# Publishes a program release to the cloud when a version tag (v2026.10.24.1) is pushed.
+# Publishes a release to the cloud when a version tag is pushed: v2026.10.24.1 for the toolbox (comp-info.exe and
+# the console version), suspector-v2026.11.13.1 for SUSpector. Each program has its own version.
 # See PROGRAM_UPDATE.md. No secrets: the cloud trusts GitHub's OIDC token for this repository.
 name: Release
 
 on:
   push:
-    tags: ['v*']
+    tags: ['v*', 'suspector-v*']
 
 permissions:
   contents: read
@@ -26,24 +27,35 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "$($test.Name) failed" }
           }
 
-      - name: Build the window version and run its checks
+      - name: Build the programs and run their checks
         shell: cmd
         run: tools\build.BAT
 
-      - name: Build release
+      - name: Build the toolbox release
+        if: ${{ !startsWith(github.ref_name, 'suspector-v') }}
         shell: pwsh
         # Same Windows PowerShell 5.1 as on the flash drives. Fails when the tag does not match console-ui.ps1.
         run: |
-          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/build-release.ps1 -Version $env:GITHUB_REF_NAME.TrimStart('v')
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/build-release.ps1 -Version $env:GITHUB_REF_NAME.Substring(1)
           if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
-          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/build-suspector-release.ps1 -Version $env:GITHUB_REF_NAME.TrimStart('v')
+
+      - name: Build the SUSpector release
+        if: ${{ startsWith(github.ref_name, 'suspector-v') }}
+        shell: pwsh
+        # Fails when the tag does not match app/SUSpector.version.
+        run: |
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/build-suspector-release.ps1 -Version $env:GITHUB_REF_NAME.Substring('suspector-v'.Length)
           if ($LASTEXITCODE -ne 0) { throw 'SUSpector build failed' }
 
       - name: Publish to the cloud
         shell: pwsh
         run: |
-          $version = $env:GITHUB_REF_NAME.TrimStart('v')
           $tokenUrl = "$env:ACTIONS_ID_TOKEN_REQUEST_URL&audience=comp-info-release"
           $token = (Invoke-RestMethod -Uri $tokenUrl -Headers @{ Authorization = "bearer $env:ACTIONS_ID_TOKEN_REQUEST_TOKEN" }).value
-          ./tools/publish-release.ps1 -Package "dist/comp-info-$version.zip" -Token $token
-          ./tools/publish-release.ps1 -Package "dist/SUSpector-$version.zip" -Token $token -ApiUrl 'https://comp-info.chagear.top/api/suspector-release'
+          if ($env:GITHUB_REF_NAME.StartsWith('suspector-v')) {
+            $version = $env:GITHUB_REF_NAME.Substring('suspector-v'.Length)
+            ./tools/publish-release.ps1 -Package "dist/SUSpector-$version.zip" -Token $token -ApiUrl 'https://comp-info.chagear.top/api/suspector-release'
+          } else {
+            $version = $env:GITHUB_REF_NAME.Substring(1)
+            ./tools/publish-release.ps1 -Package "dist/comp-info-$version.zip" -Token $token
+          }

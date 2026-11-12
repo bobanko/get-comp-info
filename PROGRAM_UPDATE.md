@@ -6,8 +6,20 @@
 
 Сборщикам не нужны ни доступ к GitHub, ни Git, ни отдельный токен. Для публикации не нужны секреты: облако проверяет подписанный GitHub токен запуска (OIDC). Обновление приходит только при выпуске версии, а не при каждом коммите.
 
-Standalone-программа `SUSpector.exe` публикуется тем же подписанным запуском GitHub Actions, но отдельным публичным архивом,
-в котором разрешён только сам SUSpector. Он не даёт доступа к пакету внутреннего тулбокса и не требует личного ключа Comp Info.
+## Программы и их версии
+
+У каждой программы своя версия `ГГГГ.ММ.ДД.N` и свой выпуск:
+
+| Программа | Версия | Выпуск |
+|---|---|---|
+| Тулбокс: `comp-info.exe` и консольная версия (скрипты, BAT) | `$script:toolboxVersion` в `console-ui.ps1` | тег `vВЕРСИЯ` → облако, `/api/release` |
+| `SUSpector.exe` | `app/SUSpector.version` | тег `suspector-vВЕРСИЯ` → облако, `/api/suspector-release` (публичный архив только с SUSpector, см. [SUSPECTOR.md](SUSPECTOR.md)) |
+| `youSBee.exe` | `app/youSBee.version` | без облака: сайт chagear.top кладёт собранный exe в `/download/`, как HashPot (см. [YOUSBEE.md](YOUSBEE.md)) |
+
+Версию поднимает `tools\update-version.BAT [toolbox|suspector|yousbee]` (по умолчанию тулбокс), собирает
+`tools\build.BAT [toolbox] [suspector] [yousbee]` (без аргументов — все три, проверки `app\tests` идут всегда).
+`tools\release.BAT` выпускает только тулбокс; SUSpector — `update-version.BAT suspector`, коммит `chore: SUSpector version …`,
+тег `suspector-vВЕРСИЯ` и push: GitHub Actions по такому тегу собирает и публикует только SUSpector.
 
 ```text
 Разработчик                GitHub Actions                       Cloudflare                     Флешка / компьютер
