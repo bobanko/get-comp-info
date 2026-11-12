@@ -39,7 +39,7 @@ namespace CompInfo
             int width = em * 30;
 
             FlowLayoutPanel text;
-            TableLayoutPanel t = About.Build(Font, width, L.T("CHAGEAR Тулбокс"), L.T("Учёт компьютеров при подготовке и выдаче сотрудникам"),
+            TableLayoutPanel t = About.Build(Font, width, L.Code == "ru" ? Ui.FaceRuImage : Ui.FaceImage, L.T("CHAGEAR Тулбокс"), L.T("Учёт компьютеров при подготовке и выдаче сотрудникам"),
                 L.T("Программа собирает сведения о компьютере (имя, серийный номер, сеть, ESET), хранит их на флешке и синхронизирует ") +
                 L.T("с облачной базой. Здесь же — настройка сети по профилям корпусов, имя компьютера и домен, быстрая проверка связи ") +
                 L.T("и серийные номера USB-накопителей."), Sections, out text);

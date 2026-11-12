@@ -1,7 +1,8 @@
 // Builds app\app.ico (icon of comp-info.exe) from a picture, run by tools\make-icon.BAT:
-// keeps its transparency (or removes a white background with soft edges), crops empty margins and writes an ICO with all sizes Windows uses.
+// keeps its transparency (or removes a white or black background with soft edges), crops empty margins and writes an ICO with all sizes Windows uses.
 // --cli adds a dark tile with a ">_" prompt in the lower-left corner.
-// Usage: MakeIcon.exe <source.png> <out.ico> [preview.png] [--cli]
+// --small=<file.png> takes sizes up to 32 px from a simpler picture (the main one is unreadable there).
+// Usage: MakeIcon.exe <source.png> <out.ico> [preview.png] [--cli] [--small=<file.png>]
 //        MakeIcon.exe <source.png> --face-png=<file>   (only the 256 px picture, no icon)
 using System;
 using System.Collections.Generic;
@@ -18,23 +19,25 @@ static class MakeIcon
     static string GearPng;      // --gear-png=<file>: the plain gear alone, 96 px (picture in the window header)
     static string FacePng;      // --face-png=<file>: the picture itself, 256 px (window «О программе»)
     static Bitmap Source;   // background removed, cropped to a square
+    static Bitmap Small;    // --small: the same for sizes up to 32 px
 
     static int Main(string[] args)
     {
         List<string> pos = new List<string>();
+        string small = null;
         foreach (string a in args)
         {
             if (a == "--cli") Cli = true;
             else if (a == "--gear-small") GearUpTo = 32;
             else if (a.StartsWith("--gear-png=")) GearPng = a.Substring(11);
             else if (a.StartsWith("--face-png=")) FacePng = a.Substring(11);
+            else if (a.StartsWith("--small=")) small = a.Substring(8);
             else pos.Add(a);
         }
-        if (pos.Count < 2 && !(pos.Count == 1 && FacePng != null)) { Console.Error.WriteLine("MakeIcon.exe <source.png> <out.ico> [preview.png] [--cli]"); return 2; }
+        if (pos.Count < 2 && !(pos.Count == 1 && FacePng != null)) { Console.Error.WriteLine("MakeIcon.exe <source.png> <out.ico> [preview.png] [--cli] [--small=<file.png>]"); return 2; }
 
-        // A picture that already has transparency is used as is; otherwise the white background is cut out.
-        using (Bitmap raw = new Bitmap(pos[0]))
-            Source = CropSquare(HasTransparency(raw) ? FromPixels(Pixels(raw), raw.Width, raw.Height) : RemoveBackground(raw));
+        Source = Load(pos[0]);
+        if (small != null) Small = Load(small);
 
         if (pos.Count == 1)
         {
@@ -61,6 +64,17 @@ static class MakeIcon
     }
 
     // ---------- background removal ----------
+
+    // A picture that already has transparency is used as is; otherwise its white or black background is cut out.
+    static Bitmap Load(string path)
+    {
+        using (Bitmap raw = new Bitmap(path))
+        {
+            if (HasTransparency(raw)) return CropSquare(FromPixels(Pixels(raw), raw.Width, raw.Height));
+            int corner = raw.GetPixel(0, 0).ToArgb();
+            return CropSquare(RemoveBackground(raw, Dark(corner) && !White(corner)));
+        }
+    }
 
     static int[] Pixels(Bitmap b)
     {
@@ -97,24 +111,31 @@ static class MakeIcon
         return min >= 245 && max - min <= 10;
     }
 
-    // White area connected to the border becomes transparent. Pixels next to it get alpha
-    // estimated against the nearest solid colour of the picture, so there is no white halo.
-    static Bitmap RemoveBackground(Bitmap raw)
+    // Black background including a faint glow around the picture (no channel above 60).
+    static bool Dark(int c)
+    {
+        return Math.Max(R(c), Math.Max(G(c), B(c))) <= 60;
+    }
+
+    // White (or black) area connected to the border becomes transparent. Pixels next to it get alpha
+    // estimated against the nearest solid colour of the picture, so there is no halo.
+    static Bitmap RemoveBackground(Bitmap raw, bool dark)
     {
         int w = raw.Width, h = raw.Height;
         int[] px = Pixels(raw);
         bool[] bg = new bool[w * h];
         Queue<int> q = new Queue<int>();
-        for (int x = 0; x < w; x++) { Seed(px, bg, q, x); Seed(px, bg, q, (h - 1) * w + x); }
-        for (int y = 0; y < h; y++) { Seed(px, bg, q, y * w); Seed(px, bg, q, y * w + w - 1); }
+        for (int x = 0; x < w; x++) { Seed(px, bg, q, x, dark); Seed(px, bg, q, (h - 1) * w + x, dark); }
+        for (int y = 0; y < h; y++) { Seed(px, bg, q, y * w, dark); Seed(px, bg, q, y * w + w - 1, dark); }
         while (q.Count > 0)
         {
             int i = q.Dequeue(), x = i % w, y = i / w;
-            if (x > 0) Seed(px, bg, q, i - 1);
-            if (x < w - 1) Seed(px, bg, q, i + 1);
-            if (y > 0) Seed(px, bg, q, i - w);
-            if (y < h - 1) Seed(px, bg, q, i + w);
+            if (x > 0) Seed(px, bg, q, i - 1, dark);
+            if (x < w - 1) Seed(px, bg, q, i + 1, dark);
+            if (y > 0) Seed(px, bg, q, i - w, dark);
+            if (y < h - 1) Seed(px, bg, q, i + w, dark);
         }
+        int back = dark ? 0 : 255;
 
         // edge band: non-background pixels within 2 px of the background
         bool[] band = new bool[w * h];
@@ -153,10 +174,10 @@ static class MakeIcon
                 double fr, fg, fb;
                 if (n > 0) { fr = sr / (double)n; fg = sg / (double)n; fb = sb / (double)n; }
                 else { fr = R(c); fg = G(c); fb = B(c); }
-                // alpha = how far the pixel is from white, relative to the solid colour
-                double vx = 255 - fr, vy = 255 - fg, vz = 255 - fb;
+                // alpha = how far the pixel is from the background, relative to the solid colour
+                double vx = back - fr, vy = back - fg, vz = back - fb;
                 double len2 = vx * vx + vy * vy + vz * vz;
-                double a = len2 < 1 ? 1 : ((255 - R(c)) * vx + (255 - G(c)) * vy + (255 - B(c)) * vz) / len2;
+                double a = len2 < 1 ? 1 : ((back - R(c)) * vx + (back - G(c)) * vy + (back - B(c)) * vz) / len2;
                 a = Math.Max(0, Math.Min(1, a));
                 if (a < 0.04) { outPx[i] = 0; continue; }
                 int A = (int)Math.Round(a * 255);
@@ -165,9 +186,9 @@ static class MakeIcon
         return FromPixels(outPx, w, h);
     }
 
-    static void Seed(int[] px, bool[] bg, Queue<int> q, int i)
+    static void Seed(int[] px, bool[] bg, Queue<int> q, int i, bool dark)
     {
-        if (bg[i] || !White(px[i])) return;
+        if (bg[i] || !(dark ? Dark(px[i]) : White(px[i]))) return;
         bg[i] = true;
         q.Enqueue(i);
     }
@@ -203,7 +224,7 @@ static class MakeIcon
     static Bitmap Render(int size)
     {
         if (size <= GearUpTo) return DrawGear(size);
-        Bitmap bmp = Scale(Source, size);
+        Bitmap bmp = Scale(Small != null && size <= 32 ? Small : Source, size);
         if (Cli)
             using (Graphics g = Graphics.FromImage(bmp))
             {

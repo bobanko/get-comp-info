@@ -216,7 +216,7 @@ namespace CompInfo
             Padding = new Padding(em);
 
             FlowLayoutPanel text;
-            TableLayoutPanel t = About.Build(Font, em * 26, "SUSpector",
+            TableLayoutPanel t = About.Build(Font, em * 26, Ui.SuspectorImage, "SUSpector",
                 L.T("Помогает проверить и подготовить компьютер перед внешней проверкой безопасности."), null, Sections, out text);
             text.Controls.Add(About.SiteRow(Font, Glyph.Open, About.WebSite, null));
             text.Controls.Add(About.FolderRow(Font, AppDomain.CurrentDomain.BaseDirectory));

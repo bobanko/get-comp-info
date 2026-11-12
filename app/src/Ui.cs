@@ -361,6 +361,10 @@ namespace CompInfo
         // The alternative picture of «О программе», shown only with the Russian interface.
         public static Bitmap FaceRuImage { get { return faceRuImage ?? (faceRuImage = Resource("CompInfo.face-ru.png")); } }
 
+        // The picture of SUSpector (256 px, as its icon) for its «О программе»; only SUSpector.exe embeds it.
+        public static Bitmap SuspectorImage { get { return suspectorImage ?? (suspectorImage = Resource("CompInfo.suspector.png")); } }
+        static Bitmap suspectorImage;
+
         // Pictures embedded by tools\build.BAT (made by tools\make-icon.BAT).
         static Bitmap Resource(string name)
         {
@@ -434,7 +438,7 @@ namespace CompInfo
         public const string WebSite = "chagear.top";
 
         // Builds everything up to the developer's e-mail; the caller adds its own links to the returned column.
-        public static TableLayoutPanel Build(Font font, int width, string title, string subtitle, string intro, string[] sections, out FlowLayoutPanel text)
+        public static TableLayoutPanel Build(Font font, int width, Image picture, string title, string subtitle, string intro, string[] sections, out FlowLayoutPanel text)
         {
             int em = font.Height;
             TableLayoutPanel t = new TableLayoutPanel();
@@ -447,7 +451,7 @@ namespace CompInfo
 
             int side = em * 7;
             PictureBox pic = new PictureBox();
-            pic.Image = L.Code == "ru" ? Ui.FaceRuImage : Ui.FaceImage;
+            pic.Image = picture;
             pic.SizeMode = PictureBoxSizeMode.Zoom;
             pic.Size = new Size(side, side);
             pic.Margin = new Padding(0, 0, em, 0);
