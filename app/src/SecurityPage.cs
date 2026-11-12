@@ -25,6 +25,7 @@ namespace CompInfo
         readonly Bitmap openFileIcon;
         readonly Bitmap openFolderIcon;
         readonly Bitmap deleteIcon;
+        readonly Bitmap lockedIcon;
         readonly SplitContainer split = new SplitContainer();
         readonly FlowLayoutPanel bulkBar = Ui.Row();
         bool running;
@@ -115,6 +116,7 @@ namespace CompInfo
             openFileIcon = Glyph.Image(Glyph.Open, em, Theme.Accent);
             openFolderIcon = Glyph.Image(Glyph.Folder, em, Theme.Folder);
             deleteIcon = Glyph.Image(Glyph.Delete, em, Theme.Bad);
+            lockedIcon = Glyph.Image(Glyph.Lock, em, Theme.Muted);
 
             grid = Ui.Grid(Font);
             grid.Dock = DockStyle.Fill;
@@ -417,7 +419,7 @@ namespace CompInfo
                 string fileName = file ? Path.GetFileName(item.Text) : item.Text;
                 if (file && string.IsNullOrEmpty(fileName)) fileName = item.Text;
                 int index = details.Rows.Add(file ? FileIcon(item.FilePath) : null, item.FileType, "", count, fileName,
-                    file ? openFileIcon : null, file ? openFolderIcon : null, file ? deleteIcon : null);
+                    file ? openFileIcon : null, file ? openFolderIcon : null, !file ? null : Protected(item) ? lockedIcon : deleteIcon);
                 DataGridViewRow row = details.Rows[index];
                 row.Tag = item;
                 row.Cells[2].Tag = chips;
@@ -429,7 +431,9 @@ namespace CompInfo
                     row.Cells[4].ToolTipText = item.Text;
                     row.Cells[5].ToolTipText = L.T("Открыть");
                     row.Cells[6].ToolTipText = L.T("Папка");
-                    row.Cells[7].ToolTipText = L.T("Удалить (Delete)");
+                    row.Cells[7].ToolTipText = Protected(item)
+                        ? L.T("Файлы SupraWeed не удаляются: это шаблоны и файлы самой программы, в них только слова-триггеры.")
+                        : L.T("Удалить (Delete)");
                 }
                 if (item.FileType.Length > 0)
                 {
@@ -472,6 +476,12 @@ namespace CompInfo
                 if (split.Height > em * 12 && split.SplitterDistance < em * 6) split.SplitterDistance = split.Height * 3 / 5;
             }
             else if (split.Width > em * 24 && split.SplitterDistance < em * 10) split.SplitterDistance = split.Width * 9 / 20;
+        }
+
+        // Files in a SupraWeed folder are the program's own templates: they hold trigger words, not ДСК content.
+        static bool Protected(SecurityDetail item)
+        {
+            return TagsOf(item).Contains("SupraWeed");
         }
 
         static List<string> TagsOf(SecurityDetail item)
@@ -572,7 +582,7 @@ namespace CompInfo
             SecurityDetail item = details.Rows[rowIndex].Tag as SecurityDetail;
             DataGridViewRow checkRow = grid.CurrentRow;
             SecurityCheck check = checkRow == null ? null : checkRow.Tag as SecurityCheck;
-            if (item == null || item.FilePath.Length == 0 || check == null || running) return;
+            if (item == null || item.FilePath.Length == 0 || check == null || running || Protected(item)) return;
             string name = Path.GetFileName(item.Text);
             if (Ui.Ask(FindForm(), L.T("Удаление документа"),
                 L.F("Удалить «{0}» безвозвратно? Файл не попадёт в корзину, восстановить его будет нельзя.", name) + "\r\n\r\n" + item.Text,
