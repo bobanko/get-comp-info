@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="ru">
+<html lang="uk">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SUSpector</title>
-  <meta name="description" content="SUSpector — проверка и подготовка компьютера перед внешней проверкой. Один файл, без установки, результаты остаются на компьютере.">
+  <meta name="description" content="SUSpector — перевірка та підготовка комп’ютера перед зовнішньою перевіркою. Один файл, без встановлення, результати залишаються на комп’ютері.">
   <link rel="icon" type="image/png" sizes="32x32" href="/suspector/favicon-32.png">
   <link rel="apple-touch-icon" href="/suspector/icon-180.png">
   <style>
@@ -109,46 +109,46 @@
       <img src="/suspector/suspector.png" alt="" width="200" height="200">
       <div>
         <h1><span class="sus">SUS</span>pector</h1>
-        <p class="tagline">Проверка и подготовка компьютера перед внешней проверкой. Результаты остаются на этом компьютере.</p>
+        <p class="tagline">Перевірка та підготовка комп’ютера перед зовнішньою перевіркою. Результати залишаються на цьому комп’ютері.</p>
         <div class="download">
           <a id="download" class="button" href="/api/suspector/download" download="SUSpector.exe">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
-            Скачать SUSpector.exe
+            Завантажити SUSpector.exe
           </a>
-          <span id="meta" class="meta">Windows 10 и 11</span>
+          <span id="meta" class="meta">Windows 10 і 11</span>
         </div>
       </div>
     </section>
 
     <section class="grid">
       <div class="card">
-        <h2>Что проверяет</h2>
+        <h2>Що перевіряє</h2>
         <ul>
-          <li>имя компьютера и домен;</li>
-          <li>антивирус и VPN;</li>
-          <li>нежелательные программы и OneDrive;</li>
-          <li>локальных администраторов и пароли Windows;</li>
-          <li>ДСК-файлы на дисках.</li>
+          <li>ім’я комп’ютера та домен;</li>
+          <li>антивірус і VPN;</li>
+          <li>небажані програми та OneDrive;</li>
+          <li>локальних адміністраторів і паролі Windows;</li>
+          <li>ДСК-файли на дисках.</li>
         </ul>
       </div>
       <div class="card">
-        <h2>Конфиденциальность</h2>
-        <p>Все проверки выполняются локально. Программа ничего никуда не отправляет — в интернет она обращается, только когда вы нажимаете «Обновление».</p>
+        <h2>Конфіденційність</h2>
+        <p>Усі перевірки виконуються локально. Програма нічого нікуди не надсилає — до інтернету вона звертається, лише коли ви натискаєте «Оновлення».</p>
       </div>
       <div class="card">
-        <h2>Подготовка — только по вашей команде</h2>
-        <p>Действия подготовки запускаются явно: можно отключить синхронизацию OneDrive (локальные файлы и учётная запись остаются) и безвозвратно удалить найденные документы — каждый после подтверждения.</p>
+        <h2>Підготовка — лише за вашою командою</h2>
+        <p>Дії підготовки запускаються явно: можна вимкнути синхронізацію OneDrive (локальні файли та обліковий запис залишаються) і назавжди видалити знайдені документи — кожен після підтвердження.</p>
       </div>
       <div class="card">
-        <h2>Установка не нужна</h2>
-        <p>Это один файл: он работает прямо с флешки. Рядом сохраняется только <strong>SUSpector.ini</strong> с выбранными темой и языком (русский, украинский, английский).</p>
+        <h2>Встановлення не потрібне</h2>
+        <p>Це один файл: він працює просто з флешки. Поруч зберігається лише <strong>SUSpector.ini</strong> з вибраними темою та мовою (українська, англійська, російська).</p>
       </div>
       <div class="card wide">
-        <h2>Как запустить</h2>
+        <h2>Як запустити</h2>
         <ol class="steps">
-          <li>Скачайте <strong>SUSpector.exe</strong> и запустите его — права администратора не нужны.</li>
-          <li>Если Windows покажет «Windows защитила ваш компьютер», нажмите <strong>Подробнее</strong> → <strong>Выполнить в любом случае</strong>: программа не подписана сертификатом.</li>
-          <li>Новые версии ставятся кнопкой <strong>Обновление</strong> в нижней панели программы — скачивать заново не нужно.</li>
+          <li>Завантажте <strong>SUSpector.exe</strong> і запустіть його — права адміністратора не потрібні.</li>
+          <li>Якщо Windows SmartScreen попередить про невідому програму, натисніть <strong>Докладніше</strong>, а потім кнопку запуску: програму не підписано сертифікатом.</li>
+          <li>Нові версії встановлюються кнопкою <strong>Оновлення</strong> в нижній панелі програми — завантажувати заново не потрібно.</li>
         </ol>
       </div>
     </section>
@@ -164,16 +164,16 @@
         const response = await fetch('/api/suspector/latest', { cache: 'no-store' });
         if (response.status === 404) {
           button.setAttribute('aria-disabled', 'true');
-          meta.textContent = 'Программа ещё не опубликована.';
+          meta.textContent = 'Програму ще не опубліковано.';
           return;
         }
         if (!response.ok) return;
         const release = await response.json();
-        const date = new Date(release.publishedAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+        const date = new Date(release.publishedAt).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' });
         meta.replaceChildren(
-          'Версия ',
+          'Версія ',
           Object.assign(document.createElement('span'), { className: 'mono', textContent: release.version }),
-          ` · ${date} · Windows 10 и 11`,
+          ` · ${date} · Windows 10 і 11`,
         );
       } catch {
         // Without the version the button still downloads the current release.
