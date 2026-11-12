@@ -1,8 +1,10 @@
 // Builds app\app.ico (icon of comp-info.exe) from a picture, run by tools\make-icon.BAT:
 // keeps its transparency (or removes a white or black background with soft edges), crops empty margins and writes an ICO with all sizes Windows uses.
 // --cli adds a dark tile with a ">_" prompt in the lower-left corner.
-// --small=<file.png> takes sizes up to 32 px from a simpler picture (the main one is unreadable there).
-// Usage: MakeIcon.exe <source.png> <out.ico> [preview.png] [--cli] [--small=<file.png>]
+// --small=<file.png> takes small sizes from a simpler picture (the main one is unreadable there):
+// up to 32 px, or up to --small-up-to=<px>. --dark=<n>: a black background (and its glow) is every pixel
+// with no channel above n, 60 by default.
+// Usage: MakeIcon.exe <source.png> <out.ico> [preview.png] [--cli] [--small=<file.png> [--small-up-to=<px>]] [--dark=<n>]
 //        MakeIcon.exe <source.png> --face-png=<file>   (only the 256 px picture, no icon)
 using System;
 using System.Collections.Generic;
@@ -19,7 +21,9 @@ static class MakeIcon
     static string GearPng;      // --gear-png=<file>: the plain gear alone, 96 px (picture in the window header)
     static string FacePng;      // --face-png=<file>: the picture itself, 256 px (window «О программе»)
     static Bitmap Source;   // background removed, cropped to a square
-    static Bitmap Small;    // --small: the same for sizes up to 32 px
+    static Bitmap Small;    // --small: the same for sizes up to SmallUpTo
+    static int SmallUpTo = 32;
+    static int DarkLimit = 60;
 
     static int Main(string[] args)
     {
@@ -32,6 +36,8 @@ static class MakeIcon
             else if (a.StartsWith("--gear-png=")) GearPng = a.Substring(11);
             else if (a.StartsWith("--face-png=")) FacePng = a.Substring(11);
             else if (a.StartsWith("--small=")) small = a.Substring(8);
+            else if (a.StartsWith("--small-up-to=")) SmallUpTo = int.Parse(a.Substring(14));
+            else if (a.StartsWith("--dark=")) DarkLimit = int.Parse(a.Substring(7));
             else pos.Add(a);
         }
         if (pos.Count < 2 && !(pos.Count == 1 && FacePng != null)) { Console.Error.WriteLine("MakeIcon.exe <source.png> <out.ico> [preview.png] [--cli] [--small=<file.png>]"); return 2; }
@@ -111,10 +117,10 @@ static class MakeIcon
         return min >= 245 && max - min <= 10;
     }
 
-    // Black background including a faint glow around the picture (no channel above 60).
+    // Black background including the glow around the picture (no channel above DarkLimit).
     static bool Dark(int c)
     {
-        return Math.Max(R(c), Math.Max(G(c), B(c))) <= 60;
+        return Math.Max(R(c), Math.Max(G(c), B(c))) <= DarkLimit;
     }
 
     // White (or black) area connected to the border becomes transparent. Pixels next to it get alpha
@@ -224,7 +230,7 @@ static class MakeIcon
     static Bitmap Render(int size)
     {
         if (size <= GearUpTo) return DrawGear(size);
-        Bitmap bmp = Scale(Small != null && size <= 32 ? Small : Source, size);
+        Bitmap bmp = Scale(Small != null && size <= SmallUpTo ? Small : Source, size);
         if (Cli)
             using (Graphics g = Graphics.FromImage(bmp))
             {
