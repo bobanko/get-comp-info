@@ -7,7 +7,7 @@ catch {
 }
 
 # Release version. Update with tools/update-version.ps1 before distributing a release.
-$script:toolboxVersion = '2026.11.12.3'
+$script:toolboxVersion = '2026.11.12.4'
 
 function Write-ToolboxHeader {
     param(
