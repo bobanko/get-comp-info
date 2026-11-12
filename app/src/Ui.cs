@@ -713,6 +713,8 @@ namespace CompInfo
         int selected, hover = -1;
         readonly ToolTip tip = new ToolTip();
         public event Action<int> Changed;
+        // Glyph size as a part of the font height.
+        public float GlyphScale = 0.8f;
 
         public Segmented(string[] items, bool glyphs, string[] tips, int selected)
         {
@@ -761,7 +763,7 @@ namespace CompInfo
                     Color fore = i == selected ? Theme.Accent : Theme.Text;
                     using (SolidBrush b = new SolidBrush(back)) g.FillRectangle(b, r);
                     if (i > 0) using (Pen p = new Pen(Theme.Border)) g.DrawLine(p, x0, 0, x0, Height);
-                    if (glyphs) Glyph.Draw(g, items[i], r, fore, em * 0.8f);
+                    if (glyphs) Glyph.Draw(g, items[i], r, fore, em * GlyphScale);
                     else
                         using (Font f = new Font(Font.FontFamily, 8.5f, i == selected ? FontStyle.Bold : FontStyle.Regular))
                             TextRenderer.DrawText(g, items[i], f, r, fore, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);

@@ -69,7 +69,8 @@ namespace CompInfo
             Segmented layout = new Segmented(new[] { Glyph.DockBottom, Glyph.DockRight }, true,
                 new[] { L.T("Таблицы одна под другой"), L.T("Таблицы рядом") }, TableLayout == "right" ? 1 : 0);
             layout.Font = Font;
-            layout.Size = new Size(em * 4, run.Height);
+            layout.Size = new Size(em * 6, Math.Max(run.Height, run.PreferredSize.Height));
+            layout.GlyphScale = 1.15f;
             layout.Margin = new Padding(em / 2, 0, 0, 0);
             layout.Changed += delegate (int index)
             {
