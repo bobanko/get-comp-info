@@ -114,7 +114,7 @@ namespace CompInfo
             adapterLabel.Margin = new Padding(0, em / 4, em / 2, 0);
             adapter.Width = em * 28;
             adapter.DropDownWidth = em * 36;
-            adapter.SelectedIndexChanged += delegate { UpdateSummary(); };
+            adapter.SelectedIndexChanged += delegate { UpdateSummary(); ReadCurrent(); };
             adapterRow.Controls.Add(adapterLabel);
             adapterRow.Controls.Add(adapter);
             adapterRow.Dock = DockStyle.Top;
@@ -294,27 +294,80 @@ namespace CompInfo
             if (Office != null) host.Focus(); else adapter.Focus();
         }
 
+        Adapter SelectedAdapter
+        {
+            get { return adapter.SelectedItem == null ? null : (Adapter)((Item)adapter.SelectedItem).Value; }
+        }
+
         async void LoadAdapters()
         {
+            // After «Применить» the list is reloaded: stay on the adapter that was just configured.
+            Adapter previous = SelectedAdapter;
             adapter.Items.Clear();
             adapter.Enabled = false;
             try
             {
                 adapters = await Task.Run(delegate { return LanSetup.WiredAdapters(); });
+                int select = 0;
                 foreach (Adapter a in adapters)
                 {
                     bool good, bad;
                     Item item = new Item();
                     item.Text = a.Name + " — " + LanSetup.StatusText(a, out good, out bad) + "  (" + a.Description + ")";
                     item.Value = a;
+                    if (previous != null && a.Index == previous.Index) select = adapter.Items.Count;
                     adapter.Items.Add(item);
                 }
-                if (adapter.Items.Count > 0) adapter.SelectedIndex = 0;
+                if (adapter.Items.Count > 0) adapter.SelectedIndex = select;
                 adapter.Enabled = adapters.Count > 0;
                 if (adapters.Count == 0) status.Set(Glyph.Warning, L.T("Проводные сетевые адаптеры не найдены."), Theme.Bad);
             }
             catch (Exception e) { status.Set(Glyph.Warning, L.T("Не удалось получить список адаптеров: ") + e.Message, Theme.Bad); }
             UpdateSummary();
+        }
+
+        int currentRead;
+
+        // Shows what the selected adapter is set to now and starts the form from it: the office, segment and
+        // computer number of its address, or DHCP. An address outside the office profiles leaves the choices as they are.
+        async void ReadCurrent()
+        {
+            int request = ++currentRead;
+            Adapter a = SelectedAdapter;
+            applied.Text = "";
+            if (a == null) return;
+            LanSetup.State state;
+            try { state = await Task.Run(delegate { return LanSetup.Read(a.Guid); }); }
+            catch (Exception) { state = null; }
+            if (request != currentRead || IsDisposed || running) return;
+            if (state == null) return;
+
+            List<string> lines = new List<string> { L.T("Сейчас на адаптере «") + a.Name + "»:" };
+            lines.Add("   " + L.T("Режим:  ") + (state.Dhcp ? L.T("автоматически (DHCP)") : L.T("вручную")));
+            if (state.Ip.Length > 0) lines.Add("   IPv4:  " + state.Ip + (state.Mask.Length > 0 ? L.T(" (маска ") + state.Mask + ")" : ""));
+            else if (state.Dhcp) lines.Add("   IPv4:  " + L.T("ещё не получен от роутера"));
+            if (state.Gateway.Length > 0) lines.Add("   " + L.T("Шлюз") + ":  " + state.Gateway);
+            for (int i = 0; i < state.Dns.Count; i++) lines.Add("   DNS " + (i + 1) + ":  " + state.Dns[i] + (state.DnsManual ? "" : L.T(" (от роутера)")));
+
+            NetworkProfiles.Location location;
+            int segment, last;
+            if (state.Dhcp) Select(officeButtons, null);
+            else if (profiles.Match(state.Ip, out location, out segment, out last))
+            {
+                Select(officeButtons, location);
+                Select(segmentButtons, segment);
+                host.Value = last;
+            }
+            else if (state.Ip.Length > 0 && !profiles.Missing)
+                lines.Add(L.T("Адрес не относится к профилям корпусов: выберите корпус и номер компьютера."));
+            applied.Text = string.Join("\r\n", lines);
+            UpdateSummary();
+        }
+
+        static void Select(List<RadioButton> group, object value)
+        {
+            foreach (RadioButton r in group)
+                if (Equals(r.Tag, value)) { r.Checked = true; return; }
         }
 
         NetworkProfiles.Location Office
@@ -423,10 +476,7 @@ namespace CompInfo
                 List<string> dns = l == null ? new List<string>() : l.DnsServers;
                 await Task.Run(delegate { LanSetup.Apply(a.Index, l == null, ip, prefixLength, gateway, dns); });
                 status.Set(Glyph.Check, L.T("Настройки сети применены.") + (l == null ? L.T(" Получение настроек от роутера может занять некоторое время.") : ""), Theme.Good);
-                List<string[]> now = await Task.Run(delegate { return LanSetup.Current(a.Index); });
-                List<string> lines = new List<string> { L.T("Сейчас на адаптере «") + a.Name + "»:" };
-                foreach (string[] line in now) lines.Add("   " + line[0] + ":  " + line[1]);
-                applied.Text = string.Join("\r\n", lines);
+                // The reloaded adapter list below shows the new settings under «Сейчас на адаптере».
             }
             catch (OperationCanceledException e) { status.Set(Glyph.Info, e.Message, Theme.Warn); }
             catch (Exception e) { status.Set(Glyph.Warning, L.T("Не удалось завершить настройку сети: ") + e.Message, Theme.Bad); }

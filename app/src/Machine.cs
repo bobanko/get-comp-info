@@ -73,6 +73,7 @@ namespace CompInfo
         public string Mac;           // 00-11-22-33-44-55
         public bool Hardware;
         public bool Wired;           // NdisMedium 0 = 802.3
+        public string Guid = "";     // {…}: key of its TCP/IP settings in the registry
 
         public static List<Adapter> List()
         {
@@ -89,6 +90,7 @@ namespace CompInfo
                 a.Mac = addresses.Length > 0 ? FormatMac(addresses[0]) : "";
                 a.Hardware = Wmi.Bool(row, "HardwareInterface");
                 a.Wired = Wmi.Num(row, "NdisMedium") == 0;
+                a.Guid = Wmi.Str(row, "InterfaceGuid") ?? "";
                 result.Add(a);
             }
             return result;

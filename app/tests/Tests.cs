@@ -191,6 +191,13 @@ namespace CompInfo
             Check(!p.Missing && p.Locations.Count == 2 && p.DomainCheckHost == "dc.example" && p.DomainName == "dc.example", "profiles read, domain falls back to the check host");
             Check(p.IsOfficeAddress("10.112.171.200") && !p.IsOfficeAddress("10.112.171.100") && !p.IsOfficeAddress("10.113.171.200"), "office address by common segments");
             Check(p.IsOfficeAddress("10.113.5.20") && !p.IsOfficeAddress("10.111.5.20"), "office address by own segments");
+            NetworkProfiles.Location office;
+            int segment, host;
+            Check(p.Match("10.112.171.200", out office, out segment, out host) && office.Name == "Штаб" && segment == 112 && host == 200, "current address picks office, segment and computer");
+            Check(p.Match("10.113.5.20", out office, out segment, out host) && office.Name == "Склад" && segment == 113 && host == 20, "current address in an office with own segments");
+            Check(!p.Match("10.112.171.129", out office, out segment, out host) && office == null, "the gateway is not a computer address");
+            Check(!p.Match("10.112.171.100", out office, out segment, out host) && !p.Match("192.168.1.10", out office, out segment, out host) &&
+                !p.Match("", out office, out segment, out host) && !p.Match("fe80::1", out office, out segment, out host), "foreign addresses leave the form as it is");
             Check(NetworkProfiles.Read(Path.Combine(dir, "none.json")).Missing && NetworkProfiles.Read(Path.Combine(dir, "none.json")).DomainName == null, "missing profiles");
             File.WriteAllText(path, "{\"value\":{\"domainCheckHost\":\"10.0.0.1\",\"domainName\":\" Corp.Example \",\"locations\":[{\"name\":\"A\",\"thirdOctet\":1}]}}", Encoding.UTF8);
             Check(NetworkProfiles.Read(path).DomainName == "corp.example", "domain from the «Домен» field");

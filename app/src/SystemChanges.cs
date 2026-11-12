@@ -89,19 +89,54 @@ namespace CompInfo
             PowerShell.Run(Script(index, dhcp, ip, prefixLength, gateway, dns), null, !PowerShell.IsAdministrator());
         }
 
-        // Address, gateway and DNS of an adapter as Windows reports them now.
-        public static List<string[]> Current(int index)
+        // Configured IPv4 settings of an adapter.
+        public class State
         {
-            List<string[]> lines = new List<string[]>();
-            foreach (Dictionary<string, object> row in Wmi.Query(Wmi.Net, "SELECT IPAddress, PrefixLength FROM MSFT_NetIPAddress WHERE AddressFamily=2 AND InterfaceIndex=" + index))
-                lines.Add(new[] { "IPv4", Wmi.Str(row, "IPAddress") + L.T(" (маска ") + NetworkProfiles.MaskFromPrefix((int)Wmi.Num(row, "PrefixLength")) + ")" });
-            foreach (Dictionary<string, object> row in Wmi.Query(Wmi.Net, "SELECT NextHop FROM MSFT_NetRoute WHERE AddressFamily=2 AND DestinationPrefix='0.0.0.0/0' AND InterfaceIndex=" + index))
-                lines.Add(new[] { L.T("Шлюз"), Wmi.Str(row, "NextHop") });
-            int n = 1;
-            foreach (Dictionary<string, object> row in Wmi.Query(Wmi.Net, "SELECT ServerAddresses FROM MSFT_DNSClientServerAddress WHERE AddressFamily=2 AND InterfaceIndex=" + index))
-                foreach (string s in Wmi.Strings(row, "ServerAddresses")) lines.Add(new[] { "DNS " + n++, s });
-            return lines;
+            public bool Dhcp;
+            public string Ip = "", Mask = "", Gateway = "";
+            public List<string> Dns = new List<string>();
+            public bool DnsManual;
         }
+
+        // Read from the TCP/IP settings in the registry rather than the live addresses: a static address set
+        // on an adapter without a cable is shown too, as is DHCP without a lease yet.
+        public static State Read(string guid)
+        {
+            State s = new State();
+            if (string.IsNullOrEmpty(guid)) return null;
+            using (RegistryKey hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64))
+            using (RegistryKey key = hklm.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\" + guid))
+            {
+                if (key == null) return null;
+                s.Dhcp = Convert.ToInt32(key.GetValue("EnableDHCP", 0)) != 0;
+                s.Ip = FirstAddress(key, s.Dhcp ? "DhcpIPAddress" : "IPAddress");
+                s.Mask = FirstAddress(key, s.Dhcp ? "DhcpSubnetMask" : "SubnetMask");
+                s.Gateway = FirstAddress(key, s.Dhcp ? "DhcpDefaultGateway" : "DefaultGateway");
+                s.Dns = Addresses(key, "NameServer");
+                s.DnsManual = s.Dns.Count > 0;
+                if (!s.DnsManual && s.Dhcp) s.Dns = Addresses(key, "DhcpNameServer");
+            }
+            return s;
+        }
+
+        // REG_SZ or REG_MULTI_SZ, entries separated by commas or spaces; 0.0.0.0 means "not set".
+        static List<string> Addresses(RegistryKey key, string name)
+        {
+            List<string> result = new List<string>();
+            object value = key.GetValue(name);
+            string[] parts = value is string[] ? (string[])value : new[] { Convert.ToString(value ?? "") };
+            foreach (string part in parts)
+                foreach (string address in part.Split(new[] { ',', ' ', ';' }, StringSplitOptions.RemoveEmptyEntries))
+                    if (address != "0.0.0.0" && !result.Contains(address)) result.Add(address);
+            return result;
+        }
+
+        static string FirstAddress(RegistryKey key, string name)
+        {
+            List<string> all = Addresses(key, name);
+            return all.Count > 0 ? all[0] : "";
+        }
+
     }
 
     // Naming rules of the unit (computer-policy.ps1).

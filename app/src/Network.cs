@@ -102,6 +102,27 @@ namespace CompInfo
             }
             return false;
         }
+
+        // The office, segment and computer octet a configured address was made from, so the network page can start
+        // from the computer's own settings. Only host addresses of a profile match: not the gateway, not another office.
+        public bool Match(string address, out Location location, out int segment, out int host)
+        {
+            location = null; segment = host = 0;
+            IPAddress parsed;
+            if (!IPAddress.TryParse(address ?? "", out parsed) || parsed.AddressFamily != AddressFamily.InterNetwork) return false;
+            byte[] o = parsed.GetAddressBytes();
+            if (o[0] != FirstOctet) return false;
+            foreach (Location l in Locations)
+            {
+                List<int> segments = l.Segments ?? Segments;
+                if (segments.Contains(o[1]) && o[2] == l.ThirdOctet && o[3] >= l.FirstHostOctet && o[3] <= l.LastHostOctet)
+                {
+                    location = l; segment = o[1]; host = o[3];
+                    return true;
+                }
+            }
+            return false;
+        }
     }
 
     // Quick ping: own address, gateway, DNS, then domain or internet (quick-ping.ps1).
