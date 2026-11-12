@@ -8,8 +8,6 @@ namespace CompInfo
     // «О программе», as in SupraWeed: icon, version, what the program does and how to reach the developer.
     public class AboutPage : Page
     {
-        public const string Email = "toolbox@chagear.top";
-        public const string WebSite = "chagear.top";
         public const string WebInterface = "comp-info.chagear.top";
 
         static string[] Sections { get { return new[]
@@ -40,92 +38,16 @@ namespace CompInfo
             Theme.Native(this);
             int width = em * 30;
 
-            TableLayoutPanel t = new TableLayoutPanel();
-            t.AutoSize = true;
-            t.ColumnCount = 2;
-            t.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            t.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            t.Location = new Point(0, 0);
-
-            int side = em * 7;
-            PictureBox pic = new PictureBox();
-            pic.Image = L.Code == "ru" ? Ui.FaceRuImage : Ui.FaceImage;
-            pic.SizeMode = PictureBoxSizeMode.Zoom;
-            pic.Size = new Size(side, side);
-            pic.Margin = new Padding(0, 0, em, 0);
-            t.Controls.Add(pic, 0, 0);
-
-            FlowLayoutPanel text = new FlowLayoutPanel();
-            text.FlowDirection = FlowDirection.TopDown;
-            text.WrapContents = false;
-            text.AutoSize = true;
-            text.Margin = Padding.Empty;
-            t.Controls.Add(text, 1, 0);
-
-            text.Controls.Add(Line(L.T("CHAGEAR Тулбокс"), new Font("Segoe UI Semibold", 16f), Theme.Text, width, 0));
-            text.Controls.Add(Line(L.T("Учёт компьютеров при подготовке и выдаче сотрудникам"), Font, Theme.Text, width, 0));
-            text.Controls.Add(Line(L.T("Версия ") + AppVersion.Text + (PowerShell.IsAdministrator() ? L.T(" · запущена с правами администратора") : ""), Font, Theme.Muted, width, em / 2));
-            text.Controls.Add(Line(L.T("Программа собирает сведения о компьютере (имя, серийный номер, сеть, ESET), хранит их на флешке и синхронизирует ") +
+            FlowLayoutPanel text;
+            TableLayoutPanel t = About.Build(Font, width, L.T("CHAGEAR Тулбокс"), L.T("Учёт компьютеров при подготовке и выдаче сотрудникам"),
+                L.T("Программа собирает сведения о компьютере (имя, серийный номер, сеть, ESET), хранит их на флешке и синхронизирует ") +
                 L.T("с облачной базой. Здесь же — настройка сети по профилям корпусов, имя компьютера и домен, быстрая проверка связи ") +
-                L.T("и серийные номера USB-накопителей."), Font, Theme.Text, width, em / 2));
-
-            Font bold = new Font(Font, FontStyle.Bold);
-            for (int i = 0; i + 1 < Sections.Length; i += 2)
-            {
-                text.Controls.Add(Line(Sections[i], bold, Theme.Text, width, 0));
-                text.Controls.Add(Line(Sections[i + 1], Font, Theme.Text, width, em / 2));
-            }
-
-            text.Controls.Add(Line(L.T("Связь с разработчиком"), bold, Theme.Text, width, 0));
-            Label copied = Line(L.T("← нажмите, чтобы скопировать"), Font, Theme.Muted, width, 0);
-            // Service computers have no mail client: a click copies the address instead of opening mailto.
-            text.Controls.Add(LinkRow(Glyph.Person, Email, copied, delegate
-            {
-                try { Clipboard.SetText(Email); copied.Text = L.T("скопировано ✓"); } catch (Exception) { }
-            }));
-            text.Controls.Add(LinkRow(Glyph.Cloud, WebInterface, Line(L.T("веб-интерфейс базы"), Font, Theme.Muted, width, 0), delegate { OpenSite(WebInterface); }));
-            text.Controls.Add(LinkRow(Glyph.Open, WebSite, null, delegate { OpenSite(WebSite); }));
-            text.Controls.Add(LinkRow(Glyph.Folder, L.T("Открыть папку программы"), null, delegate
-            {
-                try { Process.Start("explorer.exe", "\"" + AppPaths.Root + "\""); } catch (Exception) { }
-            }));
-
+                L.T("и серийные номера USB-накопителей."), Sections, out text);
+            t.Location = new Point(0, 0);
+            text.Controls.Add(About.SiteRow(Font, Glyph.Cloud, WebInterface, About.Line(L.T("веб-интерфейс базы"), Font, Theme.Muted, width, 0)));
+            text.Controls.Add(About.SiteRow(Font, Glyph.Open, About.WebSite, null));
+            text.Controls.Add(About.FolderRow(Font, AppPaths.Root));
             Controls.Add(t);
-        }
-
-        static Label Line(string s, Font font, Color color, int width, int bottom)
-        {
-            Label l = Ui.Text(s, font, color);
-            l.MaximumSize = new Size(width, 0);
-            l.Margin = new Padding(0, 0, 0, bottom);
-            return l;
-        }
-
-        FlowLayoutPanel LinkRow(string glyph, string text, Label note, LinkLabelLinkClickedEventHandler click)
-        {
-            int em = Font.Height;
-            FlowLayoutPanel row = Ui.Row();
-            PictureBox icon = new PictureBox();
-            icon.Image = Glyph.Image(glyph, em, Theme.Muted);
-            icon.SizeMode = PictureBoxSizeMode.AutoSize;
-            icon.Margin = new Padding(0, 3, em / 4, 3);
-            LinkLabel link = new LinkLabel();
-            link.Text = text;
-            link.AutoSize = true;
-            link.LinkColor = link.ActiveLinkColor = link.VisitedLinkColor = Theme.Info;
-            link.Margin = new Padding(0, 3, 0, 3);
-            link.LinkClicked += click;
-            row.Controls.Add(icon);
-            row.Controls.Add(link);
-            if (note != null) { note.Margin = new Padding(em / 2, 3, 0, 3); row.Controls.Add(note); }
-            return row;
-        }
-
-        // Opens in the default browser; if that fails (no browser, locked down PC), the address is copied.
-        static void OpenSite(string site)
-        {
-            try { Process.Start(new ProcessStartInfo("https://" + site) { UseShellExecute = true }); }
-            catch (Exception) { try { Clipboard.SetText("https://" + site); } catch (Exception) { } }
         }
     }
 }

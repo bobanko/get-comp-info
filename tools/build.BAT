@@ -52,7 +52,7 @@ if exist comp-info.exe (
   %REFS% /r:System.Windows.Forms.dll /r:System.Drawing.dll %CORE% %UI%
 if errorlevel 1 exit /b 1
 
-"%CSC%" /nologo /optimize+ /codepage:65001 /target:winexe /main:CompInfo.SuspectorProgram /out:SUSpector.exe /win32manifest:app\app.manifest /win32icon:app\app.ico ^
+"%CSC%" /nologo /optimize+ /codepage:65001 /target:winexe /main:CompInfo.SuspectorProgram /out:SUSpector.exe /win32manifest:app\app.manifest /win32icon:app\app.ico /resource:app\face.png,CompInfo.face.png /resource:app\face-ru.png,CompInfo.face-ru.png ^
   %REFS% /r:System.Windows.Forms.dll /r:System.Drawing.dll %SUSPECTOR_CORE% %SUSPECTOR_UI%
 if errorlevel 1 exit /b 1
 

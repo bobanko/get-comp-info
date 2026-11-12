@@ -426,6 +426,113 @@ namespace CompInfo
         }
     }
 
+    // «О программе» of comp-info (AboutPage) and SUSpector (SuspectorAboutDialog), as in SupraWeed:
+    // the picture on the left; name, version, sections and how to reach the developer on the right.
+    public static class About
+    {
+        public const string Email = "toolbox@chagear.top";
+        public const string WebSite = "chagear.top";
+
+        // Builds everything up to the developer's e-mail; the caller adds its own links to the returned column.
+        public static TableLayoutPanel Build(Font font, int width, string title, string subtitle, string intro, string[] sections, out FlowLayoutPanel text)
+        {
+            int em = font.Height;
+            TableLayoutPanel t = new TableLayoutPanel();
+            t.AutoSize = true;
+            t.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            t.ColumnCount = 2;
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            t.Margin = Padding.Empty;
+
+            int side = em * 7;
+            PictureBox pic = new PictureBox();
+            pic.Image = L.Code == "ru" ? Ui.FaceRuImage : Ui.FaceImage;
+            pic.SizeMode = PictureBoxSizeMode.Zoom;
+            pic.Size = new Size(side, side);
+            pic.Margin = new Padding(0, 0, em, 0);
+            t.Controls.Add(pic, 0, 0);
+
+            text = new FlowLayoutPanel();
+            text.FlowDirection = FlowDirection.TopDown;
+            text.WrapContents = false;
+            text.AutoSize = true;
+            text.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            text.Margin = Padding.Empty;
+            t.Controls.Add(text, 1, 0);
+
+            text.Controls.Add(Line(title, new Font("Segoe UI Semibold", 16f), Theme.Text, width, 0));
+            text.Controls.Add(Line(subtitle, font, Theme.Text, width, 0));
+            text.Controls.Add(Line(L.T("Версия ") + AppVersion.Text + (PowerShell.IsAdministrator() ? L.T(" · запущена с правами администратора") : ""), font, Theme.Muted, width, em / 2));
+            if (!string.IsNullOrEmpty(intro)) text.Controls.Add(Line(intro, font, Theme.Text, width, em / 2));
+
+            Font bold = new Font(font, FontStyle.Bold);
+            for (int i = 0; i + 1 < sections.Length; i += 2)
+            {
+                text.Controls.Add(Line(sections[i], bold, Theme.Text, width, 0));
+                text.Controls.Add(Line(sections[i + 1], font, Theme.Text, width, em / 2));
+            }
+
+            text.Controls.Add(Line(L.T("Связь с разработчиком"), bold, Theme.Text, width, 0));
+            Label copied = Line(L.T("← нажмите, чтобы скопировать"), font, Theme.Muted, width, 0);
+            // Service computers have no mail client: a click copies the address instead of opening mailto.
+            text.Controls.Add(LinkRow(font, Glyph.Person, Email, copied, delegate
+            {
+                try { Clipboard.SetText(Email); copied.Text = L.T("скопировано ✓"); } catch (Exception) { }
+            }));
+            return t;
+        }
+
+        public static Label Line(string s, Font font, Color color, int width, int bottom)
+        {
+            Label l = Ui.Text(s, font, color);
+            l.MaximumSize = new Size(width, 0);
+            l.Margin = new Padding(0, 0, 0, bottom);
+            return l;
+        }
+
+        public static FlowLayoutPanel LinkRow(Font font, string glyph, string text, Label note, LinkLabelLinkClickedEventHandler click)
+        {
+            int em = font.Height;
+            FlowLayoutPanel row = Ui.Row();
+            PictureBox icon = new PictureBox();
+            icon.Image = Glyph.Image(glyph, em, Theme.Muted);
+            icon.SizeMode = PictureBoxSizeMode.AutoSize;
+            icon.Margin = new Padding(0, 3, em / 4, 3);
+            LinkLabel link = new LinkLabel();
+            link.Text = text;
+            link.Font = font;
+            link.AutoSize = true;
+            link.LinkColor = link.ActiveLinkColor = link.VisitedLinkColor = Theme.Info;
+            link.Margin = new Padding(0, 3, 0, 3);
+            link.LinkClicked += click;
+            row.Controls.Add(icon);
+            row.Controls.Add(link);
+            if (note != null) { note.Margin = new Padding(em / 2, 3, 0, 3); row.Controls.Add(note); }
+            return row;
+        }
+
+        public static FlowLayoutPanel SiteRow(Font font, string glyph, string site, Label note)
+        {
+            return LinkRow(font, glyph, site, note, delegate { OpenSite(site); });
+        }
+
+        public static FlowLayoutPanel FolderRow(Font font, string folder)
+        {
+            return LinkRow(font, Glyph.Folder, L.T("Открыть папку программы"), null, delegate
+            {
+                try { Process.Start("explorer.exe", "\"" + folder + "\""); } catch (Exception) { }
+            });
+        }
+
+        // Opens in the default browser; if that fails (no browser, locked down PC), the address is copied.
+        public static void OpenSite(string site)
+        {
+            try { Process.Start(new ProcessStartInfo("https://" + site) { UseShellExecute = true }); }
+            catch (Exception) { try { Clipboard.SetText("https://" + site); } catch (Exception) { } }
+        }
+    }
+
     // Message with an icon and buttons; replaces MessageBox, which ignores the dark theme.
     public class AskDialog : Form
     {

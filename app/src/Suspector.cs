@@ -185,61 +185,50 @@ namespace CompInfo
         }
     }
 
+    // «О программе» of SUSpector, laid out like the one of comp-info (see About in Ui.cs).
     public class SuspectorAboutDialog : Form
     {
+        static string[] Sections { get { return new[]
+        {
+            L.T("Проверки"),
+            L.T("Проверяет имя и домен компьютера, антивирус, VPN, нежелательное ПО, OneDrive, локальных администраторов, пароли Windows и документы с признаками ДСК."),
+            L.T("Подготовка"),
+            L.T("Пользователь сам запускает исправляющие действия. Сейчас можно отключить синхронизацию OneDrive без удаления локальных файлов."),
+            L.T("Конфиденциальность"),
+            L.T("Проверка выполняется локально. Результаты и найденные файлы никуда не отправляются."),
+            L.T("Установка не нужна"),
+            L.T("SUSpector — один файл, он работает прямо с флешки. Рядом с ним сохраняется только SUSpector.ini с выбранными темой и языком."),
+            L.T("Обновление"),
+            L.T("Кнопка «Обновление» сверяет версию с сайтом разработчика и при согласии заменяет SUSpector.exe новой версией. Без интернета программа работает как обычно."),
+            L.T("Клавиши"),
+            L.T("F5 — запустить проверку заново. Enter или двойной щелчок по найденному документу — открыть его."),
+        }; } }
+
         public SuspectorAboutDialog()
         {
             Ui.Dialog(this);
             Text = L.T("О программе");
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
+            AutoSize = true;
+            AutoSizeMode = AutoSizeMode.GrowAndShrink;
             int em = Font.Height;
             Padding = new Padding(em);
 
-            FlowLayoutPanel body = new FlowLayoutPanel();
-            body.FlowDirection = FlowDirection.TopDown;
-            body.WrapContents = false;
-            body.AutoSize = true;
-            body.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            body.Margin = Padding.Empty;
-            int width = em * 34;
-
-            body.Controls.Add(Line("SUSpector", new Font("Segoe UI Semibold", 18f), Theme.Text, width, 0));
-            body.Controls.Add(Line(L.T("Версия ") + AppVersion.Text, Font, Theme.Muted, width, em / 2));
-            body.Controls.Add(Line(
-                L.T("Помогает проверить и подготовить компьютер перед внешней проверкой безопасности."),
-                Font, Theme.Text, width, em / 2));
-            body.Controls.Add(Line(L.T("Проверки"), new Font(Font, FontStyle.Bold), Theme.Text, width, 0));
-            body.Controls.Add(Line(
-                L.T("Проверяет имя и домен компьютера, антивирус, VPN, нежелательное ПО, OneDrive, локальных администраторов, пароли Windows и документы с признаками ДСК."),
-                Font, Theme.Text, width, em / 2));
-            body.Controls.Add(Line(L.T("Подготовка"), new Font(Font, FontStyle.Bold), Theme.Text, width, 0));
-            body.Controls.Add(Line(
-                L.T("Пользователь сам запускает исправляющие действия. Сейчас можно отключить синхронизацию OneDrive без удаления локальных файлов."),
-                Font, Theme.Text, width, em / 2));
-            body.Controls.Add(Line(L.T("Конфиденциальность"), new Font(Font, FontStyle.Bold), Theme.Text, width, 0));
-            body.Controls.Add(Line(
-                L.T("Проверка выполняется локально. Результаты и найденные файлы никуда не отправляются."),
-                Font, Theme.Text, width, em / 2));
-            body.Controls.Add(Line(L.T("Связь с разработчиком: ") + "toolbox@chagear.top", Font, Theme.Info, width, 0));
+            FlowLayoutPanel text;
+            TableLayoutPanel t = About.Build(Font, em * 26, "SUSpector",
+                L.T("Помогает проверить и подготовить компьютер перед внешней проверкой безопасности."), null, Sections, out text);
+            text.Controls.Add(About.SiteRow(Font, Glyph.Open, About.WebSite, null));
+            text.Controls.Add(About.FolderRow(Font, AppDomain.CurrentDomain.BaseDirectory));
 
             Button close = Ui.Primary(L.T("Закрыть"), null, Font);
             close.Anchor = AnchorStyles.Right;
+            close.Margin = new Padding(0, em, 0, 0);
             close.Click += delegate { Close(); };
-            body.Controls.Add(close);
-            Controls.Add(body);
+            t.Controls.Add(close, 1, 1);
+            Controls.Add(t);
             AcceptButton = close;
             CancelButton = close;
-            AutoSize = true;
-            AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        }
-
-        static Label Line(string text, Font font, Color color, int width, int bottom)
-        {
-            Label label = Ui.Text(text, font, color);
-            label.MaximumSize = new Size(width, 0);
-            label.Margin = new Padding(0, 0, 0, bottom);
-            return label;
         }
     }
 
