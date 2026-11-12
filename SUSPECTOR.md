@@ -19,7 +19,7 @@ tools\build.BAT
 - `comp-info.exe` — полный внутренний тулбокс;
 - `SUSpector.exe` — отдельное окно для пользователей.
 
-Иконка SUSpector — `appsuspector.ico`, её делает `toolsmake-icon.BAT`: размеры от 40 px — из `appsuspector-source.png` (подозрительный взгляд), до 32 px — из `appsuspector-small-source.png` (ноутбук с оком), у которого скрипт убирает чёрный фон. Картинка окна «О программе» — `appsuspector.png` из того же исходника.
+Иконка SUSpector — `app\suspector.ico`, её делает `tools\make-icon.BAT`: размеры от 40 px — из `app\suspector-source.png` (подозрительный взгляд), до 32 px — из `app\suspector-small-source.png` (ноутбук с оком), у которого скрипт убирает чёрный фон. Картинка окна «О программе» — `app\suspector.png` из того же исходника.
 Проверка вёрстки без показа окна:
 
 ```bat
