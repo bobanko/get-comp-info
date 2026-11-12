@@ -91,7 +91,7 @@ namespace CompInfo
             status.Set(Glyph.Info, L.T("Введите фразу и нажмите «Найти». Регистр и переносы строк не учитываются."), Theme.Info);
 
             openFileIcon = Glyph.Image(Glyph.Open, em, Theme.Accent);
-            openFolderIcon = Glyph.Image(Glyph.Folder, em, Theme.Accent);
+            openFolderIcon = Glyph.Image(Glyph.Folder, em, Theme.Folder);
             grid = Ui.Grid(Font);
             grid.Dock = DockStyle.Fill;
             DataGridViewImageColumn icon = new DataGridViewImageColumn();

@@ -45,7 +45,7 @@ namespace CompInfo
                 Dictionary<string, string> values = Read();
                 values[name] = value;
                 StringBuilder text = new StringBuilder("; SUSpector settings\r\n[settings]\r\n");
-                foreach (string key in new[] { "theme", "language" })
+                foreach (string key in new[] { "theme", "language", "layout" })
                     if (values.ContainsKey(key)) text.Append(key).Append('=').Append(values[key]).Append("\r\n");
                 File.WriteAllText(Path, text.ToString(), new UTF8Encoding(false));
             }
@@ -197,7 +197,7 @@ namespace CompInfo
             L.T("Конфиденциальность"),
             L.T("Проверка выполняется локально. Результаты и найденные файлы никуда не отправляются."),
             L.T("Установка не нужна"),
-            L.T("SUSpector — один файл, он работает прямо с флешки. Рядом с ним сохраняется только SUSpector.ini с выбранными темой и языком."),
+            L.T("SUSpector — один файл, он работает прямо с флешки. Рядом с ним сохраняется только SUSpector.ini с выбранными темой, языком и расположением таблиц."),
             L.T("Обновление"),
             L.T("Кнопка «Обновление» сверяет версию с сайтом разработчика и при согласии заменяет SUSpector.exe новой версией. Без интернета программа работает как обычно."),
             L.T("Клавиши"),
@@ -246,6 +246,8 @@ namespace CompInfo
 
             Theme.Choice = Option(args, "--theme", 1) ?? SuspectorSettings.Get("theme", "system");
             L.Choice = Option(args, "--language", 1) ?? SuspectorSettings.Get("language", "system");
+            SecurityPage.TableLayout = Option(args, "--layout", 1) ?? SuspectorSettings.Get("layout", "bottom");
+            SecurityPage.LayoutSaved = delegate (string value) { SuspectorSettings.Set("layout", value); };
             string screenshot = Option(args, "--screenshot", 1);
             if (screenshot != null)
             {

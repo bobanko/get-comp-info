@@ -284,6 +284,10 @@ namespace CompInfo
 
         static void DocumentDeletion()
         {
+            List<string> tags = SecurityAudit.LocationTags(@"C:\Users\me\Documents\SupraWeed\out\ДСК отчёт.docx", false);
+            Check(tags.Count == 2 && tags[0] == "#SupraWeed" && tags[1] == "#документы", "files in a SupraWeed folder get their own tag first");
+            Check(!SecurityAudit.LocationTags(@"C:\Users\me\Downloads\supraweed ДСК.docx", false).Contains("#SupraWeed"), "the file name alone is no SupraWeed folder");
+            Check(SecurityAudit.LocationTags(@"C:\Users\me\Documents\ViberDownloads\ДСК.docx", false).Contains("#Viber"), "Viber downloads are tagged");
             Check(SecurityAudit.RecycleInfoFile(@"C:\$Recycle.Bin\S-1-5-21-1\$RAB12CD.docx") == @"C:\$Recycle.Bin\S-1-5-21-1\$IAB12CD.docx",
                 "a file in the bin takes its $I record along");
             Check(SecurityAudit.RecycleInfoFile(@"C:\Users\me\$Report.docx") == null && SecurityAudit.RecycleInfoFile(@"C:\Users\me\a.docx") == null,

@@ -25,7 +25,20 @@ namespace CompInfo
         readonly Bitmap openFileIcon;
         readonly Bitmap openFolderIcon;
         readonly Bitmap deleteIcon;
+        readonly SplitContainer split = new SplitContainer();
+        readonly FlowLayoutPanel bulkBar = Ui.Row();
         bool running;
+
+        // Where the file table is: "bottom" (under the checks) or "right" (next to them).
+        // The program that hosts the page loads it and saves a change through LayoutSaved.
+        public static string TableLayout = "bottom";
+        public static Action<string> LayoutSaved;
+
+        // Location tags whose documents can be deleted all at once.
+        static string[] BulkTags
+        {
+            get { return new[] { L.T("#корзина"), L.T("#даунлоадс"), L.T("#телеграм"), "#WhatsApp", "#Viber", "#Claude" }; }
+        }
 
         public SecurityPage()
         {
@@ -47,29 +60,45 @@ namespace CompInfo
             scanDocuments.Checked = true;
             scanDocuments.AutoSize = true;
             scanDocuments.ForeColor = Theme.Text;
-            scanDocuments.Margin = new Padding(em * 2 / 3, Math.Max(0, (run.Height - scanDocuments.PreferredSize.Height) / 2), 0, 0);
-            FlowLayoutPanel actions = Ui.Row();
-            actions.Controls.Add(run);
-            actions.Controls.Add(scanDocuments);
-            actions.Controls.Add(disableOneDrive);
-            actions.Anchor = AnchorStyles.Left;
+            scanDocuments.Margin = new Padding(em * 2 / 3, 0, em / 2, 0);
+            run.Margin = new Padding(0);
+            disableOneDrive.Margin = new Padding(em / 2, 0, 0, 0);
 
+            // Like the panel buttons of VS Code: the file table under the checks or next to them.
+            Segmented layout = new Segmented(new[] { Glyph.DockBottom, Glyph.DockRight }, true,
+                new[] { L.T("Таблицы одна под другой"), L.T("Таблицы рядом") }, TableLayout == "right" ? 1 : 0);
+            layout.Font = Font;
+            layout.Size = new Size(em * 4, run.Height);
+            layout.Margin = new Padding(em / 2, 0, 0, 0);
+            layout.Changed += delegate (int index)
+            {
+                TableLayout = index == 1 ? "right" : "bottom";
+                ApplyLayout();
+                if (LayoutSaved != null) LayoutSaved(TableLayout);
+            };
+
+            // One row, every control centred on the same line.
             TableLayoutPanel toolbar = new TableLayoutPanel();
-            toolbar.ColumnCount = 2;
+            toolbar.ColumnCount = 5;
             toolbar.RowCount = 1;
             toolbar.AutoSize = true;
             toolbar.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             toolbar.GrowStyle = TableLayoutPanelGrowStyle.FixedSize;
             toolbar.Dock = DockStyle.Top;
             toolbar.Padding = new Padding(0, 0, 0, em / 2);
-            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            for (int i = 0; i < 3; i++) toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             toolbar.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            foreach (Control c in new Control[] { run, scanDocuments, disableOneDrive, layout }) c.Anchor = AnchorStyles.Left;
             status.Anchor = AnchorStyles.Left | AnchorStyles.Right;
             status.Margin = new Padding(em, 0, 0, 0);
             status.MinimumSize = new Size(em * 12, run.Height);
-            toolbar.Controls.Add(actions, 0, 0);
-            toolbar.Controls.Add(status, 1, 0);
+            toolbar.Controls.Add(run, 0, 0);
+            toolbar.Controls.Add(scanDocuments, 1, 0);
+            toolbar.Controls.Add(disableOneDrive, 2, 0);
+            toolbar.Controls.Add(status, 3, 0);
+            toolbar.Controls.Add(layout, 4, 0);
 
             progress.Style = ProgressBarStyle.Continuous;
             progress.Height = em / 3;
@@ -84,7 +113,7 @@ namespace CompInfo
             waitingIcon = Glyph.Image(Glyph.Circle, em, Theme.Border);
             runningIcon = Glyph.Image(Glyph.More, em, Theme.Info);
             openFileIcon = Glyph.Image(Glyph.Open, em, Theme.Accent);
-            openFolderIcon = Glyph.Image(Glyph.Folder, em, Theme.Accent);
+            openFolderIcon = Glyph.Image(Glyph.Folder, em, Theme.Folder);
             deleteIcon = Glyph.Image(Glyph.Delete, em, Theme.Bad);
 
             grid = Ui.Grid(Font);
@@ -109,33 +138,32 @@ namespace CompInfo
             detailIcon.DefaultCellStyle.NullValue = null;
             details.Columns.Add(detailIcon);
             details.Columns.Add("type", L.T("Тип"));
-            details.Columns.Add("match", L.T("Совпадение"));
+            details.Columns.Add("tags", L.T("Метки"));
+            details.Columns.Add("matches", L.T("Совпадений"));
             details.Columns.Add("detail", L.T("Файл"));
             details.Columns.Add(ActionIconColumn(em * 2));
             details.Columns.Add(ActionIconColumn(em * 2));
             details.Columns.Add(ActionIconColumn(em * 2));
             details.Columns[1].Width = em * 4;
             details.Columns[1].DefaultCellStyle.Font = new Font("Segoe UI Semibold", 9f);
-            details.Columns[2].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
-            details.Columns[2].FillWeight = 40;
-            details.Columns[2].DefaultCellStyle.WrapMode = DataGridViewTriState.True;
-            details.Columns[3].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
-            details.Columns[3].FillWeight = 60;
-            details.Columns[3].DefaultCellStyle.Font = new Font("Segoe UI Semibold", 9f);
-            details.Columns[3].DefaultCellStyle.ForeColor = Theme.Text;
-            details.Columns[3].DefaultCellStyle.WrapMode = DataGridViewTriState.True;
+            // The tag column is as wide as its widest set of chips (ShowDetails measures it).
+            details.Columns[2].AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
+            details.Columns[3].AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
+            details.Columns[3].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
+            details.Columns[4].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            details.Columns[4].DefaultCellStyle.WrapMode = DataGridViewTriState.True;
             details.RowTemplate.Height = em * 2;
             foreach (DataGridViewColumn column in details.Columns) column.SortMode = DataGridViewColumnSortMode.NotSortable;
             SetDetailMode(false);
             details.CellPainting += PaintDetailChips;
             details.CellContentClick += delegate (object o, DataGridViewCellEventArgs e)
             {
-                if (e.RowIndex >= 0 && (e.ColumnIndex == 4 || e.ColumnIndex == 5)) OpenDetail(e.RowIndex, e.ColumnIndex == 5);
-                else if (e.RowIndex >= 0 && e.ColumnIndex == 6) DeleteDetail(e.RowIndex);
+                if (e.RowIndex >= 0 && (e.ColumnIndex == 5 || e.ColumnIndex == 6)) OpenDetail(e.RowIndex, e.ColumnIndex == 6);
+                else if (e.RowIndex >= 0 && e.ColumnIndex == 7) DeleteDetail(e.RowIndex);
             };
             details.CellDoubleClick += delegate (object o, DataGridViewCellEventArgs e)
             {
-                if (e.RowIndex >= 0 && e.ColumnIndex >= 0 && e.ColumnIndex < 4) OpenDetail(e.RowIndex, false);
+                if (e.RowIndex >= 0 && e.ColumnIndex >= 0 && e.ColumnIndex < 5) OpenDetail(e.RowIndex, false);
             };
             details.KeyDown += delegate (object o, KeyEventArgs e)
             {
@@ -151,20 +179,24 @@ namespace CompInfo
                 }
             };
 
-            SplitContainer split = new SplitContainer();
+            // «Delete all found with the tag …» buttons over the file table; shown only when such files exist.
+            bulkBar.Dock = DockStyle.Top;
+            bulkBar.WrapContents = true;
+            bulkBar.AutoSize = true;
+            bulkBar.Padding = new Padding(em / 3, em / 3, 0, em / 3);
+            bulkBar.BackColor = Theme.Surface;
+            bulkBar.Visible = false;
+
             split.Dock = DockStyle.Fill;
-            split.Orientation = Orientation.Horizontal;
             split.BackColor = Theme.Border;
             split.Panel1.BackColor = Theme.Surface;
             split.Panel2.BackColor = Theme.Surface;
             split.Panel1.Controls.Add(grid);
             split.Panel2.Controls.Add(details);
+            split.Panel2.Controls.Add(bulkBar);
             split.SplitterWidth = Math.Max(4, em / 4);
-            split.Resize += delegate
-            {
-                if (split.Height > em * 12 && split.SplitterDistance < em * 6)
-                    split.SplitterDistance = split.Height * 3 / 5;
-            };
+            split.Resize += delegate { KeepSplitSensible(); };
+            ApplyLayout();
 
             status.Set(Glyph.Info, L.T("Нажмите «Запустить проверку». Полный поиск документов может занять несколько минут."), Theme.Info);
 
@@ -305,7 +337,7 @@ namespace CompInfo
             finally
             {
                 running = false;
-                if (!IsDisposed) { run.Enabled = true; scanDocuments.Enabled = true; UpdateActions(); }
+                if (!IsDisposed) { run.Enabled = true; scanDocuments.Enabled = true; UpdateActions(); UpdateBulkBar(grid.CurrentRow == null ? null : grid.CurrentRow.Tag as SecurityCheck); }
             }
         }
 
@@ -372,31 +404,43 @@ namespace CompInfo
             if (check != null)
                 foreach (SecurityDetail item in check.Items) if (item.FilePath.Length > 0) { files = true; break; }
             SetDetailMode(files);
+            UpdateBulkBar(check);
             if (check == null) return;
+            int em = Font.Height, tagWidth = 0;
             foreach (SecurityDetail item in check.Items)
             {
                 bool file = item.FilePath.Length > 0;
-                string match = file ? item.Note : item.Text;
-                string fileName = file ? Path.GetFileName(item.Text) : "";
+                // A file's note is «#tag #tag · count»: the chips go to their column, the count to the next one.
+                FileChips chips = file ? FileChips.Parse(item.Note) : null;
+                string count = !file ? "" : chips != null ? chips.Text : item.Note;
+                if (chips != null) { chips.Text = ""; tagWidth = Math.Max(tagWidth, FileChips.Width(chips.Labels, em)); }
+                string fileName = file ? Path.GetFileName(item.Text) : item.Text;
                 if (file && string.IsNullOrEmpty(fileName)) fileName = item.Text;
-                int index = details.Rows.Add(file ? FileIcon(item.FilePath) : null, item.FileType, match, fileName,
+                int index = details.Rows.Add(file ? FileIcon(item.FilePath) : null, item.FileType, "", count, fileName,
                     file ? openFileIcon : null, file ? openFolderIcon : null, file ? deleteIcon : null);
                 DataGridViewRow row = details.Rows[index];
                 row.Tag = item;
-                if (file) row.Cells[2].Tag = FileChips.Parse(match);
+                row.Cells[2].Tag = chips;
                 if (file)
                 {
                     row.Cells[0].ToolTipText = item.Text;
-                    row.Cells[2].ToolTipText = item.ToolTip;
-                    row.Cells[3].ToolTipText = item.Text;
-                    row.Cells[4].ToolTipText = L.T("Открыть");
-                    row.Cells[5].ToolTipText = L.T("Папка");
-                    row.Cells[6].ToolTipText = L.T("Удалить (Delete)");
+                    if (chips != null) row.Cells[2].ToolTipText = "#" + string.Join(" #", chips.Labels.ToArray());
+                    row.Cells[3].ToolTipText = item.ToolTip;
+                    row.Cells[4].ToolTipText = item.Text;
+                    row.Cells[5].ToolTipText = L.T("Открыть");
+                    row.Cells[6].ToolTipText = L.T("Папка");
+                    row.Cells[7].ToolTipText = L.T("Удалить (Delete)");
                 }
                 if (item.FileType.Length > 0)
                 {
                     row.Cells[1].Style.ForeColor = item.FileType == "WORD" ? Theme.Info : item.FileType == "EXCEL" ? Theme.Good : Theme.Warn;
                 }
+            }
+            details.Columns[2].Visible = files && tagWidth > 0;
+            if (tagWidth > 0)
+            {
+                int header = TextRenderer.MeasureText(details.Columns[2].HeaderText, details.ColumnHeadersDefaultCellStyle.Font ?? Font).Width + em;
+                details.Columns[2].Width = Math.Max(header, tagWidth);
             }
             details.ClearSelection();
         }
@@ -404,16 +448,83 @@ namespace CompInfo
 
         void PaintDetailChips(object sender, DataGridViewCellPaintingEventArgs e) { FileChips.Paint(details, e, 2); }
 
+        // Found files fill all columns; other checks show their details as plain text in the last one.
         void SetDetailMode(bool files)
         {
-            details.Columns[0].Visible = files;
-            details.Columns[1].Visible = files;
-            details.Columns[2].HeaderText = files ? L.T("Совпадение") : L.T("Детали");
-            details.Columns[2].FillWeight = files ? 40 : 100;
-            details.Columns[3].Visible = files;
-            details.Columns[4].Visible = files;
-            details.Columns[5].Visible = files;
-            details.Columns[6].Visible = files;
+            foreach (int column in new[] { 0, 1, 2, 3, 5, 6, 7 }) details.Columns[column].Visible = files;
+            details.Columns[4].HeaderText = files ? L.T("Файл") : L.T("Детали");
+            details.Columns[4].DefaultCellStyle.Font = files ? new Font("Segoe UI Semibold", 9f) : Font;
+            details.Columns[4].DefaultCellStyle.ForeColor = Theme.Text;
+        }
+
+        void ApplyLayout()
+        {
+            split.Orientation = TableLayout == "right" ? Orientation.Vertical : Orientation.Horizontal;
+            int size = split.Orientation == Orientation.Vertical ? split.Width : split.Height;
+            if (size > split.SplitterWidth * 4) split.SplitterDistance = split.Orientation == Orientation.Vertical ? size * 9 / 20 : size * 3 / 5;
+        }
+
+        void KeepSplitSensible()
+        {
+            int em = Font.Height;
+            if (split.Orientation == Orientation.Horizontal)
+            {
+                if (split.Height > em * 12 && split.SplitterDistance < em * 6) split.SplitterDistance = split.Height * 3 / 5;
+            }
+            else if (split.Width > em * 24 && split.SplitterDistance < em * 10) split.SplitterDistance = split.Width * 9 / 20;
+        }
+
+        static List<string> TagsOf(SecurityDetail item)
+        {
+            FileChips chips = FileChips.Parse(item.Note);
+            return chips == null ? new List<string>() : chips.Labels;
+        }
+
+        // Found files with the tag that may be deleted all at once (SupraWeed files never are); skipped counts the SupraWeed ones.
+        static List<SecurityDetail> Tagged(SecurityCheck check, string tag, out int skipped)
+        {
+            List<SecurityDetail> result = new List<SecurityDetail>();
+            skipped = 0;
+            if (check == null) return result;
+            string label = tag.TrimStart('#');
+            foreach (SecurityDetail item in check.Items)
+            {
+                if (item.FilePath.Length == 0) continue;
+                List<string> tags = TagsOf(item);
+                if (!tags.Contains(label)) continue;
+                if (tags.Contains("SupraWeed")) skipped++;
+                else result.Add(item);
+            }
+            return result;
+        }
+
+        void UpdateBulkBar(SecurityCheck check)
+        {
+            bulkBar.SuspendLayout();
+            foreach (Control old in bulkBar.Controls) old.Dispose();
+            bulkBar.Controls.Clear();
+            int em = Font.Height;
+            foreach (string tag in BulkTags)
+            {
+                int skipped;
+                List<SecurityDetail> files = Tagged(check, tag, out skipped);
+                if (files.Count == 0) continue;
+                if (bulkBar.Controls.Count == 0)
+                {
+                    Label caption = Ui.Text(L.T("Удалить все найденные:"), Font, Theme.Muted);
+                    caption.Margin = new Padding(0, em / 3, em / 2, 0);
+                    bulkBar.Controls.Add(caption);
+                }
+                string label = tag.TrimStart('#');
+                Button button = Ui.Secondary(label + " · " + files.Count, Glyph.Delete, Font);
+                button.Margin = new Padding(0, 0, em / 3, em / 4);
+                button.Enabled = !running;
+                button.Click += delegate { DeleteTagged(tag); };
+                new ToolTip().SetToolTip(button, L.F("Удалить безвозвратно все найденные документы с меткой «{0}»", label));
+                bulkBar.Controls.Add(button);
+            }
+            bulkBar.Visible = bulkBar.Controls.Count > 0;
+            bulkBar.ResumeLayout();
         }
 
         static DataGridViewImageColumn ActionIconColumn(int width)
@@ -466,19 +577,56 @@ namespace CompInfo
             if (Ui.Ask(FindForm(), L.T("Удаление документа"),
                 L.F("Удалить «{0}» безвозвратно? Файл не попадёт в корзину, восстановить его будет нельзя.", name) + "\r\n\r\n" + item.Text,
                 Glyph.Delete, Theme.Bad, L.T("Удалить"), L.T("Отмена")) != 0) return;
-            try
+            RemoveFiles(check, checkRow, new List<SecurityDetail> { item }, rowIndex);
+        }
+
+        void DeleteTagged(string tag)
+        {
+            DataGridViewRow checkRow = grid.CurrentRow;
+            SecurityCheck check = checkRow == null ? null : checkRow.Tag as SecurityCheck;
+            if (check == null || running) return;
+            int skipped;
+            List<SecurityDetail> files = Tagged(check, tag, out skipped);
+            if (files.Count == 0) return;
+            string label = tag.TrimStart('#');
+            string text = L.F("Удалить безвозвратно все найденные документы с меткой «{0}»: {1}? Файлы не попадут в корзину, восстановить их будет нельзя.", label, files.Count);
+            if (skipped > 0) text += "\r\n\r\n" + L.F("Файлы с меткой SupraWeed не удаляются: {0}.", skipped);
+            if (Ui.Ask(FindForm(), L.T("Удаление документов"), text, Glyph.Delete, Theme.Bad, L.T("Удалить все"), L.T("Отмена")) != 0) return;
+            RemoveFiles(check, checkRow, files, details.CurrentRow == null ? 0 : details.CurrentRow.Index);
+        }
+
+        // Deletes the files for good and updates the check: its summary counts the deleted files.
+        void RemoveFiles(SecurityCheck check, DataGridViewRow checkRow, List<SecurityDetail> items, int rowIndex)
+        {
+            int removed = 0;
+            List<string> failed = new List<string>();
+            string lastName = "";
+            foreach (SecurityDetail item in items)
             {
-                SecurityAudit.DeleteDocument(item.FilePath);
+                string name = Path.GetFileName(item.Text);
+                try { SecurityAudit.DeleteDocument(item.FilePath); }
+                catch (FileNotFoundException) { }
+                catch (Exception e) { failed.Add(name + ": " + e.Message); continue; }
+                check.Items.Remove(item);
+                removed++;
+                lastName = name;
             }
-            catch (FileNotFoundException) { }
-            catch (Exception e)
+            if (removed > 0) AfterDeletion(check, checkRow, removed, rowIndex);
+            if (failed.Count == 0)
+                status.Set(Glyph.Check, removed == 1 ? L.T("Удалён файл: ") + lastName : L.F("Удалено файлов: {0}", removed), Theme.Good);
+            else if (items.Count == 1)
+                Ui.Error(FindForm(), L.T("Не удалось удалить: ") + failed[0].Substring(failed[0].IndexOf(": ") + 2));
+            else
             {
-                Ui.Error(FindForm(), L.T("Не удалось удалить: ") + e.Message);
-                return;
+                status.Set(Glyph.Warning, L.F("Удалено файлов: {0}, не удалось удалить: {1}.", removed, failed.Count), Theme.Bad);
+                Ui.Error(FindForm(), L.T("Не удалось удалить: ") + "\r\n" + string.Join("\r\n", failed.GetRange(0, Math.Min(10, failed.Count)).ToArray()));
             }
-            check.Items.Remove(item);
+        }
+
+        void AfterDeletion(SecurityCheck check, DataGridViewRow checkRow, int removed, int rowIndex)
+        {
             if (check.ScanSummary == null) check.ScanSummary = check.Summary;
-            check.DeletedFiles++;
+            check.DeletedFiles += removed;
             bool anyLeft = false;
             foreach (SecurityDetail left in check.Items) if (left.FilePath.Length > 0) { anyLeft = true; break; }
             if (!anyLeft && check.Level == SecurityLevel.Bad)
@@ -490,10 +638,9 @@ namespace CompInfo
             checkRow.Cells[0].Value = icons[check.Level];
             checkRow.Cells[2].Value = check.Summary;
             checkRow.Cells[2].Style.ForeColor = ColorOf(check.Level);
-            int keep = Math.Min(rowIndex, details.Rows.Count - 2);
             ShowDetails();
-            if (keep >= 0 && keep < details.Rows.Count) details.CurrentCell = details.Rows[keep].Cells[2];
-            status.Set(Glyph.Check, L.T("Удалён файл: ") + name, Theme.Good);
+            int keep = Math.Min(rowIndex, details.Rows.Count - 1);
+            if (keep >= 0) details.CurrentCell = details.Rows[keep].Cells[4];
         }
 
         static Color ColorOf(SecurityLevel level)

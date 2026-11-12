@@ -18,6 +18,8 @@ namespace CompInfo
             Accent, AccentHover, AccentDown, AccentDisabled, AccentSoft, OnAccent,
             Good, GoodLight, Warn, WarnLight, Bad, BadLight, Info, Selection, HeaderBack;
         public static Color[] Rainbow;
+        // Folder icons are yellow-orange, like in Explorer.
+        public static Color Folder { get { return Dark ? Color.FromArgb(255, 196, 61) : Color.FromArgb(222, 146, 0); } }
 
         static Color C(int rgb) { return Color.FromArgb((rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255); }
 

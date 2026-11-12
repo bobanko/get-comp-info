@@ -16,7 +16,7 @@ namespace CompInfo
             Copy = "", Save = "", Search = "", Check = "", Cross = "", Warning = "",
             Shield = "", Open = "", Back = "", Forward = "", Folder = "", Settings = "",
             Circle = "", Dash = "", More = "", Info = "", Cloud = "", Upload = "",
-            Power = "", Lock = "", Person = "", Theme = "", Delete = "\uE74D", Play = "", Globe = "\uE774";
+            Power = "", Lock = "", Person = "", Theme = "", Delete = "\uE74D", DockBottom = "\uE90E", DockRight = "\uE90D", Play = "", Globe = "\uE774";
         public const string Sun = "\uE706", Moon = "\uE708";
 
         static string family;

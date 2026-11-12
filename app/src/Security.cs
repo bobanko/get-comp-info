@@ -711,14 +711,26 @@ namespace CompInfo
         {
             List<string> tags = new List<string>();
             string p = "\\" + (path ?? "").Replace('/', '\\').Trim('\\') + "\\";
+            // Files of SupraWeed (cover letters) are expected there; they are marked, not hidden.
+            if (IsSupraWeedLocation(path)) tags.Add("#SupraWeed");
             if (recycle) tags.Add(L.T("#корзина"));
             if (IsClaudeLocation(p)) tags.Add("#Claude");
             if (ContainsPath(p, "telegram desktop") || ContainsPath(p, "telegram")) tags.Add(L.T("#телеграм"));
             if (p.IndexOf("whatsapp", StringComparison.OrdinalIgnoreCase) >= 0) tags.Add("#WhatsApp");
+            if (ContainsPath(p, "viberpc") || ContainsPath(p, "viberdownloads")) tags.Add("#Viber");
             if (ContainsPath(p, "desktop") || ContainsPath(p, "рабочий стол") || ContainsPath(p, "робочий стіл")) tags.Add("#Desktop");
             if (ContainsPath(p, "documents") || ContainsPath(p, "документы") || ContainsPath(p, "документи")) tags.Add(L.T("#документы"));
             if (ContainsPath(p, "downloads") || ContainsPath(p, "загрузки") || ContainsPath(p, "завантаження")) tags.Add(L.T("#даунлоадс"));
             return tags;
+        }
+
+        // Any folder on the way whose name contains «supraweed» (SupraWeed, supraweed-out…); the file name does not count.
+        static bool IsSupraWeedLocation(string path)
+        {
+            string folder = "";
+            try { folder = Path.GetDirectoryName((path ?? "").Replace('/', '\\')) ?? ""; }
+            catch (Exception) { }
+            return folder.IndexOf("supraweed", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         static bool IsClaudeLocation(string path)

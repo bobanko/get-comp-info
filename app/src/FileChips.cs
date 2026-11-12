@@ -47,7 +47,7 @@ namespace CompInfo
                     Size textSize = TextRenderer.MeasureText(e.Graphics, label, chipFont, Size.Empty,
                         TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix);
                     int width = textSize.Width + em * 2 / 3;
-                    if (x + width > e.CellBounds.Right - em * 2) break;
+                    if (x + width > e.CellBounds.Right - (chips.Text.Length > 0 ? em * 2 : em / 4)) break;
                     Color fore, back;
                     Colors(label, out fore, out back);
                     Rectangle chip = new Rectangle(x, top, width, em + 2);
@@ -66,6 +66,16 @@ namespace CompInfo
             e.Handled = true;
         }
 
+        // Width the chips need in a cell of their own (no text after them).
+        public static int Width(List<string> labels, int em)
+        {
+            int width = em / 4;
+            using (Font chipFont = new Font("Segoe UI", 8.5f))
+                foreach (string label in labels)
+                    width += TextRenderer.MeasureText(label, chipFont, Size.Empty, TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix).Width + em * 2 / 3 + em / 4;
+            return width;
+        }
+
         static BadgeKind Kind(string label)
         {
             if (label == L.T("#корзина").TrimStart('#')) return BadgeKind.Danger;
@@ -77,6 +87,18 @@ namespace CompInfo
 
         static void Colors(string label, out Color fore, out Color back)
         {
+            if (label == "SupraWeed")
+            {
+                fore = Theme.Dark ? Color.FromArgb(94, 212, 200) : Color.FromArgb(14, 112, 106);
+                back = Theme.Dark ? Color.FromArgb(22, 58, 56) : Color.FromArgb(210, 240, 236);
+                return;
+            }
+            if (label == "Viber")
+            {
+                fore = Theme.Dark ? Color.FromArgb(190, 160, 255) : Color.FromArgb(102, 64, 178);
+                back = Theme.Dark ? Color.FromArgb(48, 38, 72) : Color.FromArgb(234, 226, 252);
+                return;
+            }
             if (label == "Claude")
             {
                 fore = Theme.Dark ? Color.FromArgb(232, 154, 125) : Color.FromArgb(166, 75, 49);

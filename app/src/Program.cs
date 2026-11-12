@@ -22,6 +22,8 @@ namespace CompInfo
 
             Theme.Choice = Option(args, "--theme", 1) ?? Settings.Get("theme", "system");
             L.Choice = Option(args, "--language", 1) ?? Settings.Get("language", "system");
+            SecurityPage.TableLayout = Settings.Get("securityLayout", "bottom");
+            SecurityPage.LayoutSaved = delegate (string value) { Settings.Set("securityLayout", value); };
             Theme.ColorBlind = (Option(args, "--colorblind", 1) ?? Settings.Get("colorblind", "off")) == "on";
             string page = Option(args, "--page", 1);
             string shot = Option(args, "--screenshot", 1);
