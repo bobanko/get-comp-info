@@ -42,5 +42,19 @@ GitHub Actions публикует его независимо от внутре�
 сверяет SHA-256 архива и файла с `manifest.json` и заменяет именно запущенный exe, даже если браузер сохранил его
 как `SUSpector (1).exe`. Старый файл остаётся рядом как `<имя>.exe.old` и удаляется при следующем запуске.
 
-В Cloudflare Access пути `/api/suspector/*` (скачивание) и `/api/suspector-release` (публикация из GitHub Actions)
-должны быть открыты без входа, как `/api/client/*` и `/api/release`; иначе Access отвечает перенаправлением на страницу входа.
+## Страница скачивания
+
+Пользователям даётся ссылка https://comp-info.chagear.top/suspector/ — отдельная публичная страница
+(`cloud/public/suspector/`) с описанием программы и кнопкой «Скачать SUSpector.exe».
+Кнопка ведёт на `/api/suspector/download`: Worker распаковывает из текущего архива сам `SUSpector.exe`
+и отдаёт его как файл, версию страница берёт из `/api/suspector/latest`.
+
+В веб-интерфейсе администратора раздел «Версии программ» показывает версии Comp Info и SUSpector отдельно;
+у SUSpector, как и у Comp Info, можно сделать текущей предыдущую версию — её будут скачивать со страницы
+и её предложит кнопка «Обновление».
+
+## Cloudflare Access
+
+Пути `/api/suspector/*` (метаданные, архив и exe), `/api/suspector-release` (публикация из GitHub Actions),
+`/suspector` и `/suspector/*` (страница скачивания) должны быть открыты без входа, как `/api/client/*` и `/api/release`;
+иначе Access отвечает перенаправлением на страницу входа.

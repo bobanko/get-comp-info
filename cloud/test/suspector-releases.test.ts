@@ -3,6 +3,7 @@ import { exports } from 'cloudflare:workers';
 import { importJWK, SignJWT, type JWK } from 'jose';
 import { describe, expect, it } from 'vitest';
 import { sha256Hex } from '../src/crypto';
+import { addUser, webRequest } from './helpers';
 import { buildRelease } from './zip-builder';
 
 let counter = Math.floor(Math.random() * 5000);
@@ -70,5 +71,39 @@ describe('standalone SUSpector releases', () => {
     expect(await sha256Hex(new Uint8Array(await packageResponse.arrayBuffer()))).toBe(await sha256Hex(published.bytes));
     expect(packageResponse.headers.get('X-Content-SHA256')).toBe(await sha256Hex(published.bytes));
     expect((await exports.default.fetch(new Request('https://comp-info.test/api/suspector/1999.1.1.1/package'))).status).toBe(404);
+  });
+
+  it('downloads the current SUSpector.exe itself for the public page', async () => {
+    const version = nextVersion();
+    expect((await publish(version, { 'SUSpector.exe': 'MZ download me' })).response.status).toBe(201);
+    const response = await exports.default.fetch(new Request('https://comp-info.test/api/suspector/download'));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Content-Disposition')).toBe('attachment; filename="SUSpector.exe"');
+    expect(response.headers.get('X-SUSpector-Version')).toBe(version);
+    expect(new TextDecoder().decode(await response.arrayBuffer())).toBe('MZ download me');
+  });
+
+  it('lets only admins list SUSpector versions and roll back', async () => {
+    const admin = await addUser('admin');
+    const editor = await addUser('editor');
+    const older = nextVersion();
+    const newer = nextVersion();
+    await publish(older);
+    await publish(newer);
+
+    expect((await webRequest(editor, 'GET', '/suspector-releases')).status).toBe(403);
+    const list = await webRequest(admin, 'GET', '/suspector-releases');
+    expect(list.status).toBe(200);
+    const versions = list.body.releases.map((release: any) => release.version);
+    expect(versions).toContain(older);
+    expect(list.body.releases.find((release: any) => release.version === newer).isCurrent).toBe(true);
+
+    expect((await webRequest(editor, 'POST', `/suspector-releases/${older}/make-current`)).status).toBe(403);
+    const rolledBack = await webRequest(admin, 'POST', `/suspector-releases/${older}/make-current`);
+    expect(rolledBack.status).toBe(200);
+    expect(rolledBack.body.current.version).toBe(older);
+    const latest = await exports.default.fetch(new Request('https://comp-info.test/api/suspector/latest'));
+    expect(((await latest.json()) as any).version).toBe(older);
+    expect((await webRequest(admin, 'POST', '/suspector-releases/1999.01.01.1/make-current')).status).toBe(404);
   });
 });

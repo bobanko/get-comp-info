@@ -6,16 +6,20 @@ export async function renderReleases(context) {
   const { main } = context;
   replace(main, h('p', { class: 'muted' }, 'Загрузка версий…'));
   let releases;
+  let suspector;
   try {
-    releases = (await api('/releases')).releases;
+    [releases, suspector] = await Promise.all([api('/releases'), api('/suspector-releases')]);
+    releases = releases.releases;
+    suspector = suspector.releases;
   } catch (error) {
-    replace(main, h('h1', {}, 'Версии программы'), errorBox(error, () => renderReleases(context)));
+    replace(main, h('h1', {}, 'Версии программ'), errorBox(error, () => renderReleases(context)));
     return;
   }
 
   replace(
     main,
-    h('h1', {}, 'Версии программы'),
+    h('h1', {}, 'Версии программ'),
+    h('h2', { class: 'section-title first' }, 'Comp Info'),
     h(
       'p',
       { class: 'lead' },
@@ -23,11 +27,46 @@ export async function renderReleases(context) {
     ),
     releases.length === 0
       ? h('section', { class: 'panel' }, h('p', { class: 'empty' }, 'Версий пока нет. Выпустите первую: tools/update-version.BAT, коммит, тег vВЕРСИЯ и push.'))
-      : h('section', { class: 'panel' }, releasesTable(context, releases)),
+      : h('section', { class: 'panel' }, releasesTable(context, releases, COMP_INFO)),
+    h('h2', { class: 'section-title' }, 'SUSpector'),
+    h(
+      'p',
+      { class: 'lead' },
+      'Отдельная программа для пользователей: публикуется тем же тегом, но своим архивом, и скачивается без входа и ключа. Ссылка для пользователей: ',
+      h('a', { href: SUSPECTOR_PAGE, target: '_blank', rel: 'noopener' }, location.origin + SUSPECTOR_PAGE),
+      h('button', {
+        class: 'button small copy-link',
+        onclick: async () => {
+          try {
+            await navigator.clipboard.writeText(location.origin + SUSPECTOR_PAGE);
+            toast('Ссылка скопирована');
+          } catch {
+            toast('Не удалось скопировать ссылку', 'error');
+          }
+        },
+      }, 'Копировать'),
+    ),
+    suspector.length === 0
+      ? h('section', { class: 'panel' }, h('p', { class: 'empty' }, 'Версий SUSpector пока нет: они появятся со следующим тегом vВЕРСИЯ.'))
+      : h('section', { class: 'panel' }, releasesTable(context, suspector, SUSPECTOR)),
   );
 }
 
-function releasesTable(context, releases) {
+const SUSPECTOR_PAGE = '/suspector/';
+
+const COMP_INFO = {
+  path: '/releases',
+  confirm: (version) => `Сделать текущей версию ${version}? Консоль предложит установить её при следующем обновлении.`,
+  done: (version) => `Текущая версия: ${version}`,
+};
+
+const SUSPECTOR = {
+  path: '/suspector-releases',
+  confirm: (version) => `Сделать текущей версию SUSpector ${version}? Её будут скачивать со страницы, и кнопка «Обновление» в SUSpector предложит её установить.`,
+  done: (version) => `Текущая версия SUSpector: ${version}`,
+};
+
+function releasesTable(context, releases, kind) {
   return h(
     'div',
     { class: 'table-wrap' },
@@ -72,10 +111,10 @@ function releasesTable(context, releases) {
                   {
                     class: 'button small',
                     onclick: async () => {
-                      if (!confirm(`Сделать текущей версию ${release.version}? Консоль предложит установить её при следующем обновлении.`)) return;
+                      if (!confirm(kind.confirm(release.version))) return;
                       try {
-                        await api(`/releases/${encodeURIComponent(release.version)}/make-current`, { method: 'POST' });
-                        toast(`Текущая версия: ${release.version}`);
+                        await api(`${kind.path}/${encodeURIComponent(release.version)}/make-current`, { method: 'POST' });
+                        toast(kind.done(release.version));
                         await renderReleases(context);
                       } catch (error) {
                         toast(error.message, 'error');

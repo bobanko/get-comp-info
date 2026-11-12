@@ -153,8 +153,10 @@ export async function getReleaseFor(db: D1Database, version: string | null) {
   return toRelease(fallback ?? current);
 }
 
-export async function listReleases(db: D1Database) {
-  const { results } = await db.prepare(`SELECT ${RELEASE_COLUMNS} FROM program_releases ORDER BY published_at DESC`).all<ReleaseRow>();
+type ReleaseTable = 'program_releases' | 'suspector_releases';
+
+export async function listReleases(db: D1Database, table: ReleaseTable = 'program_releases') {
+  const { results } = await db.prepare(`SELECT ${RELEASE_COLUMNS} FROM ${table} ORDER BY published_at DESC`).all<ReleaseRow>();
   return results.map(toRelease);
 }
 
@@ -168,12 +170,12 @@ export async function getReleasePackage(db: D1Database, version: string): Promis
   return { bytes: new Uint8Array(row.package), sha256: row.sha256 };
 }
 
-export async function makeCurrent(db: D1Database, version: string): Promise<boolean> {
-  const exists = await db.prepare('SELECT version FROM program_releases WHERE version = ?').bind(version).first();
+export async function makeCurrent(db: D1Database, version: string, table: ReleaseTable = 'program_releases'): Promise<boolean> {
+  const exists = await db.prepare(`SELECT version FROM ${table} WHERE version = ?`).bind(version).first();
   if (!exists) return false;
   await db.batch([
-    db.prepare('UPDATE program_releases SET is_current = 0 WHERE is_current = 1'),
-    db.prepare('UPDATE program_releases SET is_current = 1 WHERE version = ?').bind(version),
+    db.prepare(`UPDATE ${table} SET is_current = 0 WHERE is_current = 1`),
+    db.prepare(`UPDATE ${table} SET is_current = 1 WHERE version = ?`).bind(version),
   ]);
   return true;
 }
@@ -292,6 +294,24 @@ suspectorApi.get('/latest', async (c) => {
   const release = await getCurrentSuspectorRelease(c.env.DB);
   if (!release) fail(404, 'no_release', 'SUSpector ещё не опубликован.');
   return c.json(release);
+});
+
+// The program itself for the public download page: SUSpector.exe of the current release, unpacked.
+suspectorApi.get('/download', async (c) => {
+  const release = await getCurrentSuspectorRelease(c.env.DB);
+  if (!release) fail(404, 'no_release', 'SUSpector ещё не опубликован.');
+  const found = await getSuspectorPackage(c.env.DB, release.version);
+  const exe = found && (await readZip(found.bytes)).find((entry) => isSuspectorFile(entry.name));
+  if (!exe) fail(500, 'invalid_package', 'В архиве SUSpector нет программы.');
+  return new Response(exe.data, {
+    headers: {
+      'Content-Type': 'application/vnd.microsoft.portable-executable',
+      'Content-Length': String(exe.data.byteLength),
+      'Content-Disposition': 'attachment; filename="SUSpector.exe"',
+      'Cache-Control': 'no-store',
+      'X-SUSpector-Version': release.version,
+    },
+  });
 });
 
 suspectorApi.get('/:version/package', async (c) => {

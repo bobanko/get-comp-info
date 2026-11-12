@@ -17,7 +17,7 @@ const PAGES = [
   { hash: '#/keys', icon: '🔑', label: 'Мои ключи', role: 'harvester' },
   { hash: '#/users', icon: '👥', label: 'Пользователи', role: 'admin' },
   { hash: '#/network', icon: '🌐', label: 'Сеть', role: 'admin' },
-  { hash: '#/releases', icon: '📦', label: 'Версии программы', role: 'admin' },
+  { hash: '#/releases', icon: '📦', label: 'Версии программ', role: 'admin' },
 ];
 
 let me = null;

@@ -11,7 +11,7 @@ import {
   validateDeviceId,
 } from '../devices';
 import { fail, isPlainObject, nowIso, readJsonObject, requireRole } from '../http';
-import { getCurrentRelease, listReleases, makeCurrent } from '../releases';
+import { getCurrentRelease, getCurrentSuspectorRelease, listReleases, makeCurrent } from '../releases';
 import { getSetting, getSettingHistory, NETWORK_KEY, putSetting, validateNetworkSettings, type NetworkSettings } from '../settings';
 import { hasRole, isRole, toUser, type AppEnv, type UserRow } from '../types';
 import { writeResponse } from './console';
@@ -297,6 +297,17 @@ webApi.post('/releases/:version/make-current', async (c) => {
   requireRole(c, 'admin');
   if (!(await makeCurrent(c.env.DB, c.req.param('version')))) fail(404, 'not_found', 'Такой версии программы нет.');
   return c.json({ current: await getCurrentRelease(c.env.DB) });
+});
+
+webApi.get('/suspector-releases', async (c) => {
+  requireRole(c, 'admin');
+  return c.json({ releases: await listReleases(c.env.DB, 'suspector_releases') });
+});
+
+webApi.post('/suspector-releases/:version/make-current', async (c) => {
+  requireRole(c, 'admin');
+  if (!(await makeCurrent(c.env.DB, c.req.param('version'), 'suspector_releases'))) fail(404, 'not_found', 'Такой версии SUSpector нет.');
+  return c.json({ current: await getCurrentSuspectorRelease(c.env.DB) });
 });
 
 function validateName(value: unknown): string {
