@@ -286,6 +286,9 @@ namespace CompInfo
             List<SecurityCheck> plan = SecurityAudit.Plan();
             Check(plan.Count == 9 && plan[0].Key == "hostname" && plan[6].Key == "administrators" && plan[7].Key == "passwords" && plan[8].Key == "documents",
                 "fast security checks precede the document scan");
+            List<SecurityCheck> noDocuments = SecurityAudit.Plan(false);
+            Check(noDocuments.Count == 9 && noDocuments[8].Key == "documents" && noDocuments[8].Summary.StartsWith("Пропущено") &&
+                noDocuments[7].Summary == plan[7].Summary, "document scan can be left out and is shown as skipped");
             Check(SecurityAudit.AdministratorLevel(1) == SecurityLevel.Good && SecurityAudit.AdministratorLevel(2) == SecurityLevel.Good &&
                 SecurityAudit.AdministratorLevel(3) == SecurityLevel.Warning && SecurityAudit.AdministratorLevel(4) == SecurityLevel.Warning &&
                 SecurityAudit.AdministratorLevel(5) == SecurityLevel.Bad, "administrator account thresholds");

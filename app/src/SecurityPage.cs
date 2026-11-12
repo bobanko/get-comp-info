@@ -13,6 +13,7 @@ namespace CompInfo
     {
         readonly Button run;
         readonly Button disableOneDrive;
+        readonly CheckBox scanDocuments = new CheckBox();
         readonly ProgressBar progress = new ProgressBar();
         readonly DataGridView grid;
         readonly DataGridView details;
@@ -40,8 +41,15 @@ namespace CompInfo
             disableOneDrive = Ui.Secondary(L.T("Отключить OneDrive"), Glyph.Power, Font);
             disableOneDrive.Visible = false;
             disableOneDrive.Click += delegate { DisableOneDrive(); };
+            // The slow full disk scan can be left out of a run; the step is then shown as skipped.
+            scanDocuments.Text = L.T("Сканировать документы");
+            scanDocuments.Checked = true;
+            scanDocuments.AutoSize = true;
+            scanDocuments.ForeColor = Theme.Text;
+            scanDocuments.Margin = new Padding(em * 2 / 3, Math.Max(0, (run.Height - scanDocuments.PreferredSize.Height) / 2), 0, 0);
             FlowLayoutPanel actions = Ui.Row();
             actions.Controls.Add(run);
+            actions.Controls.Add(scanDocuments);
             actions.Controls.Add(disableOneDrive);
             actions.Anchor = AnchorStyles.Left;
 
@@ -175,13 +183,16 @@ namespace CompInfo
             if (running) return;
             running = true;
             run.Enabled = false;
+            scanDocuments.Enabled = false;
+            bool documents = scanDocuments.Checked;
             disableOneDrive.Visible = false;
             grid.Rows.Clear();
             details.Rows.Clear();
-            List<SecurityCheck> plan = SecurityAudit.Plan();
+            List<SecurityCheck> plan = SecurityAudit.Plan(documents);
             foreach (SecurityCheck check in plan)
             {
-                int index = grid.Rows.Add(waitingIcon, check.Title, check.Summary);
+                bool skipped = !documents && check.Key == "documents";
+                int index = grid.Rows.Add(skipped ? icons[SecurityLevel.Info] : waitingIcon, check.Title, check.Summary);
                 DataGridViewRow row = grid.Rows[index];
                 row.Tag = check;
                 row.Cells[2].Style.ForeColor = Theme.Muted;
@@ -264,7 +275,7 @@ namespace CompInfo
                             Theme.Muted);
                     });
                 };
-                List<SecurityCheck> checks = await Task.Run(delegate { return SecurityAudit.Run(started, completed, detailedProgress); });
+                List<SecurityCheck> checks = await Task.Run(delegate { return SecurityAudit.Run(started, completed, detailedProgress, documents); });
                 if (IsDisposed) return;
                 int bad = 0, warnings = 0;
                 foreach (SecurityCheck check in checks)
@@ -285,7 +296,7 @@ namespace CompInfo
             finally
             {
                 running = false;
-                if (!IsDisposed) { run.Enabled = true; UpdateActions(); }
+                if (!IsDisposed) { run.Enabled = true; scanDocuments.Enabled = true; UpdateActions(); }
             }
         }
 

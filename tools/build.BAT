@@ -40,12 +40,14 @@ set "UI=app\src\Theme.cs app\src\Ui.cs app\src\MainForm.cs app\src\CollectPage.c
 set "SUSPECTOR_CORE=obj\SuspectorVersion.cs app\src\Json.cs app\src\Store.cs app\src\Identity.cs app\src\Machine.cs app\src\Network.cs app\src\Shell.cs app\src\SystemChanges.cs app\src\Security.cs app\src\SuspectorUpdate.cs app\src\Lang.cs app\src\Strings.cs"
 set "SUSPECTOR_UI=app\src\Theme.cs app\src\Ui.cs app\src\FileChips.cs app\src\SecurityPage.cs app\src\SuspectorUpdateDialog.cs app\src\Suspector.cs"
 
-rem A running comp-info.exe cannot be overwritten, but Windows lets it be renamed: it keeps running from obj\.
-del /q obj\comp-info.previous.exe >nul 2>&1
-if exist comp-info.exe move /y comp-info.exe obj\comp-info.previous.exe >nul 2>&1
-if exist comp-info.exe (
-  echo comp-info.exe is busy. Close the program and run the build again.
-  exit /b 1
+rem A running exe cannot be overwritten, but Windows lets it be renamed: it keeps running from obj\.
+for %%p in (comp-info SUSpector) do (
+  del /q obj\%%p.previous.exe >nul 2>&1
+  if exist %%p.exe move /y %%p.exe obj\%%p.previous.exe >nul 2>&1
+  if exist %%p.exe (
+    echo %%p.exe is busy. Close the program and run the build again.
+    exit /b 1
+  )
 )
 
 "%CSC%" /nologo /optimize+ /codepage:65001 /target:winexe /out:comp-info.exe /win32manifest:app\app.manifest /win32icon:app\app.ico /resource:app\brand.png,CompInfo.brand.png /resource:app\face.png,CompInfo.face.png /resource:app\face-ru.png,CompInfo.face-ru.png ^

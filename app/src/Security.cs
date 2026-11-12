@@ -115,10 +115,24 @@ namespace CompInfo
 
         public static List<SecurityCheck> Plan()
         {
+            return Plan(true);
+        }
+
+        // Without scanDocuments the document step stays in the table, marked as skipped.
+        public static List<SecurityCheck> Plan(bool scanDocuments)
+        {
             List<SecurityCheck> plan = new List<SecurityCheck>();
             foreach (AuditStep step in Steps())
-                plan.Add(new SecurityCheck(step.Key, step.Title, SecurityLevel.Info, L.T("Ожидает проверки"), ""));
+                plan.Add(!scanDocuments && step.Key == "documents"
+                    ? Skipped(step)
+                    : new SecurityCheck(step.Key, step.Title, SecurityLevel.Info, L.T("Ожидает проверки"), ""));
             return plan;
+        }
+
+        static SecurityCheck Skipped(AuditStep step)
+        {
+            return new SecurityCheck(step.Key, step.Title, SecurityLevel.Info, L.T("Пропущено: сканирование документов выключено"),
+                L.T("Чтобы проверить документы, отметьте «Сканировать документы» и запустите проверку снова."));
         }
 
         public static List<SecurityCheck> Run(Action<string> progress)
@@ -133,9 +147,21 @@ namespace CompInfo
 
         public static List<SecurityCheck> Run(Action<SecurityCheck> started, Action<SecurityCheck> completed, Action<SecurityProgress> detailedProgress)
         {
+            return Run(started, completed, detailedProgress, true);
+        }
+
+        public static List<SecurityCheck> Run(Action<SecurityCheck> started, Action<SecurityCheck> completed, Action<SecurityProgress> detailedProgress, bool scanDocuments)
+        {
             List<SecurityCheck> result = new List<SecurityCheck>();
             foreach (AuditStep step in Steps())
             {
+                if (!scanDocuments && step.Key == "documents")
+                {
+                    SecurityCheck skipped = Skipped(step);
+                    result.Add(skipped);
+                    if (completed != null) completed(skipped);
+                    continue;
+                }
                 SecurityCheck pending = new SecurityCheck(step.Key, step.Title, SecurityLevel.Info, L.T("Проверяется…"), "");
                 if (started != null) started(pending);
                 SecurityCheck check = Read(step, detailedProgress);
