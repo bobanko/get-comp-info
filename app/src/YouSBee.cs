@@ -11,10 +11,11 @@ namespace CompInfo
 
         public YouSBeeForm()
             : base("youSBee",
-                L.T("Серийные номера подключённых флешек и USB-дисков. Список обновляется сам, когда накопитель подключают или отключают."),
+                L.T("Серийные номера флешек и USB-дисков."),
                 new UsbPage(), AboutDialog)
         {
-            SizeInEm(46, 26, 34, 18);
+            // A small utility: the table has only a few short columns.
+            SizeInEm(33, 21, 30, 16);
         }
 
         static StandaloneAboutDialog AboutDialog()

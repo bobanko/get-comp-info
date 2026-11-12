@@ -17,8 +17,9 @@ youSBee.exe --theme light --language uk --screenshot yousbee.png 1500
 ```
 
 Иконка — `app\yousbee.ico`, картинка «О программе» — `app\yousbee.png`; обе делает `tools\make-icon.BAT`
-из `app\yousbee-source.png`. Сейчас это временная картинка (жёлтая плашка с флешкой и полосками), нарисованная
-программно; чтобы поменять — заменить `app\yousbee-source.png` и запустить `tools\make-icon.BAT`, затем `tools\build.BAT`.
+из `app\yousbee-source.png` (пчела-флешка на фиолетовой плашке; чёрный фон вокруг вырезается).
+Чтобы поменять — заменить `app\yousbee-source.png`, запустить `tools\make-icon.BAT`, затем `tools\build.BAT yousbee`
+и скопировать `app\yousbee.png` в `chagear-site/public/img/`.
 
 ## Распространение
 

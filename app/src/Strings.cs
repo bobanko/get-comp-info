@@ -587,6 +587,7 @@ namespace CompInfo
             "Удалено файлов: {0}, не удалось удалить: {1}.", "Видалено файлів: {0}, не вдалося видалити: {1}.", "Files deleted: {0}, could not delete: {1}.",
             "Удалить (Delete)", "Видалити (Delete)", "Delete (Delete)",
             "Язык и тема", "Мова й тема", "Language and theme",
+            "Серийные номера флешек и USB-дисков.", "Серійні номери флешок і USB-дисків.", "Serial numbers of flash drives and USB disks.",
             "Показывает серийные номера флешек и USB-дисков, чтобы их было удобно переписать или вставить в заявку.", "Показує серійні номери флешок і USB-дисків, щоб їх було зручно переписати або вставити в заявку.", "Shows the serial numbers of flash drives and USB disks so they are easy to write down or paste into a request.",
             "Как пользоваться", "Як користуватися", "How to use",
             "Подключите флешку — она сразу появится в списке. Кнопка «Копировать», двойной щелчок или Ctrl+C копирует серийный номер.", "Підключіть флешку — вона одразу з’явиться в списку. Кнопка «Копіювати», подвійне клацання або Ctrl+C копіює серійний номер.", "Connect a flash drive and it appears in the list at once. The «Copy» button, a double click or Ctrl+C copies the serial number.",
