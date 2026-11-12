@@ -50,15 +50,15 @@ for %%p in (comp-info SUSpector) do (
   )
 )
 
-"%CSC%" /nologo /optimize+ /codepage:65001 /target:winexe /out:comp-info.exe /win32manifest:app\app.manifest /win32icon:app\app.ico /resource:app\brand.png,CompInfo.brand.png /resource:app\face.png,CompInfo.face.png /resource:app\face-ru.png,CompInfo.face-ru.png ^
+"%CSC%" /nologo /optimize+ /codepage:65001 /target:winexe /out:comp-info.exe /win32manifest:app\app.manifest /win32icon:app\app.ico /resource:app\trigger-words.txt,CompInfo.trigger-words.txt /resource:app\brand.png,CompInfo.brand.png /resource:app\face.png,CompInfo.face.png /resource:app\face-ru.png,CompInfo.face-ru.png ^
   %REFS% /r:System.Windows.Forms.dll /r:System.Drawing.dll %CORE% %UI%
 if errorlevel 1 exit /b 1
 
-"%CSC%" /nologo /optimize+ /codepage:65001 /target:winexe /main:CompInfo.SuspectorProgram /out:SUSpector.exe /win32manifest:app\app.manifest /win32icon:app\suspector.ico /resource:app\suspector.png,CompInfo.suspector.png ^
+"%CSC%" /nologo /optimize+ /codepage:65001 /target:winexe /main:CompInfo.SuspectorProgram /out:SUSpector.exe /win32manifest:app\app.manifest /win32icon:app\suspector.ico /resource:app\suspector.png,CompInfo.suspector.png /resource:app\trigger-words.txt,CompInfo.trigger-words.txt ^
   %REFS% /r:System.Windows.Forms.dll /r:System.Drawing.dll %SUSPECTOR_CORE% %SUSPECTOR_UI%
 if errorlevel 1 exit /b 1
 
-"%CSC%" /nologo /optimize+ /codepage:65001 /target:exe /out:obj\tests.exe %REFS% %CORE% app\src\SuspectorUpdate.cs app\tests\Tests.cs app\tests\FakeCloud.cs
+"%CSC%" /nologo /optimize+ /codepage:65001 /target:exe /out:obj\tests.exe /resource:app\trigger-words.txt,CompInfo.trigger-words.txt %REFS% %CORE% app\src\SuspectorUpdate.cs app\tests\Tests.cs app\tests\FakeCloud.cs
 if errorlevel 1 exit /b 1
 obj\tests.exe app\tests
 if errorlevel 1 exit /b 1

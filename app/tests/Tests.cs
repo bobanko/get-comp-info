@@ -284,6 +284,10 @@ namespace CompInfo
 
         static void DocumentDeletion()
         {
+            string[] parsed = SecurityAudit.ParseKeywords("# comment\r\nДСК\r\n\r\n  таємно  \nдск\n");
+            Check(parsed.Length == 2 && parsed[0] == "ДСК" && parsed[1] == "таємно", "trigger words: comments, blanks and repeats are skipped");
+            string[] built = SecurityAudit.LoadKeywords();
+            Check(Array.IndexOf(built, "ТФД") >= 0 && Array.IndexOf(built, "ДСК-ЕП") >= 0, "trigger-words.txt is built into the program");
             List<string> tags = SecurityAudit.LocationTags(@"C:\Users\me\Documents\SupraWeed\out\ДСК отчёт.docx", false);
             Check(tags.Count == 2 && tags[0] == "#SupraWeed" && tags[1] == "#документы", "files in a SupraWeed folder get their own tag first");
             Check(!SecurityAudit.LocationTags(@"C:\Users\me\Downloads\supraweed ДСК.docx", false).Contains("#SupraWeed"), "the file name alone is no SupraWeed folder");

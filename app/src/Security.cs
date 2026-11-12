@@ -60,11 +60,37 @@ namespace CompInfo
     public static class SecurityAudit
     {
         static readonly string[] UnwantedPrograms = { "WinRAR" };
-        static readonly string[] DocumentKeywords =
+        // Trigger words of the document check: app\trigger-words.txt, built into the program by tools\build.BAT.
+        static string[] keywords;
+        static string[] DocumentKeywords { get { return keywords ?? (keywords = LoadKeywords()); } }
+
+        internal static string[] LoadKeywords()
         {
-            "ТФД", "телефонний довідник", "телефонный справочник", "відомість", "ведомость", "вахтовка", "доповідь", "доклад",
-            "для службового користування", "мосі", "дск-еп", "дск", "таємно", "особливої важливості"
-        };
+            using (Stream stream = typeof(SecurityAudit).Assembly.GetManifestResourceStream("CompInfo.trigger-words.txt"))
+            {
+                if (stream == null) throw new InvalidOperationException(L.T("В программу не встроен список слов-триггеров."));
+                using (StreamReader reader = new StreamReader(stream, Encoding.UTF8, true))
+                {
+                    string[] words = ParseKeywords(reader.ReadToEnd());
+                    if (words.Length == 0) throw new InvalidOperationException(L.T("Список слов-триггеров пуст."));
+                    return words;
+                }
+            }
+        }
+
+        // One word or phrase per line; empty lines and # comments are skipped, repeats (any case) count once.
+        internal static string[] ParseKeywords(string text)
+        {
+            List<string> words = new List<string>();
+            HashSet<string> seen = new HashSet<string>(StringComparer.CurrentCultureIgnoreCase);
+            foreach (string raw in (text ?? "").Split(new[] { "\r\n", "\n" }, StringSplitOptions.None))
+            {
+                string word = raw.Trim();
+                if (word.Length == 0 || word.StartsWith("#", StringComparison.Ordinal) || !seen.Add(word)) continue;
+                words.Add(word);
+            }
+            return words.ToArray();
+        }
         static readonly HashSet<string> OfficeExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             ".doc", ".docx", ".docm", ".dot", ".dotx", ".dotm",
@@ -702,7 +728,7 @@ namespace CompInfo
         static string MatchToolTip(List<KeywordHit> hits, string deletedAt)
         {
             List<string> lines = new List<string>();
-            foreach (KeywordHit hit in hits) lines.Add(DisplayKeyword(hit.Keyword) + " — " + hit.Count);
+            foreach (KeywordHit hit in hits) lines.Add(hit.Keyword + " — " + hit.Count);
             if (!string.IsNullOrEmpty(deletedAt)) lines.Add(L.T("Удалён: ") + deletedAt);
             return string.Join("\r\n", lines.ToArray());
         }
@@ -744,14 +770,6 @@ namespace CompInfo
         static bool ContainsPath(string path, string folder)
         {
             return path.IndexOf("\\" + folder + "\\", StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
-        static string DisplayKeyword(string keyword)
-        {
-            if (string.Equals(keyword, "дск", StringComparison.OrdinalIgnoreCase)) return "ДСК";
-            if (string.Equals(keyword, "дск-еп", StringComparison.OrdinalIgnoreCase)) return "ДСК-ЕП";
-            if (string.Equals(keyword, "мосі", StringComparison.OrdinalIgnoreCase)) return "МОСІ";
-            return keyword;
         }
 
         static string DocumentType(string path)

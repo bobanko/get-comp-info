@@ -78,6 +78,8 @@ namespace CompInfo
     {
         readonly SecurityPage page = new SecurityPage();
         public bool Reopen;
+        // Language or theme changed in «О программе»: the window is built again and opens it once more.
+        static bool reopenAbout;
 
         public SuspectorForm()
         {
@@ -116,57 +118,28 @@ namespace CompInfo
             content.Controls.Add(title);
             Controls.Add(content);
 
-            string[] themes = { "light", "system", "dark" };
-            Segmented theme = new Segmented(new[] { Glyph.Sun, Glyph.Theme, Glyph.Moon }, true,
-                new[] { L.T("Светлая тема"), L.T("Как в Windows"), L.T("Тёмная тема") },
-                Array.IndexOf(themes, Theme.Choice) < 0 ? 1 : Array.IndexOf(themes, Theme.Choice));
-            theme.Width = em * 11;
-            theme.Height = em * 3 / 2;
-            theme.Anchor = AnchorStyles.Left;
-            theme.Changed += delegate (int index)
-            {
-                Theme.Choice = themes[index];
-                SuspectorSettings.Set("theme", themes[index]);
-                Rebuild();
-            };
-            Segmented language = new Segmented(new[] { "УКР", "ENG", "РУС" }, false,
-                new[] { "Українська", "English", "Русский" }, Array.IndexOf(L.Codes, L.Code));
-            language.Width = em * 11;
-            language.Height = em * 3 / 2;
-            language.Anchor = AnchorStyles.Left;
-            language.Changed += delegate (int index)
-            {
-                L.Choice = L.Codes[index];
-                SuspectorSettings.Set("language", L.Codes[index]);
-                Rebuild();
-            };
             Button about = Ui.Secondary(L.T("О программе"), Glyph.Info, Font);
-            about.Click += delegate { using (SuspectorAboutDialog dialog = new SuspectorAboutDialog()) dialog.ShowDialog(this); };
+            about.Click += delegate { ShowAbout(); };
             Button update = Ui.Secondary(L.T("Обновление"), Glyph.Update, Font);
             update.Click += delegate { using (SuspectorUpdateDialog dialog = new SuspectorUpdateDialog()) dialog.ShowDialog(this); };
-            FlowLayoutPanel footerActions = Ui.Row();
-            footerActions.Anchor = AnchorStyles.Right;
-            footerActions.Controls.Add(update);
-            footerActions.Controls.Add(about);
+            update.Margin = new Padding(0, 0, em / 2, 0);
+            about.Margin = new Padding(0);
 
-            TableLayoutPanel footer = new TableLayoutPanel();
+            // The row is as tall as its buttons, so they are never cut off.
+            FlowLayoutPanel footer = Ui.Row();
             footer.Dock = DockStyle.Bottom;
-            footer.Height = em * 5 / 2;
-            footer.ColumnCount = 4;
-            footer.RowCount = 1;
-            footer.Padding = new Padding(em, em / 3, em, em / 2);
+            footer.FlowDirection = FlowDirection.RightToLeft;
+            footer.Padding = new Padding(em, em / 3, em, em * 2 / 3);
             footer.BackColor = Theme.Back;
-            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, em * 12));
-            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, em * 12));
-            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            footer.RowStyles.Add(new RowStyle(SizeType.Absolute, em * 3 / 2));
-            footer.Controls.Add(language, 0, 0);
-            footer.Controls.Add(theme, 1, 0);
-            footer.Controls.Add(footerActions, 3, 0);
+            footer.Controls.Add(about);
+            footer.Controls.Add(update);
             Controls.Add(footer);
 
-            Shown += delegate { page.Opened(); };
+            Shown += delegate
+            {
+                page.Opened();
+                if (reopenAbout) { reopenAbout = false; BeginInvoke((MethodInvoker)ShowAbout); }
+            };
             KeyDown += delegate (object sender, KeyEventArgs e)
             {
                 if (page.Shortcut(e.KeyData)) { e.Handled = true; e.SuppressKeyPress = true; }
@@ -175,6 +148,17 @@ namespace CompInfo
             {
                 if (!Reopen && !page.CanLeave()) e.Cancel = true;
             };
+        }
+
+        void ShowAbout()
+        {
+            bool rebuild;
+            using (SuspectorAboutDialog dialog = new SuspectorAboutDialog())
+            {
+                dialog.ShowDialog(this);
+                rebuild = dialog.Rebuild;
+            }
+            if (rebuild) { reopenAbout = true; Rebuild(); }
         }
 
         void Rebuild()
@@ -204,6 +188,9 @@ namespace CompInfo
             L.T("F5 — запустить проверку заново. Enter или двойной щелчок по найденному документу — открыть его."),
         }; } }
 
+        // Language or theme was changed: the main window must be built again.
+        public bool Rebuild;
+
         public SuspectorAboutDialog()
         {
             Ui.Dialog(this);
@@ -219,13 +206,47 @@ namespace CompInfo
             TableLayoutPanel t = About.Build(Font, em * 26, Ui.SuspectorImage, "SUSpector",
                 L.T("Помогает проверить и подготовить компьютер перед внешней проверкой безопасности."), null, Sections, out text);
             text.Controls.Add(About.SiteRow(Font, Glyph.Open, About.WebSite, null));
-            text.Controls.Add(About.FolderRow(Font, AppDomain.CurrentDomain.BaseDirectory));
+
+            // Language and theme: rarely changed, so they are here and not in the main window.
+            Label appearance = About.Line(L.T("Язык и тема"), new Font(Font, FontStyle.Bold), Theme.Text, em * 26, 0);
+            appearance.Margin = new Padding(appearance.Margin.Left, em / 2, appearance.Margin.Right, appearance.Margin.Bottom);
+            text.Controls.Add(appearance);
+            Segmented language = new Segmented(new[] { "УКР", "ENG", "РУС" }, false,
+                new[] { "Українська", "English", "Русский" }, Array.IndexOf(L.Codes, L.Code));
+            language.Size = new Size(em * 11, em * 3 / 2);
+            language.Margin = new Padding(0, em / 4, em, 0);
+            language.Changed += delegate (int index)
+            {
+                L.Choice = L.Codes[index];
+                SuspectorSettings.Set("language", L.Codes[index]);
+                Rebuild = true;
+                Close();
+            };
+            string[] themes = { "light", "system", "dark" };
+            Segmented theme = new Segmented(new[] { Glyph.Sun, Glyph.Theme, Glyph.Moon }, true,
+                new[] { L.T("Светлая тема"), L.T("Как в Windows"), L.T("Тёмная тема") },
+                Array.IndexOf(themes, Theme.Choice) < 0 ? 1 : Array.IndexOf(themes, Theme.Choice));
+            theme.Size = new Size(em * 11, em * 3 / 2);
+            theme.Margin = new Padding(0, em / 4, 0, 0);
+            theme.Changed += delegate (int index)
+            {
+                Theme.Choice = themes[index];
+                SuspectorSettings.Set("theme", themes[index]);
+                Rebuild = true;
+                Close();
+            };
+            FlowLayoutPanel choices = Ui.Row();
+            choices.Controls.Add(language);
+            choices.Controls.Add(theme);
+            text.Controls.Add(choices);
 
             Button close = Ui.Primary(L.T("Закрыть"), null, Font);
             close.Anchor = AnchorStyles.Right;
             close.Margin = new Padding(0, em, 0, 0);
             close.Click += delegate { Close(); };
             t.Controls.Add(close, 1, 1);
+            t.Location = new Point(em, em);
+            t.Margin = new Padding(0, 0, em, em);
             Controls.Add(t);
             AcceptButton = close;
             CancelButton = close;

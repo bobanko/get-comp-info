@@ -1,0 +1,18 @@
+# Trigger words of the «Поиск ДСК-файлов» check (SUSpector and the «Кибербезопасность» section of comp-info).
+# One word or phrase per line, as it should be shown in the report; case does not matter when searching.
+# Empty lines and lines starting with # are skipped.
+# tools\build.BAT builds this file into the programs: after a change rebuild and release a new version.
+ТФД
+телефонний довідник
+телефонный справочник
+відомість
+ведомость
+вахтовка
+доповідь
+доклад
+для службового користування
+МОСІ
+ДСК-ЕП
+ДСК
+таємно
+особливої важливості
