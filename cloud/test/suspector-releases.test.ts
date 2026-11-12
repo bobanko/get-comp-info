@@ -71,6 +71,10 @@ describe('standalone SUSpector releases', () => {
     expect(await sha256Hex(new Uint8Array(await packageResponse.arrayBuffer()))).toBe(await sha256Hex(published.bytes));
     expect(packageResponse.headers.get('X-Content-SHA256')).toBe(await sha256Hex(published.bytes));
     expect((await exports.default.fetch(new Request('https://comp-info.test/api/suspector/1999.1.1.1/package'))).status).toBe(404);
+    // The download page on chagear.top reads these answers, errors included.
+    expect(latest.headers.get('Access-Control-Allow-Origin')).toBe('https://chagear.top');
+    const missing = await exports.default.fetch(new Request('https://comp-info.test/api/suspector/1999.1.1.1/package'));
+    expect(missing.headers.get('Access-Control-Allow-Origin')).toBe('https://chagear.top');
   });
 
   it('downloads the current SUSpector.exe itself for the public page', async () => {

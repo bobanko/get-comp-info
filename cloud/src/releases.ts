@@ -1,5 +1,6 @@
 // Program releases: published by GitHub Actions, downloaded by the console, managed by admins.
 import { Hono } from 'hono';
+import { HTTPException } from 'hono/http-exception';
 import { createMiddleware } from 'hono/factory';
 import { createLocalJWKSet, createRemoteJWKSet, jwtVerify, type JSONWebKeySet, type JWTVerifyGetKey } from 'jose';
 import { sha256Hex } from './crypto';
@@ -289,6 +290,22 @@ export async function storeSuspectorRelease(db: D1Database, bytes: Uint8Array, t
 
 // Public download API: SUSpector contains no database access and ordinary users have no Comp Info key.
 export const suspectorApi = new Hono<AppEnv>();
+
+// The download page lives on the main site (chagear.top/suspector/) and reads the version from here,
+// so its origin may read these answers, errors included (404 while nothing is published).
+export const SUSPECTOR_PAGE_ORIGIN = 'https://chagear.top';
+
+suspectorApi.use('*', async (c, next) => {
+  try {
+    await next();
+  } catch (error) {
+    if (!(error instanceof HTTPException)) throw error;
+    c.res = error.getResponse();
+  }
+  c.res = new Response(c.res.body, c.res);
+  c.res.headers.set('Access-Control-Allow-Origin', SUSPECTOR_PAGE_ORIGIN);
+  c.res.headers.append('Vary', 'Origin');
+});
 
 suspectorApi.get('/latest', async (c) => {
   const release = await getCurrentSuspectorRelease(c.env.DB);

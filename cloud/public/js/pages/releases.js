@@ -33,12 +33,12 @@ export async function renderReleases(context) {
       'p',
       { class: 'lead' },
       'Отдельная программа для пользователей: публикуется тем же тегом, но своим архивом, и скачивается без входа и ключа. Ссылка для пользователей: ',
-      h('a', { href: SUSPECTOR_PAGE, target: '_blank', rel: 'noopener' }, location.origin + SUSPECTOR_PAGE),
+      h('a', { href: SUSPECTOR_PAGE, target: '_blank', rel: 'noopener' }, SUSPECTOR_PAGE),
       h('button', {
         class: 'button small copy-link',
         onclick: async () => {
           try {
-            await navigator.clipboard.writeText(location.origin + SUSPECTOR_PAGE);
+            await navigator.clipboard.writeText(SUSPECTOR_PAGE);
             toast('Ссылка скопирована');
           } catch {
             toast('Не удалось скопировать ссылку', 'error');
@@ -52,7 +52,7 @@ export async function renderReleases(context) {
   );
 }
 
-const SUSPECTOR_PAGE = '/suspector/';
+const SUSPECTOR_PAGE = 'https://chagear.top/suspector/';
 
 const COMP_INFO = {
   path: '/releases',

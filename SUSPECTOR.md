@@ -66,10 +66,10 @@ GitHub Actions публикует его независимо от внутре�
 
 ## Страница скачивания
 
-Пользователям даётся ссылка https://comp-info.chagear.top/suspector/ — отдельная публичная страница
-(`cloud/public/suspector/`) с описанием программы и кнопкой «Скачать SUSpector.exe».
+Пользователям даётся ссылка https://chagear.top/suspector/ — публичная страница основного сайта
+(проект `chagear-site`, папка `public/suspector/`) с описанием программы и кнопкой «Завантажити SUSpector.exe».
 Кнопка ведёт на `/api/suspector/download`: Worker распаковывает из текущего архива сам `SUSpector.exe`
-и отдаёт его как файл, версию страница берёт из `/api/suspector/latest`.
+и отдаёт его как файл, версию страница берёт из `/api/suspector/latest` (Worker разрешает chagear.top читать ответы `/api/suspector/*`).
 
 В веб-интерфейсе администратора раздел «Версии программ» показывает версии Comp Info и SUSpector отдельно;
 у SUSpector, как и у Comp Info, можно сделать текущей предыдущую версию — её будут скачивать со страницы
@@ -77,6 +77,6 @@ GitHub Actions публикует его независимо от внутре�
 
 ## Cloudflare Access
 
-Пути `/api/suspector/*` (метаданные, архив и exe), `/api/suspector-release` (публикация из GitHub Actions),
-`/suspector` и `/suspector/*` (страница скачивания) должны быть открыты без входа, как `/api/client/*` и `/api/release`;
-иначе Access отвечает перенаправлением на страницу входа.
+Пути `/api/suspector/*` (метаданные, архив и exe) и `/api/suspector-release` (публикация из GitHub Actions)
+должны быть открыты без входа, как `/api/client/*` и `/api/release`; иначе Access отвечает перенаправлением на страницу входа.
+Страница скачивания на основном домене, Access её не касается.
