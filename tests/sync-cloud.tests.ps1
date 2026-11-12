@@ -154,6 +154,10 @@ try {
     $left = '{"a":{"z":1,"b":2},"list":[1,2],"comment":"A"}' | ConvertFrom-Json
     $right = '{ "comment":"A", "list":[1,2], "a":{"b":2,"z":1} }' | ConvertFrom-Json
     Assert-True ((Get-RecordHash $left) -eq (Get-RecordHash $right)) 'Key order must not change the hash'
+    $answer = [pscustomobject]@{ Status = 401; Body = ('{"error":{"code":"invalid_key","message":"The key is wrong or revoked."}}' | ConvertFrom-Json) }
+    Assert-True ((Get-CloudErrorMessage $answer) -ceq 'Ключ неверный или отозван.') 'Known cloud errors are shown in Russian'
+    $answer = [pscustomobject]@{ Status = 400; Body = ('{"error":{"code":"invalid_something","message":"Some English text."}}' | ConvertFrom-Json) }
+    Assert-True ((Get-CloudErrorMessage $answer) -ceq 'Some English text.') 'Unknown cloud errors show the cloud message'
     Assert-True (@(Get-SyncDifferences ('{}' | ConvertFrom-Json) ('{"a":null}' | ConvertFrom-Json)).Count -eq 1) 'Missing and null differ'
     Assert-True ((Get-CloudRecordId ('{"computerId":"UUID-1"}' | ConvertFrom-Json) 'x.json') -ceq 'UUID-1') 'computerId is the id'
     Assert-True ((Get-CloudRecordId ('{"computerId":""}' | ConvertFrom-Json) 'SERIAL1.json') -ceq 'SERIAL1') 'Legacy id is the file name'

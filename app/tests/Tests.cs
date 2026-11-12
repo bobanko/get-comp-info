@@ -580,6 +580,13 @@ namespace CompInfo
 
         static void Synchronization()
         {
+            // The cloud answers in English; known error codes are shown in the program's language.
+            CloudClient.Response answer = new CloudClient.Response();
+            answer.Status = 401;
+            answer.Body = Json.Parse("{\"error\":{\"code\":\"invalid_key\",\"message\":\"The key is wrong or revoked.\"}}");
+            Check(answer.ErrorMessage == "Ключ неверный или отозван.", "known cloud errors are translated by code");
+            answer.Body = Json.Parse("{\"error\":{\"code\":\"invalid_something\",\"message\":\"Some English text.\"}}");
+            Check(answer.ErrorMessage == "Some English text.", "unknown cloud errors show the cloud message");
             string root = TempDir();
             using (FakeCloud cloud = new FakeCloud())
             {

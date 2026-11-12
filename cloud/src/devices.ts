@@ -59,7 +59,7 @@ export function toDevice(row: DeviceRow): Device {
 
 export function validateDeviceId(id: string): string {
   if (id.length === 0 || id.length > MAX_ID_LENGTH || /[\u0000-\u001f\u007f]/.test(id)) {
-    fail(400, 'invalid_id', 'Недопустимый идентификатор устройства.');
+    fail(400, 'invalid_id', 'Invalid device id.');
   }
   return id;
 }
@@ -67,7 +67,7 @@ export function validateDeviceId(id: string): string {
 // Checks incoming record data and removes deprecated fields.
 export function normalizeData(id: string, data: unknown): Record<string, unknown> {
   if (!isPlainObject(data)) {
-    fail(400, 'invalid_data', 'Запись устройства должна быть JSON-объектом.');
+    fail(400, 'invalid_data', 'The device record must be a JSON object.');
   }
   const result: Record<string, unknown> = { ...data };
   for (const field of DEPRECATED_FIELDS) {
@@ -75,10 +75,10 @@ export function normalizeData(id: string, data: unknown): Record<string, unknown
   }
   const computerId = result.computerId;
   if (typeof computerId === 'string' && computerId !== '' && computerId !== id) {
-    fail(400, 'id_mismatch', `computerId записи (${computerId}) не совпадает с идентификатором ${id}.`);
+    fail(400, 'id_mismatch', `The record computerId (${computerId}) does not match the id ${id}.`);
   }
   if (new TextEncoder().encode(JSON.stringify(result)).length > MAX_DATA_BYTES) {
-    fail(413, 'too_large', 'Запись устройства больше 64 КБ.');
+    fail(413, 'too_large', 'The device record is larger than 64 KB.');
   }
   return result;
 }
@@ -220,11 +220,11 @@ export async function patchDevice(
   user: User,
 ): Promise<WriteResult> {
   if ('computerId' in changes) {
-    fail(400, 'readonly_field', 'Поле computerId изменить нельзя.');
+    fail(400, 'readonly_field', 'The computerId field cannot be changed.');
   }
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const row = await getDeviceRow(db, id);
-    if (!row) fail(404, 'not_found', 'Устройство не найдено.');
+    if (!row) fail(404, 'not_found', 'Device not found.');
     const current = toDevice(row);
     if (current.deleted) return { status: 'deleted', current };
     if (baseRevision !== current.revision) return { status: 'conflict', current };
@@ -240,11 +240,11 @@ export async function patchDevice(
 export async function setDeleted(db: D1Database, id: string, deleted: boolean, user: User): Promise<Device> {
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const row = await getDeviceRow(db, id);
-    if (!row) fail(404, 'not_found', 'Устройство не найдено.');
+    if (!row) fail(404, 'not_found', 'Device not found.');
     const current = toDevice(row);
     if (current.deleted === deleted) return current;
     const device = await writeRevision(db, id, row, current.data, deleted ? 'delete' : 'restore', user, 'web');
     if (device) return device;
   }
-  fail(409, 'busy', 'Запись одновременно изменяется. Повторите попытку.');
+  fail(409, 'busy', 'The record is being changed at the same time. Try again.');
 }

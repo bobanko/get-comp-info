@@ -202,11 +202,33 @@ function Save-CloudDownload {
     finally { $response.Dispose() }
 }
 
+# The cloud answers errors in English; the console shows its own text by error code
+# and the cloud's message for codes it does not know.
+$script:CloudErrorTexts = @{
+    unauthorized = 'Нужен личный ключ доступа.'
+    invalid_key = 'Ключ неверный или отозван.'
+    user_disabled = 'Пользователь отключён.'
+    forbidden = 'Недостаточно прав: роль пользователя не даёт доступа к этому действию.'
+    invalid_id = 'Недопустимый идентификатор устройства.'
+    invalid_data = 'Запись устройства должна быть JSON-объектом.'
+    id_mismatch = 'computerId записи не совпадает с её идентификатором.'
+    too_large = 'Запись устройства больше 64 КБ.'
+    busy = 'Запись одновременно изменяется. Повторите попытку.'
+    conflict = 'Запись уже изменили в облаке.'
+    deleted = 'Запись удалена в облаке.'
+    no_release = 'В облаке ещё нет опубликованных версий программы.'
+    no_settings = 'Настройки сети в облаке ещё не заданы.'
+    not_found = 'Не найдено в облаке.'
+    internal = 'Внутренняя ошибка сервера.'
+}
+
 function Get-CloudErrorMessage {
     param($Response)
-    if ($Response.Body -and $Response.Body.error -and $Response.Body.error.message) {
-        return [string]$Response.Body.error.message
+    $cloudError = if ($Response.Body) { $Response.Body.error } else { $null }
+    if ($cloudError -and $cloudError.code -and $script:CloudErrorTexts.ContainsKey([string]$cloudError.code)) {
+        return $script:CloudErrorTexts[[string]$cloudError.code]
     }
+    if ($cloudError -and $cloudError.message) { return [string]$cloudError.message }
     return "Облако ответило кодом $($Response.Status)."
 }
 

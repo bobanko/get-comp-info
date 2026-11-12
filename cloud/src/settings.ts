@@ -44,88 +44,88 @@ const DOMAIN = /^(?=.{1,253}$)[a-z0-9]+(?:[.-][a-z0-9]+)*\.[a-z0-9]*[a-z][a-z0-9
 
 function octet(value: unknown, where: string): number {
   if (!Number.isInteger(value) || (value as number) < 0 || (value as number) > 255) {
-    fail(400, 'invalid_settings', `${where}: нужно целое число от 0 до 255.`);
+    fail(400, 'invalid_settings', `${where}: an integer from 0 to 255 is required.`);
   }
   return value as number;
 }
 
 function segmentList(value: unknown, where: string): number[] {
   if (!Array.isArray(value) || value.length === 0 || value.length > 16) {
-    fail(400, 'invalid_settings', `${where}: нужен список от 1 до 16 сегментов.`);
+    fail(400, 'invalid_settings', `${where}: a list of 1 to 16 segments is required.`);
   }
-  const segments = value.map((item, index) => octet(item, `${where}, сегмент ${index + 1}`));
-  if (new Set(segments).size !== segments.length) fail(400, 'invalid_settings', `${where}: сегменты повторяются.`);
+  const segments = value.map((item, index) => octet(item, `${where}, segment ${index + 1}`));
+  if (new Set(segments).size !== segments.length) fail(400, 'invalid_settings', `${where}: segments repeat.`);
   return segments;
 }
 
 // Checks the whole document and returns it with only the known fields.
 export function validateNetworkSettings(value: unknown): NetworkSettings {
-  if (!isPlainObject(value)) fail(400, 'invalid_settings', 'Настройки сети должны быть JSON-объектом.');
-  const firstOctet = octet(value.firstOctet, 'Первый октет');
-  const segments = segmentList(value.segments, 'Сегменты сети');
+  if (!isPlainObject(value)) fail(400, 'invalid_settings', 'Network settings must be a JSON object.');
+  const firstOctet = octet(value.firstOctet, 'First octet');
+  const segments = segmentList(value.segments, 'Network segments');
 
   let domainCheckHost: string | null = null;
   if (value.domainCheckHost !== null && value.domainCheckHost !== undefined && value.domainCheckHost !== '') {
     const host = typeof value.domainCheckHost === 'string' ? value.domainCheckHost.trim() : '';
-    if (!HOST.test(host) && !IPV4.test(host)) fail(400, 'invalid_settings', 'Адрес для проверки домена: нужно имя узла или IPv4-адрес.');
+    if (!HOST.test(host) && !IPV4.test(host)) fail(400, 'invalid_settings', 'Domain check address: a host name or IPv4 address is required.');
     domainCheckHost = host;
   }
 
   let domainName: string | null = null;
   if (value.domainName !== null && value.domainName !== undefined && value.domainName !== '') {
     const name = typeof value.domainName === 'string' ? value.domainName.trim().toLowerCase() : '';
-    if (!DOMAIN.test(name)) fail(400, 'invalid_settings', 'Домен: нужно имя вида corp.example (латиница, цифры, точки и дефисы).');
+    if (!DOMAIN.test(name)) fail(400, 'invalid_settings', 'Domain: a name like corp.example is required (Latin letters, digits, dots and hyphens).');
     domainName = name;
   }
 
   if (!Array.isArray(value.locations) || value.locations.length === 0 || value.locations.length > 50) {
-    fail(400, 'invalid_settings', 'Нужен список от 1 до 50 корпусов.');
+    fail(400, 'invalid_settings', 'A list of 1 to 50 locations is required.');
   }
   const names = new Set<string>();
   const locations = value.locations.map((raw: unknown, index: number): NetworkLocation => {
-    if (!isPlainObject(raw)) fail(400, 'invalid_settings', `Корпус ${index + 1}: нужен JSON-объект.`);
+    if (!isPlainObject(raw)) fail(400, 'invalid_settings', `Location ${index + 1}: a JSON object is required.`);
     const name = typeof raw.name === 'string' ? raw.name.trim() : '';
-    const where = `Корпус «${name || index + 1}»`;
-    if (name === '' || name.length > 60) fail(400, 'invalid_settings', `Корпус ${index + 1}: название обязательно, не длиннее 60 символов.`);
-    if (names.has(name.toLowerCase())) fail(400, 'invalid_settings', `${where}: такое название уже есть.`);
+    const where = `Location "${name || index + 1}"`;
+    if (name === '' || name.length > 60) fail(400, 'invalid_settings', `Location ${index + 1}: a name is required, up to 60 characters.`);
+    if (names.has(name.toLowerCase())) fail(400, 'invalid_settings', `${where}: this name is already used.`);
     names.add(name.toLowerCase());
 
     const prefixLength = raw.prefixLength;
     if (!Number.isInteger(prefixLength) || (prefixLength as number) < 24 || (prefixLength as number) > 30) {
-      fail(400, 'invalid_settings', `${where}: длина префикса должна быть от 24 до 30.`);
+      fail(400, 'invalid_settings', `${where}: the prefix length must be from 24 to 30.`);
     }
-    const thirdOctet = octet(raw.thirdOctet, `${where}, третий октет`);
-    const gatewayOctet = octet(raw.gatewayOctet, `${where}, шлюз`);
-    const firstHostOctet = octet(raw.firstHostOctet, `${where}, первый адрес`);
-    const lastHostOctet = octet(raw.lastHostOctet, `${where}, последний адрес`);
+    const thirdOctet = octet(raw.thirdOctet, `${where}, third octet`);
+    const gatewayOctet = octet(raw.gatewayOctet, `${where}, gateway`);
+    const firstHostOctet = octet(raw.firstHostOctet, `${where}, first address`);
+    const lastHostOctet = octet(raw.lastHostOctet, `${where}, last address`);
 
     // The host range must lie inside the gateway's subnet, without the network and broadcast addresses.
     const size = 2 ** (32 - (prefixLength as number));
     const network = gatewayOctet - (gatewayOctet % size);
     const broadcast = network + size - 1;
     if (gatewayOctet === network || gatewayOctet === broadcast) {
-      fail(400, 'invalid_settings', `${where}: шлюз не может быть адресом сети или широковещательным адресом (${network}–${broadcast}).`);
+      fail(400, 'invalid_settings', `${where}: the gateway cannot be the network or broadcast address (${network}–${broadcast}).`);
     }
-    if (firstHostOctet > lastHostOctet) fail(400, 'invalid_settings', `${where}: первый адрес больше последнего.`);
+    if (firstHostOctet > lastHostOctet) fail(400, 'invalid_settings', `${where}: the first address is greater than the last one.`);
     if (firstHostOctet <= network || lastHostOctet >= broadcast) {
-      fail(400, 'invalid_settings', `${where}: адреса должны быть внутри подсети шлюза, от ${network + 1} до ${broadcast - 1}.`);
+      fail(400, 'invalid_settings', `${where}: addresses must be inside the gateway subnet, from ${network + 1} to ${broadcast - 1}.`);
     }
     if (gatewayOctet >= firstHostOctet && gatewayOctet <= lastHostOctet) {
-      fail(400, 'invalid_settings', `${where}: шлюз не должен входить в диапазон адресов компьютеров.`);
+      fail(400, 'invalid_settings', `${where}: the gateway must not be in the computer address range.`);
     }
 
     if (!Array.isArray(raw.dnsServers) || raw.dnsServers.length === 0 || raw.dnsServers.length > 4) {
-      fail(400, 'invalid_settings', `${where}: нужно от 1 до 4 DNS-серверов.`);
+      fail(400, 'invalid_settings', `${where}: 1 to 4 DNS servers are required.`);
     }
     const dnsServers = raw.dnsServers.map((server: unknown) => {
       const text = typeof server === 'string' ? server.trim() : '';
-      if (!IPV4.test(text)) fail(400, 'invalid_settings', `${where}: DNS-сервер «${String(server)}» не является IPv4-адресом.`);
+      if (!IPV4.test(text)) fail(400, 'invalid_settings', `${where}: DNS server "${String(server)}" is not an IPv4 address.`);
       return text;
     });
 
     const location: NetworkLocation = { name, thirdOctet, prefixLength: prefixLength as number, gatewayOctet, firstHostOctet, lastHostOctet, dnsServers };
     if (raw.segments !== undefined && raw.segments !== null && !(Array.isArray(raw.segments) && raw.segments.length === 0)) {
-      location.segments = segmentList(raw.segments, `${where}, свои сегменты`);
+      location.segments = segmentList(raw.segments, `${where}, own segments`);
     }
     return location;
   });

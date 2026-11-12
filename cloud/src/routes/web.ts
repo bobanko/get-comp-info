@@ -38,7 +38,7 @@ async function visibleDevice(c: Context<AppEnv>, id: string) {
   const row = await getDeviceRow(c.env.DB, id);
   // Deleted devices are visible to admins only.
   if (!row || (row.deleted_at !== null && !hasRole(c.get('user'), 'admin'))) {
-    fail(404, 'not_found', 'Устройство не найдено.');
+    fail(404, 'not_found', 'Device not found.');
   }
   return toDevice(row);
 }
@@ -58,10 +58,10 @@ webApi.patch('/devices/:id', async (c) => {
   const id = validateDeviceId(c.req.param('id'));
   const body = await readJsonObject(c);
   if (!Number.isInteger(body.baseRevision) || (body.baseRevision as number) < 1) {
-    fail(400, 'invalid_revision', 'baseRevision должен быть целым числом от 1.');
+    fail(400, 'invalid_revision', 'baseRevision must be an integer from 1.');
   }
   if (!isPlainObject(body.changes)) {
-    fail(400, 'invalid_changes', 'changes должен быть JSON-объектом с изменёнными полями.');
+    fail(400, 'invalid_changes', 'changes must be a JSON object with the changed fields.');
   }
   return writeResponse(c, await patchDevice(c.env.DB, id, body.baseRevision as number, body.changes, c.get('user')));
 });
@@ -119,7 +119,7 @@ webApi.post('/keys', async (c) => {
   const body = await readJsonObject(c);
   const label = typeof body.label === 'string' ? body.label.trim() : '';
   if (label === '' || label.length > MAX_LABEL_LENGTH) {
-    fail(400, 'invalid_label', `Название ключа обязательно, не длиннее ${MAX_LABEL_LENGTH} символов.`);
+    fail(400, 'invalid_label', `A key name is required, up to ${MAX_LABEL_LENGTH} characters.`, { maxLength: MAX_LABEL_LENGTH });
   }
   const key = generateApiKey();
   const row: KeyRow = {
@@ -146,7 +146,7 @@ webApi.delete('/keys/:id', async (c) => {
     .bind(c.req.param('id'))
     .first<KeyRow>();
   if (!row || (row.user_email !== user.email && !hasRole(user, 'admin'))) {
-    fail(404, 'not_found', 'Ключ не найден.');
+    fail(404, 'not_found', 'Key not found.');
   }
   if (row.revoked_at === null) {
     row.revoked_at = nowIso();
@@ -170,15 +170,15 @@ webApi.post('/users', async (c) => {
   const body = await readJsonObject(c);
   const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
   if (!EMAIL_PATTERN.test(email)) {
-    fail(400, 'invalid_email', 'Укажите корректный адрес почты.');
+    fail(400, 'invalid_email', 'Enter a valid email address.');
   }
   const name = validateName(body.name);
   if (!isRole(body.role)) {
-    fail(400, 'invalid_role', 'Роль должна быть viewer, harvester, editor или admin.');
+    fail(400, 'invalid_role', 'The role must be viewer, harvester, editor or admin.');
   }
   const existing = await c.env.DB.prepare('SELECT email FROM users WHERE email = ?').bind(email).first();
   if (existing) {
-    fail(409, 'user_exists', 'Пользователь с такой почтой уже есть.');
+    fail(409, 'user_exists', 'A user with this email already exists.');
   }
   const row: UserRow = { email, name, role: body.role, active: 1, created_at: nowIso() };
   // Adding a user also approves their access request, if there was one.
@@ -201,22 +201,22 @@ webApi.patch('/users/:email', async (c) => {
   const body = await readJsonObject(c);
   const row = await c.env.DB.prepare('SELECT * FROM users WHERE email = ?').bind(email).first<UserRow>();
   if (!row) {
-    fail(404, 'not_found', 'Пользователь не найден.');
+    fail(404, 'not_found', 'User not found.');
   }
   if (body.name !== undefined) {
     row.name = validateName(body.name);
   }
   if (body.role !== undefined) {
-    if (!isRole(body.role)) fail(400, 'invalid_role', 'Роль должна быть viewer, harvester, editor или admin.');
+    if (!isRole(body.role)) fail(400, 'invalid_role', 'The role must be viewer, harvester, editor or admin.');
     row.role = body.role;
   }
   if (body.active !== undefined) {
-    if (typeof body.active !== 'boolean') fail(400, 'invalid_active', 'active должен быть true или false.');
+    if (typeof body.active !== 'boolean') fail(400, 'invalid_active', 'active must be true or false.');
     row.active = body.active ? 1 : 0;
   }
   // An admin cannot lock themselves out, so at least one active admin always remains.
   if (email === c.get('user').email && (row.role !== 'admin' || row.active !== 1)) {
-    fail(400, 'self_lockout', 'Нельзя снять с себя роль admin или отключить себя.');
+    fail(400, 'self_lockout', 'You cannot remove your own admin role or disable yourself.');
   }
   await c.env.DB.prepare('UPDATE users SET name = ?, role = ?, active = ? WHERE email = ?')
     .bind(row.name, row.role, row.active, email)
@@ -252,7 +252,7 @@ webApi.delete('/access-requests/:email', async (c) => {
   )
     .bind(nowIso(), c.get('user').email, email)
     .run();
-  if (result.meta.changes === 0) fail(404, 'not_found', 'Такого запроса на доступ нет.');
+  if (result.meta.changes === 0) fail(404, 'not_found', 'No such access request.');
   return c.json({ email, rejected: true });
 });
 
@@ -273,13 +273,13 @@ webApi.put('/settings/network', async (c) => {
   const body = await readJsonObject(c);
   const baseRevision = body.baseRevision ?? null;
   if (baseRevision !== null && !(Number.isInteger(baseRevision) && (baseRevision as number) >= 1)) {
-    fail(400, 'invalid_revision', 'baseRevision должен быть null или целым числом от 1.');
+    fail(400, 'invalid_revision', 'baseRevision must be null or an integer from 1.');
   }
   const value = validateNetworkSettings(body.value);
   const result = await putSetting(c.env.DB, NETWORK_KEY, baseRevision as number | null, value, c.get('user'));
   if (result.status === 'conflict') {
     return c.json(
-      { error: { code: 'conflict', message: 'Настройки сети уже изменили. Обновите страницу.' }, current: result.current },
+      { error: { code: 'conflict', message: 'The network settings were already changed. Reload the page.' }, current: result.current },
       409,
     );
   }
@@ -295,7 +295,7 @@ webApi.get('/releases', async (c) => {
 
 webApi.post('/releases/:version/make-current', async (c) => {
   requireRole(c, 'admin');
-  if (!(await makeCurrent(c.env.DB, c.req.param('version')))) fail(404, 'not_found', 'Такой версии программы нет.');
+  if (!(await makeCurrent(c.env.DB, c.req.param('version')))) fail(404, 'not_found', 'No such program version.');
   return c.json({ current: await getCurrentRelease(c.env.DB) });
 });
 
@@ -306,14 +306,14 @@ webApi.get('/suspector-releases', async (c) => {
 
 webApi.post('/suspector-releases/:version/make-current', async (c) => {
   requireRole(c, 'admin');
-  if (!(await makeCurrent(c.env.DB, c.req.param('version'), 'suspector_releases'))) fail(404, 'not_found', 'Такой версии SUSpector нет.');
+  if (!(await makeCurrent(c.env.DB, c.req.param('version'), 'suspector_releases'))) fail(404, 'not_found', 'No such SUSpector version.');
   return c.json({ current: await getCurrentSuspectorRelease(c.env.DB) });
 });
 
 function validateName(value: unknown): string {
   const name = typeof value === 'string' ? value.trim() : '';
   if (name === '' || name.length > MAX_NAME_LENGTH) {
-    fail(400, 'invalid_name', `Имя обязательно, не длиннее ${MAX_NAME_LENGTH} символов.`);
+    fail(400, 'invalid_name', `A name is required, up to ${MAX_NAME_LENGTH} characters.`, { maxLength: MAX_NAME_LENGTH });
   }
   return name;
 }

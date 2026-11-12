@@ -29,10 +29,10 @@ consoleApi.put('/devices/:id', async (c) => {
   const body = await readJsonObject(c);
   const baseRevision = body.baseRevision ?? null;
   if (baseRevision !== null && !(Number.isInteger(baseRevision) && (baseRevision as number) >= 1)) {
-    fail(400, 'invalid_revision', 'baseRevision должен быть null или целым числом от 1.');
+    fail(400, 'invalid_revision', 'baseRevision must be null or an integer from 1.');
   }
   if (body.restore !== undefined && typeof body.restore !== 'boolean') {
-    fail(400, 'invalid_restore', 'restore должен быть true или false.');
+    fail(400, 'invalid_restore', 'restore must be true or false.');
   }
   const data = normalizeData(id, body.data);
   const result = await putDevice(c.env.DB, id, baseRevision as number | null, data, {
@@ -45,20 +45,20 @@ consoleApi.put('/devices/:id', async (c) => {
 
 consoleApi.get('/program/latest', async (c) => {
   const release = await getReleaseFor(c.env.DB, clientVersion(c.req.header('User-Agent')));
-  if (!release) fail(404, 'no_release', 'В облаке ещё нет опубликованных версий программы.');
+  if (!release) fail(404, 'no_release', 'No program versions are published in the cloud yet.');
   return c.json(release);
 });
 
 // Network profiles cached by the console for setting up LAN adapters offline.
 consoleApi.get('/settings/network', async (c) => {
   const record = await getSetting<NetworkSettings>(c.env.DB, NETWORK_KEY);
-  if (!record) fail(404, 'no_settings', 'Настройки сети в облаке ещё не заданы.');
+  if (!record) fail(404, 'no_settings', 'Network settings are not set in the cloud yet.');
   return c.json(record);
 });
 
 consoleApi.get('/program/:version/package', async (c) => {
   const found = await getReleasePackage(c.env.DB, c.req.param('version'));
-  if (!found) fail(404, 'not_found', 'Такой версии программы нет.');
+  if (!found) fail(404, 'not_found', 'No such program version.');
   return new Response(found.bytes, {
     headers: {
       'Content-Type': 'application/zip',
@@ -74,12 +74,12 @@ export function writeResponse(c: Context<AppEnv>, result: WriteResult): Response
       return c.json({ revision: result.device.revision, changed: result.changed, device: result.device });
     case 'conflict':
       return c.json(
-        { error: { code: 'conflict', message: 'Запись уже изменили в облаке.' }, current: result.current },
+        { error: { code: 'conflict', message: 'The record was already changed in the cloud.' }, current: result.current },
         409,
       );
     case 'deleted':
       return c.json(
-        { error: { code: 'deleted', message: 'Запись удалена в облаке.' }, current: result.current },
+        { error: { code: 'deleted', message: 'The record was deleted in the cloud.' }, current: result.current },
         410,
       );
   }
@@ -87,7 +87,7 @@ export function writeResponse(c: Context<AppEnv>, result: WriteResult): Response
 
 function parseNonNegativeInt(value: string, name: string): number {
   if (!/^\d{1,15}$/.test(value)) {
-    fail(400, 'invalid_query', `Параметр ${name} должен быть неотрицательным целым числом.`);
+    fail(400, 'invalid_query', `The ${name} parameter must be a non-negative integer.`);
   }
   return Number(value);
 }

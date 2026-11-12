@@ -25,9 +25,36 @@ namespace CompInfo
                 get
                 {
                     JsonObject error = Object == null ? null : Object["error"] as JsonObject;
+                    string known = error == null ? null : ErrorText(error.Text("code"));
+                    if (known != null) return known;
                     string message = error == null ? null : error.Text("message");
                     return string.IsNullOrEmpty(message) ? L.T("Облако ответило кодом ") + Status + "." : message;
                 }
+            }
+        }
+
+        // The cloud answers errors in English; the program shows its own translation by error code
+        // and the cloud's message for codes it does not know.
+        public static string ErrorText(string code)
+        {
+            switch (code)
+            {
+                case "unauthorized": return L.T("Нужен личный ключ доступа.");
+                case "invalid_key": return L.T("Ключ неверный или отозван.");
+                case "user_disabled": return L.T("Пользователь отключён.");
+                case "forbidden": return L.T("Недостаточно прав: роль пользователя не даёт доступа к этому действию.");
+                case "invalid_id": return L.T("Недопустимый идентификатор устройства.");
+                case "invalid_data": return L.T("Запись устройства должна быть JSON-объектом.");
+                case "id_mismatch": return L.T("computerId записи не совпадает с её идентификатором.");
+                case "too_large": return L.T("Запись устройства больше 64 КБ.");
+                case "busy": return L.T("Запись одновременно изменяется. Повторите попытку.");
+                case "conflict": return L.T("Запись уже изменили в облаке.");
+                case "deleted": return L.T("Запись удалена в облаке.");
+                case "no_release": return L.T("В облаке ещё нет опубликованных версий программы.");
+                case "no_settings": return L.T("Настройки сети в облаке ещё не заданы.");
+                case "not_found": return L.T("Не найдено в облаке.");
+                case "internal": return L.T("Внутренняя ошибка сервера.");
+                default: return null;
             }
         }
 

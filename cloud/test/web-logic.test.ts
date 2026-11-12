@@ -24,6 +24,7 @@ import {
   subnetMask,
   suggestHostRange,
 } from '../public/js/network-logic.js';
+import { errorText } from '../public/js/api.js';
 
 function device(id: string, data: Record<string, unknown>, extra: Record<string, unknown> = {}) {
   return { id, revision: 1, deleted: false, createdAt: '', updatedAt: '2026-10-20T10:00:00Z', updatedBy: 'h@example.com', data, ...extra };
@@ -240,5 +241,20 @@ describe('CSV export', () => {
 
   it('names files like the console export', () => {
     expect(csvFileName(new Date(2026, 9, 24, 9, 5, 7))).toBe('devices_2026-10-24_09-05-07.csv');
+  });
+});
+
+describe('error texts', () => {
+  it('shows Russian by error code and the server message for unknown codes', () => {
+    const pending = { error: { code: 'access_pending', message: 'The access request…' }, email: 'a@b.cd' };
+    expect(errorText('access_pending', pending, 403)).toBe(
+      'Запрос на доступ для a@b.cd отправлен администратору. Когда он подтвердит, обновите страницу.',
+    );
+    expect(errorText('forbidden', { error: { code: 'forbidden', message: 'Not enough rights' } }, 403)).toBe('Недостаточно прав для этого действия.');
+    expect(errorText('invalid_label', { error: { code: 'invalid_label', message: 'x' }, maxLength: 100 }, 400)).toContain('не длиннее 100');
+    // Without the details a text needs, and for unknown codes, the server's message is shown.
+    expect(errorText('access_denied', { error: { code: 'access_denied', message: 'Rejected.' } }, 403)).toBe('Rejected.');
+    expect(errorText('invalid_settings', { error: { code: 'invalid_settings', message: 'Location 1: bad.' } }, 400)).toBe('Location 1: bad.');
+    expect(errorText('http_502', null, 502)).toBe('Облако ответило ошибкой 502.');
   });
 });

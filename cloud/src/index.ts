@@ -14,7 +14,7 @@ app.route('/api/release', releaseApi);
 app.route('/api/suspector', suspectorApi);
 app.route('/api/suspector-release', suspectorReleaseApi);
 
-app.all('/api/*', () => fail(404, 'not_found', 'Неизвестный адрес API.'));
+app.all('/api/*', () => fail(404, 'not_found', 'Unknown API path.'));
 
 // Everything outside /api is the web interface from ./public.
 app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw));
@@ -24,7 +24,7 @@ app.onError((error, c) => {
     return error.getResponse();
   }
   console.error(error);
-  return c.json({ error: { code: 'internal', message: 'Внутренняя ошибка сервера.' } }, 500);
+  return c.json({ error: { code: 'internal', message: 'Internal server error.' } }, 500);
 });
 
 export default app;

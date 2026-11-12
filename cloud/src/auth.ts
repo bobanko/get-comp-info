@@ -10,7 +10,7 @@ import { hasRole, toUser, type AppEnv, type UserRow } from './types';
 export const consoleAuth = createMiddleware<AppEnv>(async (c, next) => {
   const match = /^Bearer\s+(\S+)$/i.exec(c.req.header('Authorization') ?? '');
   if (!match) {
-    fail(401, 'unauthorized', 'Нужен личный ключ доступа.');
+    fail(401, 'unauthorized', 'A personal access key is required.');
   }
   const keyHash = await sha256Hex(match[1]);
   const row = await c.env.DB.prepare(
@@ -21,14 +21,14 @@ export const consoleAuth = createMiddleware<AppEnv>(async (c, next) => {
     .bind(keyHash)
     .first<UserRow & { key_id: string; key_label: string }>();
   if (!row) {
-    fail(401, 'invalid_key', 'Ключ неверный или отозван.');
+    fail(401, 'invalid_key', 'The key is wrong or revoked.');
   }
   const user = toUser(row);
   if (!user.active) {
-    fail(403, 'user_disabled', 'Пользователь отключён.');
+    fail(403, 'user_disabled', 'The user is disabled.');
   }
   if (!hasRole(user, 'harvester')) {
-    fail(403, 'forbidden', 'Роль пользователя не даёт доступа из консоли.');
+    fail(403, 'forbidden', 'The user role gives no access from the console.');
   }
   c.set('user', user);
   c.set('apiKey', { id: row.key_id, label: row.key_label });
@@ -50,7 +50,7 @@ export const webAuth = createMiddleware<AppEnv>(async (c, next) => {
     return requestAccess(c.env.DB, email);
   }
   if (row.active !== 1) {
-    fail(403, 'user_disabled', `Доступ для ${email} отключён администратором.`);
+    fail(403, 'user_disabled', `Access for ${email} was disabled by an administrator.`, { email });
   }
   c.set('user', toUser(row));
   await next();
@@ -61,21 +61,21 @@ async function requestAccess(db: D1Database, email: string): Promise<never> {
   const now = nowIso();
   const existing = await db.prepare('SELECT rejected_at FROM access_requests WHERE email = ?').bind(email).first<{ rejected_at: string | null }>();
   if (existing?.rejected_at) {
-    fail(403, 'access_denied', `Администратор отклонил запрос на доступ для ${email}.`);
+    fail(403, 'access_denied', `An administrator rejected the access request for ${email}.`, { email });
   }
   if (existing) {
     await db.prepare('UPDATE access_requests SET last_seen_at = ? WHERE email = ?').bind(now, email).run();
   } else {
     const pending = await db.prepare('SELECT COUNT(*) AS count FROM access_requests WHERE rejected_at IS NULL').first<{ count: number }>();
     if ((pending?.count ?? 0) >= MAX_PENDING_REQUESTS) {
-      fail(403, 'access_requests_full', `Нет доступа для ${email}. Запросов на доступ слишком много: попросите администратора добавить вас вручную.`);
+      fail(403, 'access_requests_full', `No access for ${email}. There are too many access requests: ask an administrator to add you by hand.`, { email });
     }
     await db
       .prepare('INSERT INTO access_requests (email, requested_at, last_seen_at) VALUES (?, ?, ?) ON CONFLICT (email) DO NOTHING')
       .bind(email, now, now)
       .run();
   }
-  fail(403, 'access_pending', `Запрос на доступ для ${email} отправлен администратору. Когда он подтвердит, обновите страницу.`);
+  fail(403, 'access_pending', `The access request for ${email} was sent to an administrator. Reload the page once it is approved.`, { email });
 }
 
 let remoteJwks: { domain: string; keys: JWTVerifyGetKey } | null = null;
@@ -104,14 +104,14 @@ async function resolveAccessEmail(c: Context<AppEnv>): Promise<string> {
     return env.DEV_AUTH_EMAIL.toLowerCase();
   }
   if (!env.ACCESS_AUD) {
-    fail(500, 'access_not_configured', 'Cloudflare Access не настроен (ACCESS_AUD).');
+    fail(500, 'access_not_configured', 'Cloudflare Access is not configured (ACCESS_AUD).');
   }
   if (!env.ACCESS_TEAM_DOMAIN) {
-    fail(500, 'access_not_configured', 'Cloudflare Access не настроен (ACCESS_TEAM_DOMAIN).');
+    fail(500, 'access_not_configured', 'Cloudflare Access is not configured (ACCESS_TEAM_DOMAIN).');
   }
   const token = c.req.header('Cf-Access-Jwt-Assertion') ?? getCookie(c, 'CF_Authorization');
   if (!token) {
-    fail(401, 'unauthorized', 'Требуется вход через Cloudflare Access.');
+    fail(401, 'unauthorized', 'Sign-in through Cloudflare Access is required.');
   }
   let email: unknown;
   try {
@@ -121,10 +121,10 @@ async function resolveAccessEmail(c: Context<AppEnv>): Promise<string> {
     });
     email = payload.email;
   } catch {
-    fail(401, 'invalid_token', 'Сессия Cloudflare Access недействительна. Войдите заново.');
+    fail(401, 'invalid_token', 'The Cloudflare Access session is invalid. Sign in again.');
   }
   if (typeof email !== 'string' || email === '') {
-    fail(401, 'invalid_token', 'В токене Cloudflare Access нет адреса почты.');
+    fail(401, 'invalid_token', 'The Cloudflare Access token has no email address.');
   }
   return email.toLowerCase();
 }

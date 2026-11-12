@@ -21,7 +21,7 @@ export async function readZip(bytes: Uint8Array): Promise<ZipEntry[]> {
 
   for (let index = 0; index < count; index++) {
     if (offset + 46 > view.byteLength || view.getUint32(offset, true) !== CENTRAL_SIGNATURE) {
-      throw new ZipError('Повреждён каталог архива.');
+      throw new ZipError('The archive directory is damaged.');
     }
     const flags = view.getUint16(offset + 8, true);
     const method = view.getUint16(offset + 10, true);
@@ -34,20 +34,20 @@ export async function readZip(bytes: Uint8Array): Promise<ZipEntry[]> {
     const name = decoder.decode(bytes.subarray(offset + 46, offset + 46 + nameLength));
     offset += 46 + nameLength + extraLength + commentLength;
 
-    if (flags & 0x1) throw new ZipError(`Зашифрованные файлы не поддерживаются: ${name}`);
+    if (flags & 0x1) throw new ZipError(`Encrypted files are not supported: ${name}`);
     if (name.endsWith('/')) continue;
     if (localOffset + 30 > view.byteLength || view.getUint32(localOffset, true) !== LOCAL_SIGNATURE) {
-      throw new ZipError(`Повреждён заголовок файла ${name}.`);
+      throw new ZipError(`The header of ${name} is damaged.`);
     }
     const dataStart = localOffset + 30 + view.getUint16(localOffset + 26, true) + view.getUint16(localOffset + 28, true);
-    if (dataStart + compressedSize > view.byteLength) throw new ZipError(`Файл ${name} обрезан.`);
+    if (dataStart + compressedSize > view.byteLength) throw new ZipError(`The file ${name} is truncated.`);
     const raw = bytes.subarray(dataStart, dataStart + compressedSize);
 
     let data: Uint8Array;
     if (method === 0) data = raw.slice();
     else if (method === 8) data = await inflate(raw);
-    else throw new ZipError(`Неподдерживаемое сжатие (${method}) у файла ${name}.`);
-    if (data.byteLength !== size) throw new ZipError(`Размер файла ${name} не совпадает с каталогом архива.`);
+    else throw new ZipError(`Unsupported compression (${method}) of ${name}.`);
+    if (data.byteLength !== size) throw new ZipError(`The size of ${name} does not match the archive directory.`);
     entries.push({ name, data });
   }
   return entries;
@@ -59,7 +59,7 @@ function findEndOfCentralDirectory(view: DataView): number {
   for (let offset = view.byteLength - 22; offset >= lowest; offset--) {
     if (view.getUint32(offset, true) === EOCD_SIGNATURE) return offset;
   }
-  throw new ZipError('Это не zip-архив.');
+  throw new ZipError('This is not a zip archive.');
 }
 
 async function inflate(raw: Uint8Array): Promise<Uint8Array> {
@@ -67,6 +67,6 @@ async function inflate(raw: Uint8Array): Promise<Uint8Array> {
     const stream = new Blob([raw]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
     return new Uint8Array(await new Response(stream).arrayBuffer());
   } catch {
-    throw new ZipError('Не удалось распаковать архив.');
+    throw new ZipError('Could not unpack the archive.');
   }
 }

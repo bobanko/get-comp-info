@@ -59,10 +59,13 @@ describe('web authentication', () => {
     const stranger = await webRequest(`${unique('stranger')}@example.com`, 'GET', '/me');
     expect(stranger.status).toBe(403);
     expect(stranger.body.error.code).toBe('access_pending');
+    expect(stranger.body.email).toMatch(/^stranger-.*@example\.com$/);
     const disabled = await addUser('admin', { active: false });
     const refused = await webRequest(disabled, 'GET', '/me');
     expect(refused.status).toBe(403);
     expect(refused.body.error.code).toBe('user_disabled');
+    // The API speaks English; the web page and the programs translate by code.
+    for (const body of [stranger.body, refused.body]) expect(body.error.message).not.toMatch(/[А-Яа-яЁёІіЇїЄєҐґ]/);
   });
 
   it('matches the email case-insensitively', async () => {

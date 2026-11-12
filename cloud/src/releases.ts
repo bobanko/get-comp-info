@@ -63,7 +63,7 @@ const RELEASE_COLUMNS = 'version, commit_sha, manifest, sha256, size, published_
 
 // Checks the archive against its manifest.json and returns the manifest.
 export async function validatePackage(bytes: Uint8Array, allowedFile: (path: string) => boolean = isProgramFile): Promise<Manifest> {
-  if (bytes.byteLength > MAX_PACKAGE_BYTES) fail(413, 'too_large', 'Архив версии больше 1 МБ.');
+  if (bytes.byteLength > MAX_PACKAGE_BYTES) fail(413, 'too_large', 'The release archive is larger than 1 MB.');
   let entries;
   try {
     entries = await readZip(bytes);
@@ -73,39 +73,39 @@ export async function validatePackage(bytes: Uint8Array, allowedFile: (path: str
   }
   const byName = new Map(entries.map((entry) => [entry.name, entry.data]));
   const manifestData = byName.get('manifest.json');
-  if (!manifestData) fail(400, 'invalid_package', 'В архиве нет manifest.json.');
+  if (!manifestData) fail(400, 'invalid_package', 'The archive has no manifest.json.');
 
   let manifest: Manifest;
   try {
     manifest = JSON.parse(new TextDecoder().decode(manifestData).replace(/^﻿/, '')) as Manifest;
   } catch {
-    fail(400, 'invalid_manifest', 'manifest.json не является JSON.');
+    fail(400, 'invalid_manifest', 'manifest.json is not JSON.');
   }
   if (typeof manifest.version !== 'string' || !VERSION_PATTERN.test(manifest.version)) {
-    fail(400, 'invalid_version', 'Версия должна быть в формате ГГГГ.ММ.ДД.N.');
+    fail(400, 'invalid_version', 'The version must look like YYYY.MM.DD.N.');
   }
-  if (typeof manifest.commit !== 'string' || manifest.commit === '') fail(400, 'invalid_manifest', 'В manifest.json нет commit.');
+  if (typeof manifest.commit !== 'string' || manifest.commit === '') fail(400, 'invalid_manifest', 'manifest.json has no commit.');
   if (manifest.notes !== undefined && !(Array.isArray(manifest.notes) && manifest.notes.every((note) => typeof note === 'string'))) {
-    fail(400, 'invalid_manifest', 'notes в manifest.json должен быть списком строк.');
+    fail(400, 'invalid_manifest', 'notes in manifest.json must be a list of strings.');
   }
-  if (!Array.isArray(manifest.files) || manifest.files.length === 0) fail(400, 'invalid_manifest', 'В manifest.json нет файлов.');
+  if (!Array.isArray(manifest.files) || manifest.files.length === 0) fail(400, 'invalid_manifest', 'manifest.json lists no files.');
 
   const listed = new Set<string>();
   for (const file of manifest.files) {
     if (typeof file?.path !== 'string' || !allowedFile(file.path)) {
-      fail(400, 'invalid_manifest', `Недопустимый файл в manifest.json: ${String(file?.path)}`);
+      fail(400, 'invalid_manifest', `File not allowed in manifest.json: ${String(file?.path)}`);
     }
-    if (listed.has(file.path.toLowerCase())) fail(400, 'invalid_manifest', `Файл указан дважды: ${file.path}`);
+    if (listed.has(file.path.toLowerCase())) fail(400, 'invalid_manifest', `File listed twice: ${file.path}`);
     listed.add(file.path.toLowerCase());
     const data = byName.get(file.path);
-    if (!data) fail(400, 'invalid_package', `В архиве нет файла ${file.path}.`);
+    if (!data) fail(400, 'invalid_package', `The archive has no file ${file.path}.`);
     if (data.byteLength !== file.size || (await sha256Hex(data)) !== String(file.sha256).toLowerCase()) {
-      fail(400, 'invalid_package', `Файл ${file.path} не совпадает с manifest.json.`);
+      fail(400, 'invalid_package', `The file ${file.path} does not match manifest.json.`);
     }
   }
   for (const name of byName.keys()) {
     if (name !== 'manifest.json' && !listed.has(name.toLowerCase())) {
-      fail(400, 'invalid_package', `Файла ${name} нет в manifest.json.`);
+      fail(400, 'invalid_package', `The file ${name} is not in manifest.json.`);
     }
   }
   return { ...manifest, notes: manifest.notes ?? [] };
@@ -201,18 +201,18 @@ export const releaseAuth = createMiddleware<AppEnv>(async (c, next) => {
     return;
   }
   const match = /^Bearer\s+(\S+)$/i.exec(c.req.header('Authorization') ?? '');
-  if (!match) fail(401, 'unauthorized', 'Нужен OIDC-токен GitHub Actions.');
+  if (!match) fail(401, 'unauthorized', 'A GitHub Actions OIDC token is required.');
   let claims: Record<string, unknown>;
   try {
     ({ payload: claims } = await jwtVerify(match[1], githubJwks(c.env), { issuer: GITHUB_ISSUER, audience: RELEASE_AUDIENCE }));
   } catch {
-    fail(401, 'invalid_token', 'OIDC-токен GitHub недействителен.');
+    fail(401, 'invalid_token', 'The GitHub OIDC token is invalid.');
   }
   if (String(claims.repository ?? '').toLowerCase() !== c.env.RELEASE_REPOSITORY.toLowerCase()) {
-    fail(403, 'forbidden', 'Публиковать версии можно только из репозитория программы.');
+    fail(403, 'forbidden', 'Releases can be published only from the program repository.');
   }
   if (claims.ref_type !== 'tag' || typeof claims.ref !== 'string' || !claims.ref.startsWith('refs/tags/')) {
-    fail(403, 'forbidden', 'Публиковать версии можно только по тегу.');
+    fail(403, 'forbidden', 'Releases can be published only from a tag.');
   }
   c.set('releaseTag', claims.ref.slice('refs/tags/'.length));
   await next();
@@ -232,10 +232,10 @@ releaseApi.post('/', async (c) => {
 export async function storeRelease(db: D1Database, bytes: Uint8Array, tag: string | null) {
   const manifest = await validatePackage(bytes);
   if (tag !== null && tag !== `v${manifest.version}`) {
-    fail(400, 'tag_mismatch', `Тег ${tag} не совпадает с версией ${manifest.version} в manifest.json.`);
+    fail(400, 'tag_mismatch', `The tag ${tag} does not match the version ${manifest.version} in manifest.json.`);
   }
   const existing = await db.prepare('SELECT version FROM program_releases WHERE version = ?').bind(manifest.version).first();
-  if (existing) fail(409, 'release_exists', `Версия ${manifest.version} уже опубликована.`);
+  if (existing) fail(409, 'release_exists', `Version ${manifest.version} is already published.`);
 
   const sha256 = await sha256Hex(bytes);
   const publishedAt = nowIso();
@@ -269,10 +269,10 @@ export async function getSuspectorPackage(db: D1Database, version: string): Prom
 export async function storeSuspectorRelease(db: D1Database, bytes: Uint8Array, tag: string | null) {
   const manifest = await validatePackage(bytes, isSuspectorFile);
   if (tag !== null && tag !== `v${manifest.version}`) {
-    fail(400, 'tag_mismatch', `Тег ${tag} не совпадает с версией ${manifest.version} в manifest.json.`);
+    fail(400, 'tag_mismatch', `The tag ${tag} does not match the version ${manifest.version} in manifest.json.`);
   }
   const existing = await db.prepare('SELECT version FROM suspector_releases WHERE version = ?').bind(manifest.version).first();
-  if (existing) fail(409, 'release_exists', `Версия SUSpector ${manifest.version} уже опубликована.`);
+  if (existing) fail(409, 'release_exists', `SUSpector version ${manifest.version} is already published.`);
   const sha256 = await sha256Hex(bytes);
   const publishedAt = nowIso();
   await db.batch([
@@ -292,17 +292,17 @@ export const suspectorApi = new Hono<AppEnv>();
 
 suspectorApi.get('/latest', async (c) => {
   const release = await getCurrentSuspectorRelease(c.env.DB);
-  if (!release) fail(404, 'no_release', 'SUSpector ещё не опубликован.');
+  if (!release) fail(404, 'no_release', 'SUSpector is not published yet.');
   return c.json(release);
 });
 
 // The program itself for the public download page: SUSpector.exe of the current release, unpacked.
 suspectorApi.get('/download', async (c) => {
   const release = await getCurrentSuspectorRelease(c.env.DB);
-  if (!release) fail(404, 'no_release', 'SUSpector ещё не опубликован.');
+  if (!release) fail(404, 'no_release', 'SUSpector is not published yet.');
   const found = await getSuspectorPackage(c.env.DB, release.version);
   const exe = found && (await readZip(found.bytes)).find((entry) => isSuspectorFile(entry.name));
-  if (!exe) fail(500, 'invalid_package', 'В архиве SUSpector нет программы.');
+  if (!exe) fail(500, 'invalid_package', 'The SUSpector archive has no program.');
   return new Response(exe.data, {
     headers: {
       'Content-Type': 'application/vnd.microsoft.portable-executable',
@@ -316,7 +316,7 @@ suspectorApi.get('/download', async (c) => {
 
 suspectorApi.get('/:version/package', async (c) => {
   const found = await getSuspectorPackage(c.env.DB, c.req.param('version'));
-  if (!found) fail(404, 'not_found', 'Такой версии SUSpector нет.');
+  if (!found) fail(404, 'not_found', 'No such SUSpector version.');
   return new Response(found.bytes, {
     headers: {
       'Content-Type': 'application/zip',
