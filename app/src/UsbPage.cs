@@ -46,12 +46,16 @@ namespace CompInfo
             copy.DefaultCellStyle.Padding = new Padding(em / 4, 3, em / 4, 3);
             grid.Columns.Add(copy);
             grid.Columns[0].AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
-            grid.Columns[1].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            // Volume labels are short (FAT32 up to 11, exFAT up to 15 characters); a longer device name is cut
+            // with an ellipsis and shown in full in the tooltip. The serial column takes the free width.
+            grid.Columns[1].AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
+            grid.Columns[1].Width = em * 6;
             grid.Columns[2].AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
             grid.Columns[2].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
-            grid.Columns[3].AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
+            grid.Columns[3].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            grid.Columns[3].MinimumWidth = em * 7;
             grid.Columns[3].DefaultCellStyle.Font = new Font(Ui.MonoFont, FontStyle.Bold);
-            grid.Columns[4].Width = em * 7;
+            grid.Columns[4].Width = em * 6;
             grid.RowTemplate.Height = em * 2;
             foreach (DataGridViewColumn c in grid.Columns) c.SortMode = DataGridViewColumnSortMode.NotSortable;
             grid.CellContentClick += delegate (object o, DataGridViewCellEventArgs e) { if (e.ColumnIndex == 4 && e.RowIndex >= 0) Copy(e.RowIndex); };
@@ -99,6 +103,7 @@ namespace CompInfo
                     int i = grid.Rows.Add(diskName, name, string.Format(L.T("{0:N1} ГБ"), d.Size / 1073741824.0),
                         has ? d.Serial : L.T("устройство не сообщает номер"), has ? L.T("Копировать") : "");
                     DataGridViewRow row = grid.Rows[i];
+                    row.Cells[1].ToolTipText = d.VolumeName.Length > 0 && d.Name.Length > 0 ? d.VolumeName + " — " + d.Name : name;
                     row.Tag = d;
                     if (!has)
                     {

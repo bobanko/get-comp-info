@@ -15,7 +15,7 @@ namespace CompInfo
                 new UsbPage(), AboutDialog)
         {
             // A small utility: the table has only a few short columns.
-            SizeInEm(33, 21, 30, 16);
+            SizeInEm(31, 21, 28, 16);
         }
 
         static StandaloneAboutDialog AboutDialog()
