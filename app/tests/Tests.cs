@@ -40,6 +40,7 @@ namespace CompInfo
             Run("cloud state", CloudStateFile);
             Run("computer names match PowerShell", ComputerNames);
             Run("security document scan", SecurityDocumentScan);
+            Run("document search", DocumentSearchFiles);
             Run("standalone SUSpector", StandaloneSuspector);
             Run("SUSpector update install", SuspectorInstall);
             Run("record differences and merge", Differences);
@@ -376,6 +377,67 @@ namespace CompInfo
             Check(assembly.GetType("CompInfo.MainForm", false) == null && assembly.GetType("CompInfo.DatabasePage", false) == null &&
                 assembly.GetType("CompInfo.SyncPage", false) == null && assembly.GetType("CompInfo.CloudClient", false) == null,
                 "SUSpector excludes the toolbox, device database and cloud UI");
+        }
+
+        static void ZipWith(string path, string entry, string xml)
+        {
+            using (ZipArchive zip = ZipFile.Open(path, ZipArchiveMode.Create))
+            using (StreamWriter w = new StreamWriter(zip.CreateEntry(entry).Open(), new UTF8Encoding(false))) w.Write(xml);
+        }
+
+        static void DocumentSearchFiles()
+        {
+            string dir = TempDir();
+            try
+            {
+                // Word splits words into runs when formatting changes inside them; the phrase must still be found.
+                ZipWith(Path.Combine(dir, "a.docx"), "word/document.xml",
+                    "<w:document><w:body><w:p><w:r><w:t>Это сек</w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>ретный</w:t></w:r><w:r><w:t xml:space=\"preserve\"> план</w:t></w:r></w:p>" +
+                    "<w:p><w:r><w:t>Секретный план &amp; ещё раз</w:t></w:r></w:p></w:body></w:document>");
+                ZipWith(Path.Combine(dir, "styles-only.docx"), "word/styles.xml", "<w:styles><w:name w:val=\"секретный план\"/>секретный план</w:styles>");
+                ZipWith(Path.Combine(dir, "b.xlsx"), "xl/sharedStrings.xml", "<sst><si><t>секретный</t></si><si><t>план</t></si><si><t>Секретный план</t></si></sst>");
+                ZipWith(Path.Combine(dir, "c.odt"), "content.xml", "<office:text><text:p>Секретный<text:s/>план</text:p></office:text>");
+                File.WriteAllBytes(Path.Combine(dir, "d.txt"), Encoding.GetEncoding(1251).GetBytes("Секретный\r\n   план, абзац"));
+                // «план» as Word writes it: \u + UTF-16 code, then a code page fallback byte to skip.
+                string u = "\\" + "u";
+                File.WriteAllText(Path.Combine(dir, "e.rtf"), @"{\rtf1\ansi\ansicpg1251{\fonttbl{\f0 Arial;}}\f0 \'d1\'e5\'ea\'f0\'e5\'f2\'ed\'fb\'e9 \uc1" +
+                    u + @"1087\'ef" + u + @"1083\'eb" + u + @"1072\'e0" + u + @"1085\'ed\par}");
+                byte[] noise = { 0xD0, 0xCF, 0x11, 0xE0, 0, 0, 0, 1, 2 };
+                byte[] text = Encoding.Unicode.GetBytes("СЕКРЕТНЫЙ ПЛАН");
+                byte[] doc = new byte[noise.Length + text.Length + noise.Length];
+                noise.CopyTo(doc, 0); text.CopyTo(doc, noise.Length); noise.CopyTo(doc, noise.Length + text.Length);
+                File.WriteAllBytes(Path.Combine(dir, "f.doc"), doc);
+                File.WriteAllText(Path.Combine(dir, "Секретный план.pdf"), "%PDF-1.4");
+                File.WriteAllText(Path.Combine(dir, "other.txt"), "секретный, но не план");
+
+                Check(DocumentSearch.RtfText(File.ReadAllText(Path.Combine(dir, "e.rtf"))).Contains("Секретный план"), "RTF code page letters and \\u with fallback");
+                string fragment;
+                Check(DocumentSearch.Count("x Секретный\r\n план y секретный план", "секретный план", out fragment) == 2 && fragment.StartsWith("x Секретный план"), "count ignores case and line breaks");
+
+                SearchOptions options = new SearchOptions();
+                options.Phrase = "  секретный   план ";
+                options.Roots.Add(dir);
+                options.Recycle = false;
+                List<string> streamed = new List<string>();
+                SearchResult r = DocumentSearch.Run(options, System.Threading.CancellationToken.None, null, delegate (SearchHit h) { streamed.Add(Path.GetFileName(h.Path)); });
+                Dictionary<string, SearchHit> hits = new Dictionary<string, SearchHit>();
+                foreach (SearchHit h in r.Hits) hits[Path.GetFileName(h.Path)] = h;
+                foreach (string name in new[] { "a.docx", "b.xlsx", "c.odt", "d.txt", "e.rtf", "f.doc", "Секретный план.pdf" })
+                    Check(hits.ContainsKey(name), "document search finds " + name);
+                Check(!hits.ContainsKey("other.txt") && !hits.ContainsKey("styles-only.docx"), "no match without the phrase or only in styles: " + string.Join(",", streamed));
+                Check(hits.ContainsKey("a.docx") && hits["a.docx"].Count == 2 && hits["a.docx"].Fragment.Contains("Это секретный план"), "words split into runs are found");
+                Check(hits.ContainsKey("Секретный план.pdf") && hits["Секретный план.pdf"].InName && hits["Секретный план.pdf"].Count == 0 && hits["Секретный план.pdf"].Type == "PDF", "PDF by name");
+                Check(streamed.Count == r.Hits.Count && r.MatchCount == r.Hits.Count && r.Files == 9 && !r.Cancelled, "results stream as found: " + r.Files);
+
+                options.Contents = false;
+                r = DocumentSearch.Run(options, System.Threading.CancellationToken.None, null, null);
+                Check(r.Hits.Count == 1 && r.Hits[0].InName, "names only when contents are off");
+
+                System.Threading.CancellationTokenSource cancelled = new System.Threading.CancellationTokenSource();
+                cancelled.Cancel();
+                Check(DocumentSearch.Run(options, cancelled.Token, null, null).Cancelled, "search can be stopped");
+            }
+            finally { Directory.Delete(dir, true); }
         }
 
         static void SuspectorInstall()

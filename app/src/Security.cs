@@ -653,7 +653,7 @@ namespace CompInfo
             return string.Join("\r\n", lines.ToArray());
         }
 
-        static List<string> LocationTags(string path, bool recycle)
+        internal static List<string> LocationTags(string path, bool recycle)
         {
             List<string> tags = new List<string>();
             string p = "\\" + (path ?? "").Replace('/', '\\').Trim('\\') + "\\";

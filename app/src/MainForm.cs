@@ -75,6 +75,7 @@ namespace CompInfo
             pages.Add(new ComputerPage(true));
             pages.Add(new PingPage());
             pages.Add(new SecurityPage());
+            pages.Add(new SearchPage());
             pages.Add(new DatabasePage());
             pages.Add(new UsbPage());
             pages.Add(new SyncPage());
