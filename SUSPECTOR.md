@@ -73,8 +73,12 @@ GitHub Actions публикует его независимо от внутре�
 
 Пользователям даётся ссылка https://chagear.top/suspector/ — публичная страница основного сайта
 (проект `chagear-site`, папка `public/suspector/`) с описанием программы и кнопкой «Завантажити SUSpector.exe».
+Прямая ссылка на программу — https://chagear.top/download/SUSpector.exe (как у HashPot). Поддомен comp-info.chagear.top —
+только для веб-интерфейса Comp Info: Worker основного сайта (`chagear-site/worker.js`) передаёт `/download/SUSpector.exe`
+и `/api/suspector/*` в Worker Comp Info через service binding. Кнопка «Обновление» SUSpector с версии после 2026.11.12.6
+спрашивает `https://chagear.top/api/suspector`; старые копии спрашивают comp-info.chagear.top, это тоже работает.
 Кнопка ведёт на `/api/suspector/download`: Worker распаковывает из текущего архива сам `SUSpector.exe`
-и отдаёт его как файл, версию страница берёт из `/api/suspector/latest` (Worker разрешает chagear.top читать ответы `/api/suspector/*`).
+и отдаёт его как файл, версию страница берёт из `/api/suspector/latest` того же домена.
 
 В веб-интерфейсе администратора раздел «Версии программ» показывает версии Comp Info и SUSpector отдельно;
 у SUSpector, как и у Comp Info, можно сделать текущей предыдущую версию — её будут скачивать со страницы

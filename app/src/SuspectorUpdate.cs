@@ -11,7 +11,9 @@ namespace CompInfo
     // Public updater for the standalone application. It accepts only SUSpector.exe packages.
     public static class SuspectorUpdate
     {
-        public const string ApiUrl = "https://comp-info.chagear.top/api/suspector";
+        // The main site passes /api/suspector/* to the Comp Info cloud (chagear-site/worker.js);
+        // versions before 2026.11.13 ask comp-info.chagear.top directly, which keeps working.
+        public const string ApiUrl = "https://chagear.top/api/suspector";
         public const string ExeName = "SUSpector.exe";
 
         public static JsonObject Latest()
