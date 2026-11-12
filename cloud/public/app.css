@@ -335,6 +335,7 @@ td > .badge:first-child, dd > .badge:first-child { margin-left: 0; }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .card-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
 .card-grid .panel { margin-bottom: 0; }
+.card-grid + .panel { margin-top: 16px; }
 
 .fields { display: grid; grid-template-columns: minmax(140px, max-content) 1fr; gap: 6px 16px; margin: 0; }
 .fields dt { color: var(--muted); }

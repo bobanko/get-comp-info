@@ -11,7 +11,7 @@ import {
   validateDeviceId,
 } from '../devices';
 import { fail, isPlainObject, nowIso, readJsonObject, requireRole } from '../http';
-import { getCurrentRelease, getCurrentSuspectorRelease, listReleases, makeCurrent } from '../releases';
+import { buildDownload, describeDownloads, getCurrentRelease, getCurrentSuspectorRelease, isDownloadKind, listReleases, makeCurrent } from '../releases';
 import { getSetting, getSettingHistory, NETWORK_KEY, putSetting, validateNetworkSettings, type NetworkSettings } from '../settings';
 import { hasRole, isRole, toUser, type AppEnv, type UserRow } from '../types';
 import { writeResponse } from './console';
@@ -284,6 +284,24 @@ webApi.put('/settings/network', async (c) => {
     );
   }
   return c.json({ setting: result.record });
+});
+
+// ---------- Downloads: the current release for anyone signed in ----------
+
+webApi.get('/downloads', async (c) => c.json(await describeDownloads(c.env.DB)));
+
+webApi.get('/downloads/:kind', async (c) => {
+  const kind = c.req.param('kind');
+  if (!isDownloadKind(kind)) fail(404, 'not_found', 'Unknown download.');
+  const download = await buildDownload(c.env.DB, kind);
+  return new Response(download.bytes, {
+    headers: {
+      'Content-Type': 'application/zip',
+      'Content-Length': String(download.bytes.byteLength),
+      'Content-Disposition': `attachment; filename="${download.name}"`,
+      'Cache-Control': 'no-store',
+    },
+  });
 });
 
 // ---------- Program releases ----------

@@ -3,7 +3,8 @@ import { exports } from 'cloudflare:workers';
 import { importJWK, SignJWT, type JWK } from 'jose';
 import { describe, expect, it } from 'vitest';
 import { sha256Hex } from '../src/crypto';
-import { addKey, addUser, consoleRequest, harvesterKey, webRequest } from './helpers';
+import { readZip } from '../src/zip';
+import { accessToken, addKey, addUser, consoleRequest, harvesterKey, webRequest } from './helpers';
 import { buildRelease, buildZip } from './zip-builder';
 
 let counter = Math.floor(Math.random() * 5000);
@@ -188,5 +189,36 @@ describe('downloading releases', () => {
     expect(rolledBack.body.current.version).toBe(older);
     expect((await consoleRequest(key, 'GET', '/program/latest')).body.version).toBe(older);
     expect((await webRequest(admin, 'POST', '/releases/1999.01.01.1/make-current')).status).toBe(404);
+  });
+});
+
+describe('downloads for signed-in users', () => {
+  async function download(email: string | null, kind: string) {
+    const headers: Record<string, string> = email ? { 'Cf-Access-Jwt-Assertion': await accessToken(email) } : {};
+    return exports.default.fetch(new Request('https://comp-info.test/api/web/downloads/' + kind, { headers }));
+  }
+
+  it('splits the current release into the window program and the console version', async () => {
+    const version = nextVersion();
+    const files = { 'comp-info.exe': 'MZ window', 'cloud-config.json': '{\"apiUrl\":\"https://x\"}', 'get-comp-info.ps1': 'Write-Host 1', 'comp-info-menu.BAT': '@echo off' };
+    expect((await publishVersion(version, files)).status).toBe(201);
+    const viewer = await addUser('viewer');
+
+    const info = await webRequest(viewer, 'GET', '/downloads');
+    expect(info.status).toBe(200);
+    expect(info.body).toMatchObject({ version, window: ['cloud-config.json', 'comp-info.exe'], console: ['cloud-config.json', 'comp-info-menu.BAT', 'get-comp-info.ps1'] });
+
+    const window = await download(viewer, 'window');
+    expect(window.status).toBe(200);
+    expect(window.headers.get('Content-Disposition')).toBe(`attachment; filename="comp-info-${version}-window.zip"`);
+    const windowFiles = await readZip(new Uint8Array(await window.arrayBuffer()));
+    expect(windowFiles.map((f) => f.name).sort()).toEqual(['cloud-config.json', 'comp-info.exe']);
+    expect(new TextDecoder().decode(windowFiles.find((f) => f.name === 'comp-info.exe')!.data)).toBe('MZ window');
+
+    const consoleZip = await readZip(new Uint8Array(await (await download(viewer, 'console')).arrayBuffer()));
+    expect(consoleZip.map((f) => f.name).sort()).toEqual(['cloud-config.json', 'comp-info-menu.BAT', 'get-comp-info.ps1']);
+
+    expect((await download(viewer, 'everything')).status).toBe(404);
+    expect((await download(null, 'window')).status).toBe(401);
   });
 });

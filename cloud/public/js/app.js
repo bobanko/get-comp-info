@@ -3,6 +3,7 @@ import { errorBox, h, replace } from './dom.js';
 import { hasRole, ROLE_LABELS } from './logic.js';
 import { renderDevice } from './pages/device.js';
 import { renderDevices } from './pages/devices.js';
+import { renderDownloads } from './pages/downloads.js';
 import { renderKeys } from './pages/keys.js';
 import { renderNetwork } from './pages/network.js';
 import { renderReleases } from './pages/releases.js';
@@ -15,6 +16,7 @@ const whoami = document.getElementById('whoami');
 const PAGES = [
   { hash: '#/devices', icon: '💻', label: 'Устройства', role: 'viewer' },
   { hash: '#/keys', icon: '🔑', label: 'Мои ключи', role: 'harvester' },
+  { hash: '#/downloads', icon: '📥', label: 'Загрузки', role: 'viewer' },
   { hash: '#/users', icon: '👥', label: 'Пользователи', role: 'admin' },
   { hash: '#/network', icon: '🌐', label: 'Сеть', role: 'admin' },
   { hash: '#/releases', icon: '📦', label: 'Версии программ', role: 'admin' },
@@ -107,6 +109,8 @@ async function route() {
     renderDevice(context, decodeURIComponent(deviceMatch[1]));
   } else if (hash === '#/keys' && hasRole(me, 'harvester')) {
     renderKeys(context);
+  } else if (hash === '#/downloads') {
+    renderDownloads(context);
   } else if (hash === '#/users' && hasRole(me, 'admin')) {
     renderUsers(context);
   } else if (hash === '#/network' && hasRole(me, 'admin')) {

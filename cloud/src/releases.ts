@@ -6,6 +6,7 @@ import { sha256Hex } from './crypto';
 import { fail, nowIso } from './http';
 import type { AppEnv } from './types';
 import { readZip, ZipError } from './zip';
+import { writeZip } from './zip-write';
 
 export const MAX_PACKAGE_BYTES = 1024 * 1024;
 export const GITHUB_ISSUER = 'https://token.actions.githubusercontent.com';
@@ -168,6 +169,52 @@ export async function getReleasePackage(db: D1Database, version: string): Promis
   if (!row) return null;
   // D1 returns BLOB columns as an array of bytes.
   return { bytes: new Uint8Array(row.package), sha256: row.sha256 };
+}
+
+// ---------- Downloads for signed-in users of the web interface ----------
+
+// The window program and the console version of the current release, each with cloud-config.json.
+export const DOWNLOAD_KINDS = {
+  window: (name: string) => name.toLowerCase() === 'comp-info.exe' || name === 'cloud-config.json',
+  console: (name: string) => name !== 'manifest.json' && name.toLowerCase() !== 'comp-info.exe',
+} as const;
+export type DownloadKind = keyof typeof DOWNLOAD_KINDS;
+
+export function isDownloadKind(value: string): value is DownloadKind {
+  return Object.prototype.hasOwnProperty.call(DOWNLOAD_KINDS, value);
+}
+
+async function currentPackage(db: D1Database) {
+  const release = await getCurrentRelease(db);
+  if (!release) fail(404, 'no_release', 'No program versions are published in the cloud yet.');
+  const found = await getReleasePackage(db, release.version);
+  if (!found) fail(404, 'no_release', 'No program versions are published in the cloud yet.');
+  return { release, entries: await readZip(found.bytes) };
+}
+
+// What each download holds, for the page.
+export async function describeDownloads(db: D1Database) {
+  const { release, entries } = await currentPackage(db);
+  const files = (kind: DownloadKind) => entries.filter((entry) => DOWNLOAD_KINDS[kind](entry.name)).map((entry) => entry.name).sort();
+  return {
+    version: release.version,
+    publishedAt: release.publishedAt,
+    notes: release.notes,
+    window: files('window').includes('comp-info.exe') ? files('window') : [],
+    console: files('console'),
+  };
+}
+
+export async function buildDownload(db: D1Database, kind: DownloadKind) {
+  const { release, entries } = await currentPackage(db);
+  const chosen = entries.filter((entry) => DOWNLOAD_KINDS[kind](entry.name));
+  if (kind === 'window' && !chosen.some((entry) => entry.name.toLowerCase() === 'comp-info.exe')) {
+    fail(404, 'no_window_app', 'The current release has no comp-info.exe.');
+  }
+  return {
+    name: `comp-info-${release.version}-${kind}.zip`,
+    bytes: writeZip(chosen.map((entry) => ({ name: entry.name, data: entry.data })), new Date(release.publishedAt)),
+  };
 }
 
 export async function makeCurrent(db: D1Database, version: string, table: ReleaseTable = 'program_releases'): Promise<boolean> {

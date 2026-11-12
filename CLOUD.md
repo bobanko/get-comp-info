@@ -219,8 +219,12 @@ settings_history (                 -- каждая сохранённая вер
 | `DELETE` | `/access-requests/{email}` — отклонить запрос | admin |
 | `GET` / `PUT` | `/settings/network` (`PUT`: `baseRevision` + `value`, 409 при устаревшей ревизии) | admin |
 | `GET` | `/settings/network/history` | admin |
+| `GET` | `/downloads` — текущая версия и состав загрузок | все |
+| `GET` | `/downloads/window`, `/downloads/console` — zip текущей версии: `comp-info.exe` + `cloud-config.json` или скрипты и BAT + `cloud-config.json` | все |
 | `GET` | `/releases` | admin |
 | `POST` | `/releases/{version}/make-current` | admin |
+
+Раздел «Загрузки» веб-интерфейса (любой вошедший пользователь, роль не важна) скачивает текущую версию Тулбокса двумя архивами: оконную версию и консольную. Архивы Worker собирает на лету из пакета текущей версии (`src/zip-write.ts`, без сжатия).
 
 ## Публикация версий (`/api/release`)
 
