@@ -65,6 +65,21 @@ $script:calls.Clear()
 Invoke-NetworkConfiguration -InterfaceIndex 7 -UseDhcp
 Assert-True (($script:calls -join ',') -eq 'enable,dhcp,dns') 'Empty configuration reset failed'
 
+# A static address must switch DHCP off before it is assigned, otherwise Windows refuses
+# with "Inconsistent parameters PolicyStore PersistentStore and Dhcp Enabled".
+function Get-NetIPAddress { param($InterfaceIndex, $AddressFamily, $ErrorAction) [pscustomobject]@{ InterfaceIndex = 7; AddressFamily = 'IPv4'; PrefixOrigin = 'Manual'; Store = 'Active' } }
+function Get-NetRoute { param($InterfaceIndex, $AddressFamily, $DestinationPrefix, $ErrorAction) }
+function Set-NetIPInterface {
+    param($InterfaceIndex, $AddressFamily, $Dhcp, $ErrorAction)
+    Assert-True ($InterfaceIndex -eq 7 -and $AddressFamily -eq 'IPv4') 'Wrong DHCP target'
+    $script:calls.Add('dhcp:' + $Dhcp)
+}
+function New-NetIPAddress { param($InterfaceIndex, $IPAddress, $PrefixLength, $DefaultGateway, $ErrorAction) $script:calls.Add('static') }
+function Set-DnsClientServerAddress { param($InterfaceIndex, $ServerAddresses, $ErrorAction) $script:calls.Add('dns') }
+$script:calls.Clear()
+Invoke-NetworkConfiguration -InterfaceIndex 7 -IpAddress '10.0.0.5' -PrefixLength 24 -Gateway '10.0.0.1' -DnsServers @('10.0.0.2')
+Assert-True (($script:calls -join ',') -eq 'enable,dhcp:Disabled,ip:Active,static,dns') ('Static order wrong: ' + ($script:calls -join ','))
+
 # Exercise the UAC handoff without launching or changing anything.
 $isAdministrator = $false
 function Start-Process {

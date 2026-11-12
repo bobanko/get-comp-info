@@ -78,6 +78,15 @@ function Invoke-NetworkConfiguration {
         return
     }
 
+    # A static address cannot be stored while DHCP is still enabled on the interface
+    # ("Inconsistent parameters PolicyStore PersistentStore and Dhcp Enabled").
+    try {
+        Set-NetIPInterface -InterfaceIndex $InterfaceIndex -AddressFamily IPv4 -Dhcp Disabled -ErrorAction Stop
+    }
+    catch {
+        throw "Не удалось отключить DHCP на адаптере '$($networkAdapter.Name)': $($_.Exception.Message)"
+    }
+
     try {
         Get-NetIPAddress -InterfaceIndex $InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
             Remove-NetIPAddress -Confirm:$false -ErrorAction Stop

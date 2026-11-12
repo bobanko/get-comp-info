@@ -69,6 +69,10 @@ namespace CompInfo
             List<string> quoted = new List<string>();
             foreach (string d in dns) quoted.Add(PowerShell.Quote(d));
             s.Append("$ip = " + PowerShell.Quote(ip) + "; $prefix = " + prefixLength + "; $gateway = " + PowerShell.Quote(gateway) + "; $dns = @(" + string.Join(", ", quoted) + ")\n");
+            // A static address cannot be stored while DHCP is still enabled on the interface
+            // ("Inconsistent parameters PolicyStore PersistentStore and Dhcp Enabled").
+            s.Append("try { Set-NetIPInterface -InterfaceIndex $index -AddressFamily IPv4 -Dhcp Disabled -ErrorAction Stop }\n" +
+                     "catch { throw \"Не удалось отключить DHCP на адаптере '$($adapter.Name)': $($_.Exception.Message)\" }\n");
             s.Append("try { Get-NetIPAddress -InterfaceIndex $index -AddressFamily IPv4 -ErrorAction SilentlyContinue | Remove-NetIPAddress -Confirm:$false -ErrorAction Stop }\n" +
                      "catch { throw \"Не удалось удалить прежний IPv4-адрес адаптера '$($adapter.Name)': $($_.Exception.Message)\" }\n");
             s.Append("try { Get-NetRoute -InterfaceIndex $index -AddressFamily IPv4 -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | Remove-NetRoute -Confirm:$false -ErrorAction Stop }\n" +
