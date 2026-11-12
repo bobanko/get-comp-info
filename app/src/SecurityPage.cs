@@ -24,6 +24,7 @@ namespace CompInfo
         readonly Bitmap runningIcon;
         readonly Bitmap openFileIcon;
         readonly Bitmap openFolderIcon;
+        readonly Bitmap deleteIcon;
         bool running;
 
         public SecurityPage()
@@ -84,6 +85,7 @@ namespace CompInfo
             runningIcon = Glyph.Image(Glyph.More, em, Theme.Info);
             openFileIcon = Glyph.Image(Glyph.Open, em, Theme.Accent);
             openFolderIcon = Glyph.Image(Glyph.Folder, em, Theme.Accent);
+            deleteIcon = Glyph.Image(Glyph.Delete, em, Theme.Bad);
 
             grid = Ui.Grid(Font);
             grid.Dock = DockStyle.Fill;
@@ -111,6 +113,7 @@ namespace CompInfo
             details.Columns.Add("detail", L.T("Файл"));
             details.Columns.Add(ActionIconColumn(em * 2));
             details.Columns.Add(ActionIconColumn(em * 2));
+            details.Columns.Add(ActionIconColumn(em * 2));
             details.Columns[1].Width = em * 4;
             details.Columns[1].DefaultCellStyle.Font = new Font("Segoe UI Semibold", 9f);
             details.Columns[2].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
@@ -128,6 +131,7 @@ namespace CompInfo
             details.CellContentClick += delegate (object o, DataGridViewCellEventArgs e)
             {
                 if (e.RowIndex >= 0 && (e.ColumnIndex == 4 || e.ColumnIndex == 5)) OpenDetail(e.RowIndex, e.ColumnIndex == 5);
+                else if (e.RowIndex >= 0 && e.ColumnIndex == 6) DeleteDetail(e.RowIndex);
             };
             details.CellDoubleClick += delegate (object o, DataGridViewCellEventArgs e)
             {
@@ -139,6 +143,11 @@ namespace CompInfo
                 {
                     e.SuppressKeyPress = true;
                     OpenDetail(details.CurrentRow.Index, false);
+                }
+                else if (e.KeyCode == Keys.Delete && details.CurrentRow != null)
+                {
+                    e.SuppressKeyPress = true;
+                    DeleteDetail(details.CurrentRow.Index);
                 }
             };
 
@@ -371,7 +380,7 @@ namespace CompInfo
                 string fileName = file ? Path.GetFileName(item.Text) : "";
                 if (file && string.IsNullOrEmpty(fileName)) fileName = item.Text;
                 int index = details.Rows.Add(file ? FileIcon(item.FilePath) : null, item.FileType, match, fileName,
-                    file ? openFileIcon : null, file ? openFolderIcon : null);
+                    file ? openFileIcon : null, file ? openFolderIcon : null, file ? deleteIcon : null);
                 DataGridViewRow row = details.Rows[index];
                 row.Tag = item;
                 if (file) row.Cells[2].Tag = FileChips.Parse(match);
@@ -382,6 +391,7 @@ namespace CompInfo
                     row.Cells[3].ToolTipText = item.Text;
                     row.Cells[4].ToolTipText = L.T("Открыть");
                     row.Cells[5].ToolTipText = L.T("Папка");
+                    row.Cells[6].ToolTipText = L.T("Удалить (Delete)");
                 }
                 if (item.FileType.Length > 0)
                 {
@@ -403,6 +413,7 @@ namespace CompInfo
             details.Columns[3].Visible = files;
             details.Columns[4].Visible = files;
             details.Columns[5].Visible = files;
+            details.Columns[6].Visible = files;
         }
 
         static DataGridViewImageColumn ActionIconColumn(int width)
@@ -443,6 +454,46 @@ namespace CompInfo
                 }
             }
             catch (Exception e) { Ui.Error(FindForm(), L.T("Не удалось открыть: ") + e.Message); }
+        }
+
+        void DeleteDetail(int rowIndex)
+        {
+            SecurityDetail item = details.Rows[rowIndex].Tag as SecurityDetail;
+            DataGridViewRow checkRow = grid.CurrentRow;
+            SecurityCheck check = checkRow == null ? null : checkRow.Tag as SecurityCheck;
+            if (item == null || item.FilePath.Length == 0 || check == null || running) return;
+            string name = Path.GetFileName(item.Text);
+            if (Ui.Ask(FindForm(), L.T("Удаление документа"),
+                L.F("Удалить «{0}» безвозвратно? Файл не попадёт в корзину, восстановить его будет нельзя.", name) + "\r\n\r\n" + item.Text,
+                Glyph.Delete, Theme.Bad, L.T("Удалить"), L.T("Отмена")) != 0) return;
+            try
+            {
+                SecurityAudit.DeleteDocument(item.FilePath);
+            }
+            catch (FileNotFoundException) { }
+            catch (Exception e)
+            {
+                Ui.Error(FindForm(), L.T("Не удалось удалить: ") + e.Message);
+                return;
+            }
+            check.Items.Remove(item);
+            if (check.ScanSummary == null) check.ScanSummary = check.Summary;
+            check.DeletedFiles++;
+            bool anyLeft = false;
+            foreach (SecurityDetail left in check.Items) if (left.FilePath.Length > 0) { anyLeft = true; break; }
+            if (!anyLeft && check.Level == SecurityLevel.Bad)
+            {
+                check.Level = SecurityLevel.Warning;
+                check.Summary = L.F("Найденные документы удалены ({0}). Запустите проверку снова, чтобы убедиться.", check.DeletedFiles);
+            }
+            else check.Summary = check.ScanSummary + L.F("; удалено: {0}", check.DeletedFiles);
+            checkRow.Cells[0].Value = icons[check.Level];
+            checkRow.Cells[2].Value = check.Summary;
+            checkRow.Cells[2].Style.ForeColor = ColorOf(check.Level);
+            int keep = Math.Min(rowIndex, details.Rows.Count - 2);
+            ShowDetails();
+            if (keep >= 0 && keep < details.Rows.Count) details.CurrentCell = details.Rows[keep].Cells[2];
+            status.Set(Glyph.Check, L.T("Удалён файл: ") + name, Theme.Good);
         }
 
         static Color ColorOf(SecurityLevel level)

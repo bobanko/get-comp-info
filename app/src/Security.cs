@@ -43,6 +43,9 @@ namespace CompInfo
     {
         public string Key, Title, Summary, Details, ActionKey;
         public SecurityLevel Level;
+        // Files the user deleted from this check's list, and the summary the scan gave before that.
+        public int DeletedFiles;
+        public string ScanSummary;
         public readonly List<SecurityDetail> Items = new List<SecurityDetail>();
 
         public SecurityCheck(string key, string title, SecurityLevel level, string summary, string details)
@@ -348,6 +351,31 @@ namespace CompInfo
         {
             AuditStep step = new AuditStep("onedrive", "OneDrive", CheckOneDrive);
             return Read(step, null);
+        }
+
+        // Deletes a found document for good, bypassing the Recycle Bin: the scan checks the bin too.
+        // A file found in the bin ($R...) takes its $I... record along, so the bin shows no empty entry.
+        public static void DeleteDocument(string path)
+        {
+            FileInfo file = new FileInfo(path);
+            if (!file.Exists) throw new FileNotFoundException(L.T("Файл больше не существует."), path);
+            if ((file.Attributes & FileAttributes.ReadOnly) != 0) file.Attributes &= ~FileAttributes.ReadOnly;
+            file.Delete();
+            string info = RecycleInfoFile(path);
+            if (info != null)
+            {
+                try { if (File.Exists(info)) File.Delete(info); }
+                catch (Exception) { }
+            }
+        }
+
+        internal static string RecycleInfoFile(string path)
+        {
+            string name = Path.GetFileName(path) ?? "";
+            string folder = Path.GetDirectoryName(path) ?? "";
+            if (!name.StartsWith("$R", StringComparison.OrdinalIgnoreCase)) return null;
+            if (folder.IndexOf(@"\$Recycle.Bin\", StringComparison.OrdinalIgnoreCase) < 0) return null;
+            return Path.Combine(folder, "$I" + name.Substring(2));
         }
 
         public static void DisableOneDriveSync()

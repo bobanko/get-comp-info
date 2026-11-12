@@ -40,6 +40,7 @@ namespace CompInfo
             Run("cloud state", CloudStateFile);
             Run("computer names match PowerShell", ComputerNames);
             Run("security document scan", SecurityDocumentScan);
+            Run("deleting found documents", DocumentDeletion);
             Run("document search", DocumentSearchFiles);
             Run("standalone SUSpector", StandaloneSuspector);
             Run("SUSpector update install", SuspectorInstall);
@@ -279,6 +280,28 @@ namespace CompInfo
                 Check(ComputerNaming.MatchesPolicy(name), "valid generic hostname policy: " + name);
             foreach (string name in new[] { "A-123-PC", "ABCD-123-PC", "AA-12-PC", "AA-123-", "AA-123-A-", "aa-123-PC", "AA-123-A_B", "ABC-123-TOO-LONG" })
                 Check(!ComputerNaming.MatchesPolicy(name), "invalid generic hostname policy: " + name);
+        }
+
+        static void DocumentDeletion()
+        {
+            Check(SecurityAudit.RecycleInfoFile(@"C:\$Recycle.Bin\S-1-5-21-1\$RAB12CD.docx") == @"C:\$Recycle.Bin\S-1-5-21-1\$IAB12CD.docx",
+                "a file in the bin takes its $I record along");
+            Check(SecurityAudit.RecycleInfoFile(@"C:\Users\me\$Report.docx") == null && SecurityAudit.RecycleInfoFile(@"C:\Users\me\a.docx") == null,
+                "ordinary files have no bin record");
+            string dir = TempDir();
+            try
+            {
+                string doc = Path.Combine(dir, "ДСК отчёт.docx");
+                File.WriteAllText(doc, "fixture", Encoding.UTF8);
+                File.SetAttributes(doc, FileAttributes.ReadOnly);
+                SecurityAudit.DeleteDocument(doc);
+                Check(!File.Exists(doc), "a read-only document is deleted");
+                bool missing = false;
+                try { SecurityAudit.DeleteDocument(doc); }
+                catch (FileNotFoundException) { missing = true; }
+                Check(missing, "a file that is already gone is reported");
+            }
+            finally { Directory.Delete(dir, true); }
         }
 
         static void SecurityDocumentScan()
