@@ -69,16 +69,12 @@ namespace CompInfo
             List<string> quoted = new List<string>();
             foreach (string d in dns) quoted.Add(PowerShell.Quote(d));
             s.Append("$ip = " + PowerShell.Quote(ip) + "; $prefix = " + prefixLength + "; $gateway = " + PowerShell.Quote(gateway) + "; $dns = @(" + string.Join(", ", quoted) + ")\n");
-            // A static address cannot be stored while DHCP is still enabled on the interface
-            // ("Inconsistent parameters PolicyStore PersistentStore and Dhcp Enabled").
-            s.Append("try { Set-NetIPInterface -InterfaceIndex $index -AddressFamily IPv4 -Dhcp Disabled -ErrorAction Stop }\n" +
-                     "catch { throw \"Не удалось отключить DHCP на адаптере '$($adapter.Name)': $($_.Exception.Message)\" }\n");
-            s.Append("try { Get-NetIPAddress -InterfaceIndex $index -AddressFamily IPv4 -ErrorAction SilentlyContinue | Remove-NetIPAddress -Confirm:$false -ErrorAction Stop }\n" +
-                     "catch { throw \"Не удалось удалить прежний IPv4-адрес адаптера '$($adapter.Name)': $($_.Exception.Message)\" }\n");
-            s.Append("try { Get-NetRoute -InterfaceIndex $index -AddressFamily IPv4 -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | Remove-NetRoute -Confirm:$false -ErrorAction Stop }\n" +
-                     "catch { throw \"Не удалось удалить прежний маршрут по умолчанию адаптера '$($adapter.Name)': $($_.Exception.Message)\" }\n");
-            s.Append("try { New-NetIPAddress -InterfaceIndex $index -IPAddress $ip -PrefixLength $prefix -DefaultGateway $gateway -ErrorAction Stop | Out-Null }\n" +
-                     "catch { throw \"Не удалось назначить адрес $ip/$prefix и шлюз $gateway адаптеру '$($adapter.Name)': $($_.Exception.Message)\" }\n");
+            // netsh, not Set-NetIPInterface + New-NetIPAddress: on an adapter without a cable
+            // Set-NetIPInterface switches DHCP off only until reboot, and New-NetIPAddress then refuses with
+            // "Inconsistent parameters PolicyStore PersistentStore and Dhcp Enabled". netsh switches DHCP off,
+            // replaces previous addresses and gateways and stores the result permanently.
+            s.Append("$netshOutput = netsh interface ipv4 set address \"name=$index\" source=static \"address=$ip/$prefix\" \"gateway=$gateway\" gwmetric=256\n" +
+                     "if ($LASTEXITCODE -ne 0) { throw \"Не удалось назначить адрес $ip/$prefix и шлюз $gateway адаптеру '$($adapter.Name)': $((@($netshOutput) -join ' ').Trim())\" }\n");
             s.Append("try { Set-DnsClientServerAddress -InterfaceIndex $index -ServerAddresses $dns -ErrorAction Stop }\n" +
                      "catch { throw \"IP-адрес назначен, но не удалось установить DNS $($dns -join ', '): $($_.Exception.Message)\" }\n");
             return s.ToString();

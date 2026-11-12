@@ -54,6 +54,7 @@ function Set-DnsClientServerAddress {
     $script:calls.Add('dns')
 }
 function New-NetIPAddress { throw 'DHCP must not assign a static IP' }
+function netsh { throw 'DHCP must not assign a static IP' }
 $isAdministrator = $true
 Invoke-SelectedNetworkConfiguration -Adapter ([pscustomobject]@{ ifIndex = 7 }) -UseDhcp
 Assert-True (($script:calls -join ',') -eq 'enable,route:PersistentStore,ip:PersistentStore,route:ActiveStore,ip:ActiveStore,dhcp,dns') 'Incomplete reset'
@@ -65,20 +66,30 @@ $script:calls.Clear()
 Invoke-NetworkConfiguration -InterfaceIndex 7 -UseDhcp
 Assert-True (($script:calls -join ',') -eq 'enable,dhcp,dns') 'Empty configuration reset failed'
 
-# A static address must switch DHCP off before it is assigned, otherwise Windows refuses
-# with "Inconsistent parameters PolicyStore PersistentStore and Dhcp Enabled".
-function Get-NetIPAddress { param($InterfaceIndex, $AddressFamily, $ErrorAction) [pscustomobject]@{ InterfaceIndex = 7; AddressFamily = 'IPv4'; PrefixOrigin = 'Manual'; Store = 'Active' } }
-function Get-NetRoute { param($InterfaceIndex, $AddressFamily, $DestinationPrefix, $ErrorAction) }
-function Set-NetIPInterface {
-    param($InterfaceIndex, $AddressFamily, $Dhcp, $ErrorAction)
-    Assert-True ($InterfaceIndex -eq 7 -and $AddressFamily -eq 'IPv4') 'Wrong DHCP target'
-    $script:calls.Add('dhcp:' + $Dhcp)
+# A static address goes through netsh: Set-NetIPInterface + New-NetIPAddress fail on an adapter
+# without a cable with "Inconsistent parameters PolicyStore PersistentStore and Dhcp Enabled".
+function Set-NetIPInterface { throw 'Static setup must not depend on Set-NetIPInterface' }
+function New-NetIPAddress { throw 'Static setup must not depend on New-NetIPAddress' }
+function netsh {
+    $script:calls.Add('netsh:' + ($args -join ' '))
+    $global:LASTEXITCODE = 0
 }
-function New-NetIPAddress { param($InterfaceIndex, $IPAddress, $PrefixLength, $DefaultGateway, $ErrorAction) $script:calls.Add('static') }
-function Set-DnsClientServerAddress { param($InterfaceIndex, $ServerAddresses, $ErrorAction) $script:calls.Add('dns') }
+function Set-DnsClientServerAddress {
+    param($InterfaceIndex, $ServerAddresses, $ErrorAction)
+    Assert-True ($InterfaceIndex -eq 7 -and ($ServerAddresses -join ',') -eq '10.0.0.2') 'Wrong DNS'
+    $script:calls.Add('dns')
+}
 $script:calls.Clear()
 Invoke-NetworkConfiguration -InterfaceIndex 7 -IpAddress '10.0.0.5' -PrefixLength 24 -Gateway '10.0.0.1' -DnsServers @('10.0.0.2')
-Assert-True (($script:calls -join ',') -eq 'enable,dhcp:Disabled,ip:Active,static,dns') ('Static order wrong: ' + ($script:calls -join ','))
+Assert-True (($script:calls -join ',') -eq 'enable,netsh:interface ipv4 set address name=7 source=static address=10.0.0.5/24 gateway=10.0.0.1 gwmetric=256,dns') ('Static setup wrong: ' + ($script:calls -join ','))
+
+# A netsh failure stops before DNS and shows netsh's own message.
+function netsh { 'The parameter is incorrect.'; $global:LASTEXITCODE = 1 }
+$script:calls.Clear()
+$failure = $null
+try { Invoke-NetworkConfiguration -InterfaceIndex 7 -IpAddress '10.0.0.5' -PrefixLength 24 -Gateway '10.0.0.1' -DnsServers @('10.0.0.2') } catch { $failure = $_.Exception.Message }
+Assert-True ($failure -like '*10.0.0.5/24*The parameter is incorrect.*') ('netsh failure not reported: ' + $failure)
+Assert-True (($script:calls -join ',') -eq 'enable') ('Continued after netsh failure: ' + ($script:calls -join ','))
 
 # Exercise the UAC handoff without launching or changing anything.
 $isAdministrator = $false

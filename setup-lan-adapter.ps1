@@ -78,36 +78,14 @@ function Invoke-NetworkConfiguration {
         return
     }
 
-    # A static address cannot be stored while DHCP is still enabled on the interface
-    # ("Inconsistent parameters PolicyStore PersistentStore and Dhcp Enabled").
-    try {
-        Set-NetIPInterface -InterfaceIndex $InterfaceIndex -AddressFamily IPv4 -Dhcp Disabled -ErrorAction Stop
-    }
-    catch {
-        throw "Не удалось отключить DHCP на адаптере '$($networkAdapter.Name)': $($_.Exception.Message)"
-    }
-
-    try {
-        Get-NetIPAddress -InterfaceIndex $InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-            Remove-NetIPAddress -Confirm:$false -ErrorAction Stop
-    }
-    catch {
-        throw "Не удалось удалить прежний IPv4-адрес адаптера '$($networkAdapter.Name)': $($_.Exception.Message)"
-    }
-
-    try {
-        Get-NetRoute -InterfaceIndex $InterfaceIndex -AddressFamily IPv4 -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
-            Remove-NetRoute -Confirm:$false -ErrorAction Stop
-    }
-    catch {
-        throw "Не удалось удалить прежний маршрут по умолчанию адаптера '$($networkAdapter.Name)': $($_.Exception.Message)"
-    }
-
-    try {
-        New-NetIPAddress -InterfaceIndex $InterfaceIndex -IPAddress $IpAddress -PrefixLength $PrefixLength -DefaultGateway $Gateway -ErrorAction Stop | Out-Null
-    }
-    catch {
-        throw "Не удалось назначить адрес $IpAddress/$PrefixLength и шлюз $Gateway адаптеру '$($networkAdapter.Name)': $($_.Exception.Message)"
+    # netsh, not Set-NetIPInterface + New-NetIPAddress: on an adapter without a cable
+    # Set-NetIPInterface switches DHCP off only until reboot, and New-NetIPAddress then refuses with
+    # "Inconsistent parameters PolicyStore PersistentStore and Dhcp Enabled". netsh switches DHCP off,
+    # replaces previous addresses and gateways and stores the result permanently.
+    # Gateway metric 256 is the one New-NetIPAddress used.
+    $netshOutput = netsh interface ipv4 set address "name=$InterfaceIndex" source=static "address=$IpAddress/$PrefixLength" "gateway=$Gateway" gwmetric=256
+    if ($LASTEXITCODE -ne 0) {
+        throw "Не удалось назначить адрес $IpAddress/$PrefixLength и шлюз $Gateway адаптеру '$($networkAdapter.Name)': $((@($netshOutput) -join ' ').Trim())"
     }
 
     try {
