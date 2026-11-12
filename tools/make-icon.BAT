@@ -18,3 +18,6 @@ rem The alternative picture of «О программе», shown only with the Ru
 obj\MakeIcon.exe app\face-ru-source.png --face-png=app\face-ru.png
 if errorlevel 1 exit /b 1
 obj\MakeIcon.exe app\suspector-source.png app\suspector.ico obj\suspector-icon-preview.png --small=app\suspector-small-source.png --small-up-to=64 --dark=97 --face-png=app\suspector.png
+if errorlevel 1 exit /b 1
+rem youSBee.exe: app\yousbee.ico and app\yousbee.png (its «О программе») from app\yousbee-source.png.
+obj\MakeIcon.exe app\yousbee-source.png app\yousbee.ico obj\yousbee-icon-preview.png --face-png=app\yousbee.png

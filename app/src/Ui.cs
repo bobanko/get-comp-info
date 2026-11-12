@@ -365,6 +365,10 @@ namespace CompInfo
         public static Bitmap SuspectorImage { get { return suspectorImage ?? (suspectorImage = Resource("CompInfo.suspector.png")); } }
         static Bitmap suspectorImage;
 
+        // The picture of youSBee for its «О программе»; only youSBee.exe embeds it.
+        public static Bitmap YouSBeeImage { get { return youSBeeImage ?? (youSBeeImage = Resource("CompInfo.yousbee.png")); } }
+        static Bitmap youSBeeImage;
+
         // Pictures embedded by tools\build.BAT (made by tools\make-icon.BAT).
         static Bitmap Resource(string name)
         {
@@ -430,7 +434,7 @@ namespace CompInfo
         }
     }
 
-    // «О программе» of comp-info (AboutPage) and SUSpector (SuspectorAboutDialog), as in SupraWeed:
+    // «О программе» of comp-info (AboutPage) and the standalone programs (StandaloneAboutDialog), as in SupraWeed:
     // the picture on the left; name, version, sections and how to reach the developer on the right.
     public static class About
     {
