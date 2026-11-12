@@ -189,6 +189,7 @@ namespace CompInfo
             // ---------- Обновление программы ----------
             "Обновление программы", "Оновлення програми", "Program update",
             "Обновление", "Оновлення", "Update",
+            "Обновление SUSpector", "Оновлення SUSpector", "SUSpector update",
             "Проверяет новую версию в облаке и устанавливает её в эту копию программы. Данные (папка data) не меняются.",
             "Перевіряє нову версію у хмарі та встановлює її в цю копію програми. Дані (папка data) не змінюються.",
             "Checks for a new version in the cloud and installs it into this copy of the program. Data (the data folder) is not changed.",
@@ -203,6 +204,7 @@ namespace CompInfo
             " от ", " від ", " of ",
             "\r\nВерсия в облаке: ", "\r\nВерсія у хмарі: ", "\r\nVersion in the cloud: ",
             "Установлена последняя версия.", "Встановлено останню версію.", "The latest version is installed.",
+            "Установлена более новая версия SUSpector.", "Встановлено новішу версію SUSpector.", "A newer SUSpector version is installed.",
             "Что нового:\r\n", "Що нового:\r\n", "What's new:\r\n",
             "\r\n   и ещё ", "\r\n   і ще ", "\r\n   and more: ",
             "Это копия программы для разработки (есть папка .git). Обновляйте её через Git.", "Це копія програми для розробки (є папка .git). Оновлюйте її через Git.", "This is a development copy (it has a .git folder). Update it with Git.",
@@ -223,6 +225,14 @@ namespace CompInfo
             "\r\nПерезапустите программу, чтобы работать в новой версии.", "\r\nПерезапустіть програму, щоб працювати в новій версії.", "\r\nRestart the program to use the new version.",
             "Обновление не выполнено: ", "Оновлення не виконано: ", "Update failed: ",
             "Не удалось перезапустить программу: ", "Не вдалося перезапустити програму: ", "Could not restart the program: ",
+            "Архив SUSpector содержит лишние файлы.", "Архів SUSpector містить зайві файли.", "The SUSpector archive contains extra files.",
+            "Архив SUSpector должен содержать один файл программы.", "Архів SUSpector має містити один файл програми.", "The SUSpector archive must contain one program file.",
+            "Не найден установленный SUSpector.exe.", "Не знайдено встановлений SUSpector.exe.", "The installed SUSpector.exe was not found.",
+            "Новый SUSpector.exe записан с ошибкой.", "Новий SUSpector.exe записано з помилкою.", "The new SUSpector.exe was written incorrectly.",
+            "SUSpector обновлён до версии ", "SUSpector оновлено до версії ", "SUSpector was updated to version ",
+            ". Перезапустите программу.", ". Перезапустіть програму.", ". Restart the program.",
+            "Облако вернуло недопустимый номер версии.", "Хмара повернула неприпустимий номер версії.", "The cloud returned an invalid version number.",
+            "Опубликованных версий SUSpector пока нет.","Опублікованих версій SUSpector поки немає.", "No SUSpector versions have been published yet.",
 
             // ---------- Сбор информации ----------
             "Несколько старых записей с таким именем. Сначала устраните дубликаты.", "Кілька старих записів з таким ім'ям. Спочатку усуньте дублікати.", "Several old records have this name. Remove the duplicates first.",

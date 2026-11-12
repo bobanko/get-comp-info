@@ -141,8 +141,13 @@ namespace CompInfo
                 Rebuild();
             };
             Button about = Ui.Secondary(L.T("О программе"), Glyph.Info, Font);
-            about.Anchor = AnchorStyles.Right;
             about.Click += delegate { using (SuspectorAboutDialog dialog = new SuspectorAboutDialog()) dialog.ShowDialog(this); };
+            Button update = Ui.Secondary(L.T("Обновление"), Glyph.Update, Font);
+            update.Click += delegate { using (SuspectorUpdateDialog dialog = new SuspectorUpdateDialog()) dialog.ShowDialog(this); };
+            FlowLayoutPanel footerActions = Ui.Row();
+            footerActions.Anchor = AnchorStyles.Right;
+            footerActions.Controls.Add(update);
+            footerActions.Controls.Add(about);
 
             TableLayoutPanel footer = new TableLayoutPanel();
             footer.Dock = DockStyle.Bottom;
@@ -158,7 +163,7 @@ namespace CompInfo
             footer.RowStyles.Add(new RowStyle(SizeType.Absolute, em * 3 / 2));
             footer.Controls.Add(language, 0, 0);
             footer.Controls.Add(theme, 1, 0);
-            footer.Controls.Add(about, 3, 0);
+            footer.Controls.Add(footerActions, 3, 0);
             Controls.Add(footer);
 
             Shown += delegate { page.Opened(); };
@@ -247,6 +252,8 @@ namespace CompInfo
             Application.SetCompatibleTextRenderingDefault(false);
             Application.ThreadException += delegate (object sender, ThreadExceptionEventArgs e) { Crash(e.Exception); };
             AppDomain.CurrentDomain.UnhandledException += delegate (object sender, UnhandledExceptionEventArgs e) { Crash(e.ExceptionObject as Exception); };
+            System.Net.ServicePointManager.SecurityProtocol |= System.Net.SecurityProtocolType.Tls12;
+            SuspectorUpdate.RemoveLeftovers(Application.ExecutablePath);
 
             Theme.Choice = Option(args, "--theme", 1) ?? SuspectorSettings.Get("theme", "system");
             L.Choice = Option(args, "--language", 1) ?? SuspectorSettings.Get("language", "system");

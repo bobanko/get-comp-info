@@ -41,6 +41,7 @@ namespace CompInfo
             Run("computer names match PowerShell", ComputerNames);
             Run("security document scan", SecurityDocumentScan);
             Run("standalone SUSpector", StandaloneSuspector);
+            Run("SUSpector update install", SuspectorInstall);
             Run("record differences and merge", Differences);
             Run("program files and versions", ProgramFiles);
             Run("program update install", InstallRelease);
@@ -368,6 +369,39 @@ namespace CompInfo
             Check(assembly.GetType("CompInfo.MainForm", false) == null && assembly.GetType("CompInfo.DatabasePage", false) == null &&
                 assembly.GetType("CompInfo.SyncPage", false) == null && assembly.GetType("CompInfo.CloudClient", false) == null,
                 "SUSpector excludes the toolbox, device database and cloud UI");
+        }
+
+        static void SuspectorInstall()
+        {
+            string dir = TempDir();
+            try
+            {
+                Dictionary<string, string> exe = new Dictionary<string, string> { { "SUSpector.exe", "exe v2" } };
+                // Browsers save a repeated download under another name: the running file is replaced, whatever it is called.
+                string target = Path.Combine(dir, "SUSpector (1).exe");
+                File.WriteAllText(target, "exe v1");
+
+                bool refused = false;
+                try { SuspectorUpdate.Install(target, MakeRelease(dir, "2026.11.12.2", exe, "evil.ps1"), "2026.11.12.2"); } catch (InvalidDataException) { refused = true; }
+                Check(refused && File.ReadAllText(target) == "exe v1", "SUSpector: an archive with an extra file must change nothing");
+                refused = false;
+                try { SuspectorUpdate.Install(target, MakeRelease(dir, "2026.11.12.2", new Dictionary<string, string> { { "comp-info.exe", "x" } }, null), "2026.11.12.2"); } catch (InvalidDataException) { refused = true; }
+                Check(refused && File.ReadAllText(target) == "exe v1", "SUSpector: a toolbox archive must be refused");
+                refused = false;
+                try { SuspectorUpdate.Install(target, MakeRelease(dir, "2026.11.12.2", exe, null), "2026.11.12.3"); } catch (InvalidDataException) { refused = true; }
+                Check(refused && File.ReadAllText(target) == "exe v1", "SUSpector: wrong version must be refused");
+
+                SuspectorUpdate.Install(target, MakeRelease(dir, "2026.11.12.2", exe, null), "2026.11.12.2");
+                Check(File.ReadAllText(target) == "exe v2", "SUSpector: new executable installed under the running name");
+                Check(File.ReadAllText(target + ".old") == "exe v1", "SUSpector: previous executable kept until restart");
+                Check(!File.Exists(Path.Combine(dir, "SUSpector.exe")), "SUSpector: no second copy next to it");
+                SuspectorUpdate.RemoveLeftovers(target);
+                Check(!File.Exists(target + ".old"), "SUSpector: leftovers removed after restart");
+
+                Check(SuspectorUpdate.IsVersion("2026.11.12.1") && !SuspectorUpdate.IsVersion("../x") && !SuspectorUpdate.IsVersion("2026.11.12.1/../a") && !SuspectorUpdate.IsVersion(null),
+                    "SUSpector: only release version numbers go into the download URL");
+            }
+            finally { Directory.Delete(dir, true); }
         }
 
         static void Differences()
