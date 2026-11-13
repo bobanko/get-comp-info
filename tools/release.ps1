@@ -88,9 +88,7 @@ try {
     if ((Invoke-PowerShellFile (Join-Path $PSScriptRoot 'build-release.ps1') @('-Version', $version)) -ne 0) {
         throw 'Сборка архива не удалась.'
     }
-    if ((Invoke-PowerShellFile (Join-Path $PSScriptRoot 'build-suspector-release.ps1') @('-Version', $version)) -ne 0) {
-        throw 'Сборка архива SUSpector не удалась.'
-    }
+    # SUSpector has its own version and is released by its own tag suspector-v<version>: not part of this release.
 
     Write-Host ''
     Write-Host "Будет выпущена версия $version. Изменения с $($previousTag):" -ForegroundColor Cyan

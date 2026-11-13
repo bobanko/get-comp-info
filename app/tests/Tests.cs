@@ -462,7 +462,9 @@ namespace CompInfo
             Check(File.Exists(path), "SUSpector.exe was built");
             if (!File.Exists(path)) return;
             System.Diagnostics.FileVersionInfo version = System.Diagnostics.FileVersionInfo.GetVersionInfo(path);
-            Check(version.FileVersion == AppVersion.Text && version.ProductName == "SUSpector", "SUSpector version and product metadata");
+            // SUSpector has its own version (app\SUSpector.version), not the toolbox one the tests are built with.
+            string expected = File.ReadAllText(Path.GetFullPath(Path.Combine(here, @"..\app\SUSpector.version"))).Trim();
+            Check(version.FileVersion == expected && version.ProductName == "SUSpector", "SUSpector version and product metadata: " + version.FileVersion + " / " + expected);
             System.Reflection.Assembly assembly = System.Reflection.Assembly.LoadFrom(path);
             Check(assembly.GetType("CompInfo.SuspectorProgram", false) != null && assembly.GetType("CompInfo.SecurityPage", false) != null,
                 "SUSpector contains the security application");
