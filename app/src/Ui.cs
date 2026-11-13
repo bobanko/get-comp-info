@@ -42,19 +42,36 @@ namespace CompInfo
         {
             Bitmap b = new Bitmap(size, size);
             using (Graphics g = Graphics.FromImage(b))
-            using (Font f = Font(size * 0.86f))
-            {
-                g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-                TextRenderer.DrawText(g, glyph, f, new Rectangle(0, 0, size, size), color, Color.Transparent,
-                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
-            }
+                Fill(g, glyph, new RectangleF(0, 0, size, size), color, size * 0.86f);
             return b;
         }
 
         public static void Draw(Graphics g, string glyph, Rectangle r, Color color, float pixels)
         {
-            using (Font f = Font(pixels))
-                TextRenderer.DrawText(g, glyph, f, r, color, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+            Fill(g, glyph, r, color, pixels);
+        }
+
+        // The glyph is drawn as a vector shape: its outline from the font, filled with anti-aliasing. GDI text
+        // (TextRenderer) has no transparency, so on a transparent bitmap its soft edge pixels were blended with
+        // black and gave the icons a dark fringe on light backgrounds.
+        static void Fill(Graphics g, string glyph, RectangleF r, Color color, float pixels)
+        {
+            using (FontFamily font = new FontFamily(Family))
+            using (System.Drawing.Drawing2D.GraphicsPath path = new System.Drawing.Drawing2D.GraphicsPath(System.Drawing.Drawing2D.FillMode.Winding))
+            using (StringFormat format = new StringFormat(StringFormat.GenericTypographic))
+            using (SolidBrush brush = new SolidBrush(color))
+            {
+                format.Alignment = StringAlignment.Center;
+                format.LineAlignment = StringAlignment.Center;
+                path.AddString(glyph, font, (int)FontStyle.Regular, pixels, r, format);
+                System.Drawing.Drawing2D.SmoothingMode smoothing = g.SmoothingMode;
+                System.Drawing.Drawing2D.PixelOffsetMode offset = g.PixelOffsetMode;
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+                g.FillPath(brush, path);
+                g.SmoothingMode = smoothing;
+                g.PixelOffsetMode = offset;
+            }
         }
 
         // A filled green shield with a white check: administrator access is already available.
