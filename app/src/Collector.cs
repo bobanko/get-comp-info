@@ -158,5 +158,42 @@ namespace CompInfo
             Files.WriteJson(FilePath, record);
             return record;
         }
+
+        // Values the program has just set; null fields are taken from the computer as it is now.
+        public class Expected
+        {
+            public string Hostname;      // the name after the restart
+            public bool? PartOfDomain;
+            public string Domain;
+            public bool SetIp;           // use Ip below (null: no address yet, e.g. DHCP without a lease)
+            public string Ip;
+            public ICollection<string> OldIps;   // addresses the computer no longer has, not to be saved again
+        }
+
+        // Saves the record of this computer right after the program changed its name, domain or address, so the
+        // local database (and, after synchronization, the colleagues' free addresses) knows the new values at once.
+        // The comment and, if the record exists, the user are kept: the change is not about them.
+        // Returns the saved record, or null with the reason when the record has to be saved through «Сбор информации».
+        public static JsonObject SaveAfterChange(string dataPath, Expected e, out string skipped)
+        {
+            skipped = null;
+            Collection c = Start(dataPath);
+            if (c.Legacy != null) { skipped = L.T("есть старая запись без устойчивого ID, подтвердите её в «Сборе информации»"); return null; }
+            if (c.PreviousError != null) { skipped = L.T("запись не читается: ") + c.PreviousError; return null; }
+            c.Apply(e);
+            return c.Save(c.PreviousComment);
+        }
+
+        public void Apply(Expected e)
+        {
+            // The program may run as the administrator from the UAC window: the user of the computer stays.
+            if (Previous != null && !string.IsNullOrEmpty(Previous.Text("username"))) Snapshot.Username = Previous.Text("username");
+            if (e == null) return;
+            if (!string.IsNullOrEmpty(e.Hostname)) Snapshot.Hostname = e.Hostname;
+            if (e.PartOfDomain.HasValue) Snapshot.PartOfDomain = e.PartOfDomain.Value;
+            if (e.Domain != null) Snapshot.Domain = e.Domain;
+            if (e.SetIp) Snapshot.Ip = string.IsNullOrEmpty(e.Ip) ? null : e.Ip;
+            else if (e.OldIps != null && Snapshot.Ip != null && e.OldIps.Contains(Snapshot.Ip)) Snapshot.Ip = null;
+        }
     }
 }

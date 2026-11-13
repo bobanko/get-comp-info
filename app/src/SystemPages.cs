@@ -68,6 +68,27 @@ namespace CompInfo
         }
     }
 
+    // The record of this computer in the local database, saved right after a change of name, domain or address.
+    public static class RecordUpdate
+    {
+        // A line for the status of the page: saved, or why it was not. Runs on a worker thread.
+        public static string Save(Collection.Expected expected, out bool saved)
+        {
+            saved = false;
+            try
+            {
+                string skipped;
+                JsonObject record = Collection.SaveAfterChange(AppPaths.Data, expected, out skipped);
+                if (record == null) return L.T("Запись в локальной базе не обновлена: ") + skipped + ".";
+                saved = true;
+                string ip = record.Text("ip");
+                return L.T("Запись в локальной базе обновлена: ") + record.Text("hostname") + (string.IsNullOrEmpty(ip) ? "" : ", " + ip) +
+                    L.T(". Синхронизируйте базу, когда будет интернет.");
+            }
+            catch (Exception e) { return L.T("Запись в локальной базе не обновлена: ") + e.Message; }
+        }
+    }
+
     // «Настройка сети»: static address by the office profiles or DHCP (setup-lan-adapter.ps1).
     public class LanPage : Page
     {
@@ -474,8 +495,22 @@ namespace CompInfo
             {
                 int prefixLength = l == null ? 0 : l.PrefixLength;
                 List<string> dns = l == null ? new List<string>() : l.DnsServers;
-                await Task.Run(delegate { LanSetup.Apply(a.Index, l == null, ip, prefixLength, gateway, dns); });
+                LanSetup.State before = null;
+                await Task.Run(delegate
+                {
+                    try { before = LanSetup.Read(a.Guid); } catch (Exception) { }
+                    LanSetup.Apply(a.Index, l == null, ip, prefixLength, gateway, dns);
+                });
                 status.Set(Glyph.Check, L.T("Настройки сети применены.") + (l == null ? L.T(" Получение настроек от роутера может занять некоторое время.") : ""), Theme.Good);
+                // The new address goes to the record of this computer at once; with DHCP the old static one is dropped.
+                Collection.Expected expected = new Collection.Expected();
+                expected.SetIp = l != null;
+                expected.Ip = ip;
+                if (l == null && before != null && !before.Dhcp && before.Ip.Length > 0) expected.OldIps = new List<string> { before.Ip };
+                bool saved = false;
+                string note = await Task.Run(delegate { return RecordUpdate.Save(expected, out saved); });
+                status.Set(Glyph.Check, L.T("Настройки сети применены.") + (l == null ? L.T(" Получение настроек от роутера может занять некоторое время.") : "") + "\r\n" + note,
+                    saved ? Theme.Good : Theme.Warn);
                 // The reloaded adapter list below shows the new settings under «Сейчас на адаптере».
             }
             catch (OperationCanceledException e) { status.Set(Glyph.Info, e.Message, Theme.Warn); }
@@ -526,6 +561,7 @@ namespace CompInfo
         List<Adapter> wired = new List<Adapter>();
         readonly Dictionary<int, LanSetup.State> wiredStates = new Dictionary<int, LanSetup.State>();
         List<Adapter> staticAdapters = new List<Adapter>();
+        readonly List<string> staticIps = new List<string>();   // their addresses, dropped from the record after the switch to DHCP
         // Addresses Windows found in use on the network during this session, though the database has no owner for them.
         readonly HashSet<string> takenInNetwork = new HashSet<string>(StringComparer.Ordinal);
         JsonObject handoff;   // form filled before the restart with administrator rights
@@ -739,7 +775,11 @@ namespace CompInfo
                 if (matches)
                 {
                     ComputerChange.ClearReceipt();
-                    status.Set(Glyph.Check, L.T("Изменение после перезагрузки подтверждено. Соберите сведения о компьютере, чтобы обновить запись в базе."), Theme.Good);
+                    // The real values after the restart (the address from DHCP, for example) replace the expected ones.
+                    state.Set(Glyph.More, L.T("Обновление записи в локальной базе…"), Theme.Muted);
+                    bool saved = false;
+                    string note = await Task.Run(delegate { return RecordUpdate.Save(null, out saved); });
+                    status.Set(Glyph.Check, L.T("Изменение после перезагрузки подтверждено.") + "\r\n" + note, saved ? Theme.Good : Theme.Warn);
                     Refresh(false);
                     return;
                 }
@@ -857,8 +897,13 @@ namespace CompInfo
             }
             catch (Exception e) { staticAdapters = new List<Adapter>(); status.Set(Glyph.Warning, L.T("Не удалось прочитать сетевые адаптеры: ") + e.Message, Theme.Warn); }
             List<string> names = new List<string>();
+            staticIps.Clear();
             for (int i = 0; i < staticAdapters.Count; i++)
-                names.Add(staticAdapters[i].Name + (states != null && states[i].Ip.Length > 0 && !states[i].Dhcp ? " (" + states[i].Ip + ")" : ""));
+            {
+                bool hasStatic = states != null && states[i].Ip.Length > 0 && !states[i].Dhcp;
+                names.Add(staticAdapters[i].Name + (hasStatic ? " (" + states[i].Ip + ")" : ""));
+                if (hasStatic) staticIps.Add(states[i].Ip);
+            }
             dhcpOnLeave.Text = L.T("Переключить на DHCP: ") + string.Join(", ", names);
             if (localUser.Text.Trim().Length == 0) localUser.Text = admin;
             UpdateRows();
@@ -1222,9 +1267,20 @@ namespace CompInfo
                     return ComputerChange.Apply(r, p);
                 });
                 if (!changed) { status.Set(Glyph.Check, L.T("Компьютер уже имеет это имя. Изменения не требуются."), Theme.Good); return; }
+                // The record gets the values that will be there after the restart: name, domain, address.
+                status.Set(Glyph.More, L.T("Обновление записи в локальной базе…"), Theme.Muted);
+                Collection.Expected expected = new Collection.Expected();
+                expected.Hostname = r.Name;
+                if (r.Operation != "Rename") { expected.PartOfDomain = r.Operation == "Join"; expected.Domain = targetDomain; }
+                if (r.Network != null) { expected.SetIp = true; expected.Ip = r.Network.Ip; }
+                if (r.DhcpAdapters.Count > 0) expected.OldIps = new List<string>(staticIps);
+                bool saved = false;
+                string note = await Task.Run(delegate { return RecordUpdate.Save(expected, out saved); });
+                if (!saved) r.Warnings.Add(note);
                 status.Set(r.Warnings.Count > 0 ? Glyph.Warning : Glyph.Check, L.T("Windows подтвердила команду. Ожидаемое имя: ") + r.Name + L.T("; домен / группа: ") + targetDomain +
                     (r.Network != null ? L.T("; адрес ") + r.Network.Ip : "") +
-                    L.T(".\r\nПосле перезагрузки откройте этот раздел для проверки, затем соберите сведения о компьютере и синхронизируйте базу.") +
+                    L.T(".\r\nПосле перезагрузки откройте этот раздел для проверки: запись в базе обновится ещё раз уже по факту.") +
+                    (saved ? "\r\n" + note : "") +
                     (r.Warnings.Count > 0 ? "\r\n" + string.Join("\r\n", r.Warnings) : ""), r.Warnings.Count > 0 ? Theme.Warn : Theme.Good);
                 if (Ui.Ask(FindForm(), Title, L.T("Для завершения нужна перезагрузка компьютера."), Glyph.Power, Theme.Info, L.T("Перезагрузить сейчас"), L.T("Позже")) == 0) RestartComputer();
             }

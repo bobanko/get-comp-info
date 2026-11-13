@@ -275,6 +275,22 @@ namespace CompInfo
             Check(c.HasChanges("other"), "comment change is a change");
             c.Previous = Json.ParseObject("{\"collectedAt\":\"2020-01-01T00:00:00\"}");
             Check((string)c.Build("", "now")["createdAt"] == "2020-01-01T00:00:00", "legacy createdAt from collectedAt");
+
+            // Saved right after a change made by the program: expected name, domain and address.
+            c.Previous = Json.ParseObject("{\"username\":\"petrenko\",\"comment\":\"кабинет 5\"}");
+            c.Snapshot.Ip = "10.112.171.140"; c.Snapshot.Username = "admin";
+            Collection.Expected join = new Collection.Expected();
+            join.Hostname = "FR-042-PC"; join.PartOfDomain = true; join.Domain = "corp.example"; join.SetIp = true; join.Ip = "10.112.171.132";
+            c.Apply(join);
+            JsonObject after = c.Build(c.PreviousComment, "now");
+            Check(after.Text("hostname") == "FR-042-PC" && (bool)after["partOfDomain"] && after.Text("domain") == "corp.example" && after.Text("ip") == "10.112.171.132",
+                "join: expected name, domain and address");
+            Check(after.Text("username") == "petrenko" && after.Text("comment") == "кабинет 5", "user and comment are kept");
+            Collection.Expected leave = new Collection.Expected();
+            leave.Hostname = "IF-042-PC"; leave.PartOfDomain = false; leave.Domain = "WORKGROUP"; leave.OldIps = new[] { "10.112.171.132" };
+            c.Apply(leave);
+            after = c.Build("", "now");
+            Check(after.Text("hostname") == "IF-042-PC" && !(bool)after["partOfDomain"] && after["ip"] == null, "leave: the old static address is not saved again");
         }
 
         static void CloudStateFile()
