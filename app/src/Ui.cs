@@ -495,17 +495,19 @@ namespace CompInfo
     // the picture on the left; name, version, sections and how to reach the developer on the right.
     public static class About
     {
+        // Address of the toolbox; SUSpector and youSBee have their own (suspector@, yousbee@chagear.top).
         public const string Email = "toolbox@chagear.top";
         public const string WebSite = "chagear.top";
 
         // Builds everything up to the developer's e-mail; the caller adds its own links to the returned column.
         public static TableLayoutPanel Build(Font font, int width, Image picture, string title, string subtitle, string intro, string[] sections, out FlowLayoutPanel text)
         {
-            return Build(font, width, picture, title, Theme.Accent, subtitle, intro, sections, out text);
+            return Build(font, width, picture, title, Theme.Accent, Email, subtitle, intro, sections, out text);
         }
 
         // The title may mark a coloured part in square brackets (TitleText): «[SUS]pector».
-        public static TableLayoutPanel Build(Font font, int width, Image picture, string title, Color highlight, string subtitle, string intro, string[] sections, out FlowLayoutPanel text)
+        public static TableLayoutPanel Build(Font font, int width, Image picture, string title, Color highlight, string email,
+            string subtitle, string intro, string[] sections, out FlowLayoutPanel text)
         {
             int em = font.Height;
             TableLayoutPanel t = new TableLayoutPanel();
@@ -554,9 +556,9 @@ namespace CompInfo
             text.Controls.Add(Line(L.T("Связь с разработчиком"), bold, Theme.Text, width, 0));
             Label copied = Line(L.T("← нажмите, чтобы скопировать"), font, Theme.Muted, width, 0);
             // Service computers have no mail client: a click copies the address instead of opening mailto.
-            text.Controls.Add(LinkRow(font, Glyph.Person, Email, copied, delegate
+            text.Controls.Add(LinkRow(font, Glyph.Person, email, copied, delegate
             {
-                try { Clipboard.SetText(Email); copied.Text = L.T("скопировано ✓"); } catch (Exception) { }
+                try { Clipboard.SetText(email); copied.Text = L.T("скопировано ✓"); } catch (Exception) { }
             }));
             return t;
         }

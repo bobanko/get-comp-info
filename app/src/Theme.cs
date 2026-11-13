@@ -20,6 +20,8 @@ namespace CompInfo
         public static Color[] Rainbow;
         // Folder icons are yellow-orange, like in Explorer.
         public static Color Folder { get { return Dark ? Color.FromArgb(255, 196, 61) : Color.FromArgb(222, 146, 0); } }
+        // Flash drive icons are orange, like the youSBee icon.
+        public static Color Flash { get { return Dark ? Color.FromArgb(255, 170, 60) : Color.FromArgb(232, 126, 4); } }
 
         static Color C(int rgb) { return Color.FromArgb((rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255); }
 

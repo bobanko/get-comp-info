@@ -9,15 +9,18 @@
 
 `tools\build.BAT yousbee` (или без аргументов — вместе с остальными) собирает `youSBee.exe` в корень.
 Версия своя — `app/youSBee.version`, поднимает `tools\update-version.BAT yousbee`.
-Окно, «О программе» (с языком и темой) и запуск общие с SUSpector — `app/src/Standalone.cs`; настройки — `youSBee.ini`
-рядом с программой (тема и язык). Проверка вёрстки без показа окна:
+Окно, «О программе» и запуск общие с SUSpector — `app/src/Standalone.cs`; настройки — `youSBee.ini`
+рядом с программой (тема и язык). Кнопки «Обновить» и «О программе» стоят в правом верхнем углу, по правому краю таблицы;
+у каждой флешки в таблице оранжевый значок. В «О программе» язык и тема — внизу под картинкой, почта — yousbee@chagear.top.
+Проверка вёрстки без показа окна:
 
 ```bat
 youSBee.exe --theme light --language uk --screenshot yousbee.png 1500
 ```
 
 Иконка — `app\yousbee.ico`, картинка «О программе» — `app\yousbee.png`; обе делает `tools\make-icon.BAT`
-из `app\yousbee-source.png` (неоновая пчела-флешка на прозрачном фоне).
+из `app\yousbee-source.png` (неоновая пчела-флешка на прозрачном фоне); размеры до 32 px — из
+`app\yousbee-small-source.png`, оранжевой контурной флешки из шрифта значков (так её видно на панели задач).
 Чтобы поменять — заменить `app\yousbee-source.png`, запустить `tools\make-icon.BAT`, затем `tools\build.BAT yousbee`
 и скопировать `app\yousbee.png` в `chagear-site/public/img/`.
 

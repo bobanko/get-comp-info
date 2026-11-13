@@ -40,7 +40,7 @@ namespace CompInfo
 
             FlowLayoutPanel text;
             TableLayoutPanel t = About.Build(Font, width, L.Code == "ru" ? Ui.FaceRuImage : Ui.FaceImage, MarkedName(L.T("CHAGEAR Тулбокс")),
-                Theme.Dark ? Color.FromArgb(121, 166, 232) : Color.FromArgb(61, 111, 182), L.T("Учёт компьютеров при подготовке и выдаче сотрудникам"),
+                Theme.Dark ? Color.FromArgb(121, 166, 232) : Color.FromArgb(61, 111, 182), About.Email, L.T("Учёт компьютеров при подготовке и выдаче сотрудникам"),
                 L.T("Программа собирает сведения о компьютере (имя, серийный номер, сеть, ESET), хранит их на флешке и синхронизирует ") +
                 L.T("с облачной базой. Здесь же — настройка сети по профилям корпусов, имя компьютера и домен, быстрая проверка связи ") +
                 L.T("и серийные номера USB-накопителей."), Sections, out text);

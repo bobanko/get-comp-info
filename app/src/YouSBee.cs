@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.Windows.Forms;
 
 namespace CompInfo
 {
@@ -14,17 +15,28 @@ namespace CompInfo
         static Color Highlight { get { return Theme.Dark ? Color.FromArgb(245, 184, 46) : Color.FromArgb(180, 122, 0); } }
 
         public YouSBeeForm()
-            : base("you[SBee]", Highlight,
-                L.T("Серийные номера флешек и USB-дисков."),
-                new UsbPage(), AboutDialog)
+            : this(new UsbPage()) { }
+
+        // «Обновить» and «О программе» sit in the top right corner, so the page's own row with «Обновить» is hidden.
+        YouSBeeForm(UsbPage page)
+            : base("you[SBee]", Highlight, L.T("Серийные номера флешек и USB-дисков."), page, AboutDialog, true, RefreshButton(page))
         {
+            page.ShowToolbar = false;
             // A small utility: the table has only a few short columns.
             SizeInEm(31, 21, 28, 16);
         }
 
+        static Button RefreshButton(UsbPage page)
+        {
+            Button refresh = Ui.Secondary(L.T("Обновить"), Glyph.Refresh, Ui.BaseFont);
+            refresh.Click += delegate { page.RefreshList(); };
+            Ui.Keys(refresh, "F5");
+            return refresh;
+        }
+
         static StandaloneAboutDialog AboutDialog()
         {
-            return new StandaloneAboutDialog(Ui.YouSBeeImage, "you[SBee]", Highlight,
+            return new StandaloneAboutDialog(Ui.YouSBeeImage, "you[SBee]", Highlight, "yousbee@chagear.top",
                 L.T("Показывает серийные номера флешек и USB-дисков, чтобы их было удобно переписать или вставить в заявку."), Sections, Settings);
         }
 

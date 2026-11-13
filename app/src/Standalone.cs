@@ -88,7 +88,8 @@ namespace CompInfo
         public virtual void DevicesChanged() { }
     }
 
-    // The window of a standalone program: name, one line about it, the page, and buttons at the bottom.
+    // The window of a standalone program: name, one line about it, the page, and the buttons
+    // at the bottom or in the top right corner, lined up with the right edge of the page.
     public class StandaloneForm : Form
     {
         readonly Page page;
@@ -99,6 +100,9 @@ namespace CompInfo
 
         // name marks its coloured part in square brackets: «[SUS]pector», «you[SBee]».
         public StandaloneForm(string name, Color highlight, string description, Page page, Func<StandaloneAboutDialog> about, params Button[] buttons)
+            : this(name, highlight, description, page, about, false, buttons) { }
+
+        public StandaloneForm(string name, Color highlight, string description, Page page, Func<StandaloneAboutDialog> about, bool buttonsOnTop, params Button[] buttons)
         {
             this.page = page;
             this.about = about;
@@ -113,38 +117,68 @@ namespace CompInfo
             int em = Font.Height;
 
             TitleText title = new TitleText(name, new Font("Segoe UI Semibold", 15f), highlight);
-            title.Dock = DockStyle.Top;
-
             Label line = Ui.Paragraph(description, Font, Theme.Muted);
-            line.Dock = DockStyle.Top;
             line.Padding = new Padding(0, 0, 0, em / 2);
-
-            Panel content = new Panel();
-            content.Dock = DockStyle.Fill;
-            content.Padding = new Padding(em, em * 3 / 4, em, em * 3 / 4);
-            content.BackColor = Theme.Back;
-            content.Controls.Add(page);
-            content.Controls.Add(line);
-            content.Controls.Add(title);
-            Controls.Add(content);
 
             Button aboutButton = Ui.Secondary(L.T("О программе"), Glyph.Info, Font);
             aboutButton.Click += delegate { ShowAbout(); };
             aboutButton.Margin = new Padding(0);
 
             // The row is as tall as its buttons, so they are never cut off.
-            FlowLayoutPanel footer = Ui.Row();
-            footer.Dock = DockStyle.Bottom;
-            footer.FlowDirection = FlowDirection.RightToLeft;
-            footer.Padding = new Padding(em, em / 3, em, em * 2 / 3);
-            footer.BackColor = Theme.Back;
-            footer.Controls.Add(aboutButton);
+            FlowLayoutPanel row = Ui.Row();
+            row.FlowDirection = FlowDirection.RightToLeft;
+            row.BackColor = Theme.Back;
+            row.Controls.Add(aboutButton);
             for (int i = buttons.Length - 1; i >= 0; i--)
             {
                 buttons[i].Margin = new Padding(0, 0, em / 2, 0);
-                footer.Controls.Add(buttons[i]);
+                row.Controls.Add(buttons[i]);
             }
-            Controls.Add(footer);
+
+            Panel content = new Panel();
+            content.Dock = DockStyle.Fill;
+            content.Padding = new Padding(em, em * 3 / 4, em, em * 3 / 4);
+            content.BackColor = Theme.Back;
+            content.Controls.Add(page);
+            // Added before the bottom row, so the row docks at the bottom and the content fills the rest.
+            Controls.Add(content);
+            if (buttonsOnTop)
+            {
+                // A header grid: the name and the line about it on the left, the buttons on the right,
+                // their top at the name and their right edge at the page's right edge.
+                TableLayoutPanel header = new TableLayoutPanel();
+                header.Dock = DockStyle.Top;
+                header.AutoSize = true;
+                header.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+                header.ColumnCount = 2;
+                header.RowCount = 2;
+                header.Margin = header.Padding = new Padding(0);
+                header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+                header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+                header.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                header.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                title.Margin = new Padding(0);
+                line.Dock = DockStyle.None;
+                line.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+                line.Margin = new Padding(0);
+                row.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+                row.Margin = new Padding(em, 0, 0, 0);
+                header.Controls.Add(title, 0, 0);
+                header.Controls.Add(line, 0, 1);
+                header.Controls.Add(row, 1, 0);
+                header.SetRowSpan(row, 2);
+                content.Controls.Add(header);
+            }
+            else
+            {
+                title.Dock = DockStyle.Top;
+                line.Dock = DockStyle.Top;
+                content.Controls.Add(line);
+                content.Controls.Add(title);
+                row.Dock = DockStyle.Bottom;
+                row.Padding = new Padding(em, em / 3, em, em * 2 / 3);
+                Controls.Add(row);
+            }
 
             Shown += delegate
             {
@@ -199,7 +233,7 @@ namespace CompInfo
         // Language or theme was changed: the main window must be built again.
         public bool Rebuild;
 
-        public StandaloneAboutDialog(Image picture, string name, Color highlight, string subtitle, string[] sections, IniSettings settings)
+        public StandaloneAboutDialog(Image picture, string name, Color highlight, string email, string subtitle, string[] sections, IniSettings settings)
         {
             Ui.Dialog(this);
             Text = L.T("О программе");
@@ -211,17 +245,16 @@ namespace CompInfo
             Padding = new Padding(em);
 
             FlowLayoutPanel text;
-            TableLayoutPanel t = About.Build(Font, em * 26, picture, name, highlight, subtitle, null, sections, out text);
+            TableLayoutPanel t = About.Build(Font, em * 26, picture, name, highlight, email, subtitle, null, sections, out text);
             text.Controls.Add(About.SiteRow(Font, Glyph.Open, About.WebSite, null));
 
-            // Language and theme: rarely changed, so they are here and not in the main window.
-            Label appearance = About.Line(L.T("Язык и тема"), new Font(Font, FontStyle.Bold), Theme.Text, em * 26, 0);
-            appearance.Margin = new Padding(appearance.Margin.Left, em / 2, appearance.Margin.Right, appearance.Margin.Bottom);
-            text.Controls.Add(appearance);
+            // Language and theme: rarely changed, so they are here, under the picture at the very bottom,
+            // and not in the main window.
+            int side = em * 7;
             Segmented language = new Segmented(new[] { "УКР", "ENG", "РУС" }, false,
                 new[] { "Українська", "English", "Русский" }, Array.IndexOf(L.Codes, L.Code));
-            language.Size = new Size(em * 11, em * 3 / 2);
-            language.Margin = new Padding(0, em / 4, em, 0);
+            language.Size = new Size(side, em * 3 / 2);
+            language.Margin = new Padding(0, 0, 0, em / 3);
             language.Changed += delegate (int index)
             {
                 L.Choice = L.Codes[index];
@@ -233,8 +266,8 @@ namespace CompInfo
             Segmented theme = new Segmented(new[] { Glyph.Sun, Glyph.Theme, Glyph.Moon }, true,
                 new[] { L.T("Светлая тема"), L.T("Как в Windows"), L.T("Тёмная тема") },
                 Array.IndexOf(themes, Theme.Choice) < 0 ? 1 : Array.IndexOf(themes, Theme.Choice));
-            theme.Size = new Size(em * 11, em * 3 / 2);
-            theme.Margin = new Padding(0, em / 4, 0, 0);
+            theme.Size = new Size(side, em * 3 / 2);
+            theme.Margin = new Padding(0);
             theme.Changed += delegate (int index)
             {
                 Theme.Choice = themes[index];
@@ -243,12 +276,16 @@ namespace CompInfo
                 Close();
             };
             FlowLayoutPanel choices = Ui.Row();
+            choices.FlowDirection = FlowDirection.TopDown;
+            choices.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+            choices.Margin = new Padding(0, em, 0, 0);
             choices.Controls.Add(language);
             choices.Controls.Add(theme);
-            text.Controls.Add(choices);
+            new ToolTip().SetToolTip(language, L.T("Язык и тема"));
+            t.Controls.Add(choices, 0, 1);
 
             Button close = Ui.Primary(L.T("Закрыть"), null, Font);
-            close.Anchor = AnchorStyles.Right;
+            close.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             close.Margin = new Padding(0, em, 0, 0);
             close.Click += delegate { Close(); };
             t.Controls.Add(close, 1, 1);

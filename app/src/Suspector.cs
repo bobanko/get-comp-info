@@ -34,7 +34,7 @@ namespace CompInfo
 
         static StandaloneAboutDialog AboutDialog()
         {
-            return new StandaloneAboutDialog(Ui.SuspectorImage, "[SUS]pector", Highlight,
+            return new StandaloneAboutDialog(Ui.SuspectorImage, "[SUS]pector", Highlight, "suspector@chagear.top",
                 L.T("Помогает проверить и подготовить компьютер перед внешней проверкой безопасности."), Sections, Settings);
         }
 

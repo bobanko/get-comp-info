@@ -19,5 +19,6 @@ obj\MakeIcon.exe app\face-ru-source.png --face-png=app\face-ru.png
 if errorlevel 1 exit /b 1
 obj\MakeIcon.exe app\suspector-source.png app\suspector.ico obj\suspector-icon-preview.png --small=app\suspector-small-source.png --small-up-to=64 --dark=97 --face-png=app\suspector.png
 if errorlevel 1 exit /b 1
-rem youSBee.exe: app\yousbee.ico and app\yousbee.png (its «О программе») from app\yousbee-source.png.
-obj\MakeIcon.exe app\yousbee-source.png app\yousbee.ico obj\yousbee-icon-preview.png --face-png=app\yousbee.png
+rem youSBee.exe: app\yousbee.ico and app\yousbee.png (its «О программе») from app\yousbee-source.png;
+rem sizes up to 32 px are app\yousbee-small-source.png, the orange outline flash drive of the icon font.
+obj\MakeIcon.exe app\yousbee-source.png app\yousbee.ico obj\yousbee-icon-preview.png --small=app\yousbee-small-source.png --small-up-to=32 --face-png=app\yousbee.png
