@@ -41,6 +41,65 @@ namespace CompInfo
 
         // The window is about to close or rebuild: false keeps it open (e.g. an operation is running).
         public virtual bool CanLeave() { return true; }
+
+        // The form filled in the copy without administrator rights; called before the page opens.
+        public virtual void Resume(JsonObject form) { }
+    }
+
+    // Hands the filled form of a section to the copy started with administrator rights, so the change goes on there
+    // without filling the form and pressing the button again. Passwords are included: the pipe opens only for
+    // Administrators (the copy without rights cannot be connected to by other programs of the user), and the
+    // receiving copy checks, when Windows lets it, that the sender is this same program.
+    public static class AdminHandoff
+    {
+        public static System.IO.Pipes.NamedPipeServerStream Create(out string name)
+        {
+            name = "comp-info-" + Guid.NewGuid().ToString("N");
+            System.IO.Pipes.PipeSecurity security = new System.IO.Pipes.PipeSecurity();
+            security.AddAccessRule(new System.IO.Pipes.PipeAccessRule(new System.Security.Principal.SecurityIdentifier(System.Security.Principal.WellKnownSidType.BuiltinAdministratorsSid, null),
+                System.IO.Pipes.PipeAccessRights.ReadWrite, System.Security.AccessControl.AccessControlType.Allow));
+            return new System.IO.Pipes.NamedPipeServerStream(name, System.IO.Pipes.PipeDirection.Out, 1, System.IO.Pipes.PipeTransmissionMode.Byte,
+                System.IO.Pipes.PipeOptions.Asynchronous, 0, 0, security);
+        }
+
+        // False when the new copy did not connect in time.
+        public static async System.Threading.Tasks.Task<bool> Send(System.IO.Pipes.NamedPipeServerStream pipe, JsonObject form, int milliseconds)
+        {
+            System.Threading.Tasks.Task connect = pipe.WaitForConnectionAsync();
+            if (await System.Threading.Tasks.Task.WhenAny(connect, System.Threading.Tasks.Task.Delay(milliseconds)) != connect) return false;
+            await connect;
+            byte[] bytes = System.Text.Encoding.UTF8.GetBytes(Json.Compact(form));
+            await pipe.WriteAsync(bytes, 0, bytes.Length);
+            await System.Threading.Tasks.Task.Run(delegate { pipe.WaitForPipeDrain(); });
+            return true;
+        }
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool GetNamedPipeServerProcessId(IntPtr pipe, out uint processId);
+
+        // The form, or null when there is none or it does not come from this program.
+        public static JsonObject Receive(string name)
+        {
+            try
+            {
+                using (System.IO.Pipes.NamedPipeClientStream pipe = new System.IO.Pipes.NamedPipeClientStream(".", name, System.IO.Pipes.PipeDirection.In))
+                {
+                    pipe.Connect(10000);
+                    uint id;
+                    if (GetNamedPipeServerProcessId(pipe.SafePipeHandle.DangerousGetHandle(), out id))
+                    {
+                        string sender = null;
+                        try { using (Process p = Process.GetProcessById((int)id)) sender = p.MainModule.FileName; }
+                        catch (Exception) { sender = null; }   // another user's process may be closed to us
+                        if (sender != null && !string.Equals(System.IO.Path.GetFullPath(sender), System.IO.Path.GetFullPath(Application.ExecutablePath), StringComparison.OrdinalIgnoreCase))
+                            return null;
+                    }
+                    using (System.IO.StreamReader reader = new System.IO.StreamReader(pipe, System.Text.Encoding.UTF8))
+                        return Json.ParseObject(reader.ReadToEnd());
+                }
+            }
+            catch (Exception) { return null; }
+        }
     }
 
     public class MainForm : Form
@@ -175,7 +234,9 @@ namespace CompInfo
         protected override void OnShown(EventArgs e)
         {
             base.OnShown(e);
-            if (current == null) Open(Find(StartPage ?? "") ?? pages[0]);
+            Page start = Find(StartPage ?? "") ?? pages[0];
+            if (Handoff != null) { start.Resume(Handoff); Handoff = null; }
+            if (current == null) Open(start);
         }
 
         protected override void OnFormClosing(FormClosingEventArgs e)
@@ -210,19 +271,45 @@ namespace CompInfo
         // Starts the program again with administrator rights on the given section; this copy closes.
         public void RestartAsAdministrator(string page)
         {
-            ProcessStartInfo info = new ProcessStartInfo(Application.ExecutablePath, "--page " + page);
+            RestartAsAdministrator(page, null);
+        }
+
+        // form: the filled form of the section, handed to the new copy so that it goes on with the change by itself.
+        public async void RestartAsAdministrator(string page, JsonObject form)
+        {
+            string pipeName = null;
+            System.IO.Pipes.NamedPipeServerStream pipe = null;
+            if (form != null)
+            {
+                try { pipe = AdminHandoff.Create(out pipeName); }
+                catch (Exception) { pipe = null; pipeName = null; }
+            }
+            ProcessStartInfo info = new ProcessStartInfo(Application.ExecutablePath, "--page " + page + (pipeName != null ? " --handoff " + pipeName : ""));
             info.UseShellExecute = true;
             info.Verb = "runas";
             info.WorkingDirectory = AppPaths.Root;
             try { Process.Start(info); }
             catch (Win32Exception ex)
             {
+                if (pipe != null) pipe.Dispose();
                 if (ex.NativeErrorCode != 1223) Ui.Error(this, L.T("Не удалось запустить программу с правами администратора: ") + ex.Message);
                 return;
+            }
+            if (pipe != null)
+            {
+                Hide();
+                bool sent = false;
+                try { sent = await AdminHandoff.Send(pipe, form, 60000); }
+                catch (Exception) { sent = false; }
+                finally { pipe.Dispose(); }
+                if (!sent) Ui.Error(null, L.T("Окно администратора не получило заполненную форму. Заполните её там ещё раз."));
             }
             ReopenPage = null;
             Close();
         }
+
+        // Form handed over by the copy without administrator rights (--handoff), for the start page.
+        public JsonObject Handoff;
 
         // Keyboard: Ctrl+1…9 sections, Ctrl+0 «О программе», Ctrl+Tab / Ctrl+PageDown next section,
         // Ctrl+Shift+Tab / Ctrl+PageUp previous; everything else (F5, Ctrl+S, Ctrl+F…) goes to the open section.

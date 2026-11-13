@@ -115,8 +115,63 @@ namespace CompInfo
         }
     }
 
+    // Questions of the synchronization: conflict and deletion dialogs, progress on the owner's thread.
+    public class SyncDialogs : ISyncQuestions
+    {
+        readonly Control owner;
+        readonly Action<string> progress;
+
+        public SyncDialogs(Control owner, Action<string> progress)
+        {
+            this.owner = owner;
+            this.progress = progress;
+        }
+
+        // Connects with the personal key and synchronizes the whole copy; null when the user cancels the key.
+        public static async Task<SyncCounts> Run(Control owner, Action<string> progress)
+        {
+            CloudClient client = await CloudSession.Connect(owner.FindForm());
+            if (client == null) return null;
+            CloudSync sync = new CloudSync(AppPaths.Root, client, new SyncDialogs(owner, progress));
+            return await Task.Run(delegate { return sync.Run(); });
+        }
+
+        T OnUi<T>(Func<T> f) { return (T)owner.Invoke(f); }
+
+        public void Progress(string text)
+        {
+            owner.BeginInvoke(new MethodInvoker(delegate { progress(text); }));
+        }
+
+        public string ResolveConflict(string title, JsonObject local, JsonObject cloud, out JsonObject result)
+        {
+            JsonObject chosen = null;
+            string action = OnUi(delegate
+            {
+                using (ConflictDialog d = new ConflictDialog(title, local, cloud))
+                {
+                    d.ShowDialog(owner.FindForm());
+                    chosen = d.Result;
+                    return d.Action;
+                }
+            });
+            result = chosen;
+            return action;
+        }
+
+        public int DeletedInCloud(string title, string details)
+        {
+            return OnUi(delegate
+            {
+                int a = Ui.Ask(owner.FindForm(), L.T("Запись удалена в облаке"), title + "\n\n" + details, Glyph.Warning, Theme.Warn,
+                    L.T("Восстановить в облаке"), L.T("Удалить локальную запись"), L.T("Отложить"));
+                return a < 0 ? 2 : a;
+            });
+        }
+    }
+
     // «Синхронизация с облаком» (sync-cloud.ps1).
-    public class SyncPage : Page, ISyncQuestions
+    public class SyncPage : Page
     {
         readonly Label server;
         readonly Button start;
@@ -225,7 +280,7 @@ namespace CompInfo
                 CloudClient client = await CloudSession.Connect(FindForm());
                 if (client == null) { step.Set(Glyph.Info, L.T("Синхронизация отменена: ключ не введён."), Theme.Warn); return; }
                 step.Set(Glyph.Person, L.T("Пользователь: ") + CloudClient.UserText(client.User), Theme.Muted);
-                CloudSync sync = new CloudSync(AppPaths.Root, client, this);
+                CloudSync sync = new CloudSync(AppPaths.Root, client, new SyncDialogs(this, delegate (string text) { step.Set(Glyph.More, text, Theme.Muted); }));
                 SyncCounts c = await Task.Run(delegate { return sync.Run(); });
                 ShowCounts(c);
                 if (c.Errors.Count == 0) step.Set(Glyph.Check, L.T("Синхронизация завершена."), Theme.Good);
@@ -275,40 +330,6 @@ namespace CompInfo
             counts.Rows[i].Cells[0].Style.ForeColor = value == 0 ? Theme.Muted : Theme.Text;
         }
 
-        // ---------- questions from the sync thread ----------
-
-        T OnUi<T>(Func<T> f) { return (T)Invoke(f); }
-
-        public void Progress(string text)
-        {
-            BeginInvoke(new MethodInvoker(delegate { step.Set(Glyph.More, text, Theme.Muted); }));
-        }
-
-        public string ResolveConflict(string title, JsonObject local, JsonObject cloud, out JsonObject result)
-        {
-            JsonObject chosen = null;
-            string action = OnUi(delegate
-            {
-                using (ConflictDialog d = new ConflictDialog(title, local, cloud))
-                {
-                    d.ShowDialog(FindForm());
-                    chosen = d.Result;
-                    return d.Action;
-                }
-            });
-            result = chosen;
-            return action;
-        }
-
-        public int DeletedInCloud(string title, string details)
-        {
-            return OnUi(delegate
-            {
-                int a = Ui.Ask(FindForm(), L.T("Запись удалена в облаке"), title + "\n\n" + details, Glyph.Warning, Theme.Warn,
-                    L.T("Восстановить в облаке"), L.T("Удалить локальную запись"), L.T("Отложить"));
-                return a < 0 ? 2 : a;
-            });
-        }
     }
 
     // Conflict between the local record and the cloud version: whole versions or field by field (Resolve-SyncRecord).

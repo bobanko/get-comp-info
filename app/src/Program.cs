@@ -34,6 +34,10 @@ namespace CompInfo
                 return Screenshot(new MainForm(), shot, Option(args, "--screenshot", 2), Option(args, "--screenshot", 3));
             }
 
+            // Started with administrator rights to finish a change filled in the copy without them.
+            string handoffPipe = Option(args, "--handoff", 1);
+            JsonObject handoff = handoffPipe != null ? AdminHandoff.Receive(handoffPipe) : null;
+
             // The window is built again after a theme change, on the same section and place.
             Rectangle? bounds = null;
             FormWindowState windowState = FormWindowState.Normal;
@@ -43,6 +47,8 @@ namespace CompInfo
                 L.ApplyChoice();
                 MainForm form = new MainForm();
                 form.StartPage = page;
+                form.Handoff = handoff;
+                handoff = null;
                 if (bounds.HasValue)
                 {
                     form.StartPosition = FormStartPosition.Manual;

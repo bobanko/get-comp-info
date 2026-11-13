@@ -133,6 +133,45 @@ namespace CompInfo
             return all.Count > 0 ? all[0] : "";
         }
 
+        // Network adapters with a static IPv4 address or hand-set DNS: after leaving the domain they go back to DHCP.
+        public static List<Adapter> StaticAdapters(out List<State> states)
+        {
+            List<Adapter> result = new List<Adapter>();
+            states = new List<State>();
+            foreach (Adapter a in Adapter.List())
+            {
+                if (!a.Hardware) continue;
+                State s = Read(a.Guid);
+                if (s == null || (s.Dhcp && !s.DnsManual)) continue;
+                result.Add(a);
+                states.Add(s);
+            }
+            return result;
+        }
+
+        // The adapter already has exactly these static settings.
+        public static bool Configured(State s, string ip, string mask, string gateway, IList<string> dns)
+        {
+            if (s == null || s.Dhcp || s.Ip != ip || s.Mask != mask || s.Gateway != gateway || s.Dns.Count != dns.Count) return false;
+            for (int i = 0; i < dns.Count; i++) if (s.Dns[i] != dns[i]) return false;
+            return true;
+        }
+
+        // Windows checks a new static address for duplicates (Tentative → Preferred or Duplicate).
+        // Waits up to the timeout; returns the last state: 4 Preferred, 2 Duplicate, 1 Tentative, 0 not seen.
+        public static int WaitForAddress(int index, string ip, int milliseconds)
+        {
+            int state = 0;
+            DateTime end = DateTime.UtcNow.AddMilliseconds(milliseconds);
+            while (true)
+            {
+                state = 0;
+                foreach (Dictionary<string, object> row in Wmi.Query(Wmi.Net, "SELECT IPAddress, AddressState FROM MSFT_NetIPAddress WHERE AddressFamily=2 AND InterfaceIndex=" + index))
+                    if (Wmi.Str(row, "IPAddress") == ip) state = (int)Wmi.Num(row, "AddressState");
+                if (state == 4 || state == 2 || DateTime.UtcNow >= end) return state;
+                System.Threading.Thread.Sleep(500);
+            }
+        }
     }
 
     // Naming rules of the unit (computer-policy.ps1).
@@ -352,12 +391,78 @@ namespace CompInfo
             return name;
         }
 
+        // The local administrator to offer for leaving the domain: the current user when it is one
+        // (e.g. the account entered in the UAC window), otherwise the first enabled direct member of Administrators.
+        // Returns ".\name" or "".
+        public static string DefaultLocalAdministrator()
+        {
+            try
+            {
+                string current;
+                using (WindowsIdentity me = WindowsIdentity.GetCurrent()) current = me.Name ?? "";
+                string[] parts = current.Split('\\');
+                bool currentIsLocal = parts.Length == 2 && string.Equals(parts[0], Environment.MachineName, StringComparison.OrdinalIgnoreCase);
+                string fallback = null, builtin = null;
+                using (PrincipalContext machine = new PrincipalContext(ContextType.Machine))
+                using (GroupPrincipal admins = GroupPrincipal.FindByIdentity(machine, IdentityType.Sid, "S-1-5-32-544"))
+                {
+                    if (admins == null) return "";
+                    foreach (Principal member in admins.GetMembers(false))
+                    {
+                        using (member)
+                        {
+                            UserPrincipal user = member as UserPrincipal;
+                            if (user == null || member.ContextType != ContextType.Machine || user.Enabled != true) continue;
+                            string name = member.SamAccountName;
+                            if (currentIsLocal && string.Equals(name, parts[1], StringComparison.OrdinalIgnoreCase)) return ".\\" + name;
+                            if (member.Sid.Value.EndsWith("-500")) { if (builtin == null) builtin = name; }
+                            else if (fallback == null) fallback = name;
+                        }
+                    }
+                }
+                string chosen = fallback ?? builtin;
+                return chosen == null ? "" : ".\\" + chosen;
+            }
+            catch (Exception) { return ""; }   // domain members of the group may not resolve offline
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern bool SetComputerNameEx(int type, string name);
+
+        // Local rename that does not touch Active Directory; takes effect after the restart.
+        static void SetLocalName(string name)
+        {
+            const int ComputerNamePhysicalDnsHostname = 5;
+            if (!SetComputerNameEx(ComputerNamePhysicalDnsHostname, name))
+                throw new InvalidOperationException(L.T("Компьютер выведен из домена, но имя не изменено: ") + new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error()).Message);
+        }
+
+        // Windows found the new static address on another device.
+        public class AddressInUseException : InvalidOperationException
+        {
+            public AddressInUseException(string message) : base(message) { }
+        }
+
+        // Static address for the domain network, set before joining.
+        public class NetworkPlan
+        {
+            public int AdapterIndex;
+            public string AdapterName, AdapterGuid;
+            public string Ip, Mask, Gateway;
+            public int PrefixLength;
+            public List<string> Dns = new List<string>();
+        }
+
         public class Request
         {
             public string Operation;      // Rename, Join, Leave
-            public string Name;
+            public string Name;           // Leave: the new local name (internet prefix), or the current one to keep it
             public string DomainUser, DomainPassword;
             public string LocalUser, LocalPassword;
+            public NetworkPlan Network;   // Join: static address to set first, or null to keep the network as it is
+            public List<Adapter> DhcpAdapters = new List<Adapter>();   // Leave: adapters to switch to DHCP
+            public Action<string> Progress = delegate { };
+            public readonly List<string> Warnings = new List<string>();
         }
 
         // Invoke-ComputerManagementChange: checks everything again, writes the receipt, then runs the Windows command.
@@ -369,9 +474,11 @@ namespace CompInfo
             ComputerState state = ComputerState.Read();
             AssertAllowed(state);
             string prefix = null;
-            if (r.Operation != "Leave")
+            bool leaveRename = r.Operation == "Leave" && !string.IsNullOrEmpty(r.Name) && !string.Equals(r.Name, state.Name, StringComparison.OrdinalIgnoreCase);
+            if (r.Operation != "Leave" || leaveRename)
             {
                 prefix = r.Name.StartsWith(p.DomainPrefix + "-") ? p.DomainPrefix : p.InternetPrefix;
+                if (r.Operation == "Leave" && prefix != p.InternetPrefix) throw new InvalidOperationException(L.T("После вывода из домена нужно имя с префиксом интернет-сети."));
                 string issue = ComputerNaming.Issue(r.Name, prefix, p);
                 if (issue != null) throw new InvalidOperationException(issue);
             }
@@ -393,32 +500,93 @@ namespace CompInfo
                 }
             }
             if (r.Operation == "Leave" && !state.PartOfDomain) throw new InvalidOperationException(L.T("Компьютер уже находится в рабочей группе."));
-            if (r.Operation == "Leave") CheckLocalAdministrator(r.LocalUser, r.LocalPassword, state.Name);
-            bool needsDomain = r.Operation != "Rename" || state.PartOfDomain;
+            if (r.Operation == "Leave")
+            {
+                r.Progress(L.T("Проверка локального администратора…"));
+                CheckLocalAdministrator(r.LocalUser, r.LocalPassword, state.Name);
+            }
+            // Leaving needs no domain account: the computer leaves locally, its object in Active Directory stays as it is.
+            bool needsDomain = r.Operation == "Join" || (r.Operation == "Rename" && state.PartOfDomain);
+            if (needsDomain && string.IsNullOrEmpty(r.DomainUser)) throw new InvalidOperationException(L.T("Нужны доменные учётные данные."));
+            if (r.Operation == "Join" && r.Network != null) SetDomainNetwork(r.Network, r.Progress);
             if (needsDomain)
             {
-                if (string.IsNullOrEmpty(r.DomainUser)) throw new InvalidOperationException(L.T("Нужны доменные учётные данные."));
-                TestDomain(p.DomainName);
+                r.Progress(L.T("Проверка домена…"));
+                TestDomainAfterNetworkChange(p.DomainName, r.Network != null);
             }
-            string targetName = r.Operation == "Leave" ? state.Name : r.Name;
+            string targetName = r.Operation == "Leave" ? (leaveRename ? r.Name : state.Name) : r.Name;
             string targetDomain = r.Operation == "Join" ? p.DomainName : r.Operation == "Leave" ? p.WorkgroupName : state.Domain;
             bool targetMember = r.Operation == "Join" || (r.Operation != "Leave" && state.PartOfDomain);
             // Written BEFORE the system command: a partial failure must not permit a second change.
             WriteReceipt(state, r.Operation, targetName, targetDomain, targetMember);
 
+            r.Progress(r.Operation == "Join" ? L.T("Ввод в домен…") : r.Operation == "Leave" ? L.T("Вывод из домена…") : L.T("Переименование…"));
+            if (r.Operation == "Leave")
+            {
+                PowerShell.Run(LeaveScript(p.WorkgroupName), null, false);
+                if (leaveRename) SetLocalName(r.Name);
+                SwitchToDhcp(r);
+                return true;
+            }
             StringBuilder s = new StringBuilder();
             if (needsDomain)
                 s.Append("$user = Read-Secret\n$password = ConvertTo-SecureString (Read-Secret) -AsPlainText -Force\n$credential = New-Object System.Management.Automation.PSCredential($user, $password)\n");
             if (r.Operation == "Join")
                 s.Append("$result = Add-Computer -DomainName " + PowerShell.Quote(p.DomainName) + " -Credential $credential" +
                     (string.Equals(state.Name, r.Name, StringComparison.OrdinalIgnoreCase) ? "" : " -NewName " + PowerShell.Quote(r.Name)) + " -Force -PassThru -ErrorAction Stop\n");
-            else if (r.Operation == "Leave")
-                s.Append("$result = Remove-Computer -UnjoinDomainCredential $credential -WorkgroupName " + PowerShell.Quote(p.WorkgroupName) + " -Force -PassThru -ErrorAction Stop\n");
             else
                 s.Append("$result = Rename-Computer -NewName " + PowerShell.Quote(r.Name) + (state.PartOfDomain ? " -DomainCredential $credential" : "") + " -Force -PassThru -ErrorAction Stop\n");
             s.Append("if (-not $result.HasSucceeded) { throw 'Windows не подтвердила изменение. Перезагрузите компьютер и проверьте состояние.' }\n");
             PowerShell.Run(s.ToString(), needsDomain ? new[] { r.DomainUser, r.DomainPassword } : null, false);
             return true;
+        }
+
+        // Leaves the domain without contacting it (FUnjoinOptions 0: the computer account in AD is neither
+        // disabled nor deleted), then joins the workgroup. Remove-Computer would need a domain account for that.
+        public static string LeaveScript(string workgroup)
+        {
+            return "$cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop\n" +
+                "$r = Invoke-CimMethod -InputObject $cs -MethodName UnjoinDomainOrWorkgroup -Arguments @{ FUnjoinOptions = [uint32]0 } -ErrorAction Stop\n" +
+                "if ($r.ReturnValue -ne 0) { throw \"Windows не вывела компьютер из домена (код $($r.ReturnValue)): $(([ComponentModel.Win32Exception][int]$r.ReturnValue).Message)\" }\n" +
+                "$r = Invoke-CimMethod -InputObject $cs -MethodName JoinDomainOrWorkgroup -Arguments @{ Name = " + PowerShell.Quote(workgroup) + " } -ErrorAction Stop\n" +
+                "if ($r.ReturnValue -ne 0) { throw \"Компьютер выведен из домена, но рабочая группа " + workgroup.Replace("\"", "") + " не назначена (код $($r.ReturnValue)): $(([ComponentModel.Win32Exception][int]$r.ReturnValue).Message)\" }\n";
+        }
+
+        // Static address of the domain network on the chosen adapter; refuses an address another device already uses.
+        static void SetDomainNetwork(NetworkPlan n, Action<string> progress)
+        {
+            if (LanSetup.Configured(LanSetup.Read(n.AdapterGuid), n.Ip, n.Mask, n.Gateway, n.Dns)) return;
+            progress(L.T("Настройка сети: ") + n.Ip + "…");
+            PowerShell.Run(LanSetup.Script(n.AdapterIndex, false, n.Ip, n.PrefixLength, n.Gateway, n.Dns), null, false);
+            progress(L.T("Проверка, что адрес ") + n.Ip + L.T(" свободен в сети…"));
+            if (LanSetup.WaitForAddress(n.AdapterIndex, n.Ip, 8000) == 2)
+                throw new AddressInUseException(L.T("Адрес ") + n.Ip + L.T(" уже занят в сети другим устройством, хотя в базе его нет. Выберите другой адрес и повторите ввод в домен."));
+        }
+
+        // Right after an address change DNS and the domain controller may need a few seconds.
+        static void TestDomainAfterNetworkChange(string domain, bool networkChanged)
+        {
+            for (int attempt = 1; ; attempt++)
+            {
+                try { TestDomain(domain); return; }
+                catch (Exception)
+                {
+                    if (!networkChanged || attempt >= 4) throw;
+                    System.Threading.Thread.Sleep(3000);
+                }
+            }
+        }
+
+        // After leaving: the adapters go back to automatic settings for the internet. The computer has already left,
+        // so a failure here is a warning, not an error.
+        static void SwitchToDhcp(Request r)
+        {
+            foreach (Adapter a in r.DhcpAdapters)
+            {
+                r.Progress(L.T("Автоматическая настройка сети (DHCP): ") + a.Name + "…");
+                try { PowerShell.Run(LanSetup.Script(a.Index, true, null, 0, null, null), null, false); }
+                catch (Exception e) { r.Warnings.Add(L.T("Адаптер «") + a.Name + L.T("» не переключён на DHCP: ") + e.Message); }
+            }
         }
 
         // The record of this computer can be found without the old name (Assert-InventoryReadyForRename).

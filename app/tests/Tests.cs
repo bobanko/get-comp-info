@@ -35,6 +35,7 @@ namespace CompInfo
             Run("computer identity", IdentityMatching);
             Run("CSV export matches PowerShell", delegate { CsvMatchesPowerShell(fixtures); });
             Run("network profiles", Profiles);
+            Run("free addresses from the database", FreeAddresses);
             Run("USB serial numbers", UsbSerials);
             Run("collected record", CollectedRecord);
             Run("cloud state", CloudStateFile);
@@ -206,6 +207,47 @@ namespace CompInfo
             File.WriteAllText(path, "{\"value\":{\"domainCheckHost\":\"10.0.0.1\",\"locations\":[{\"name\":\"A\",\"thirdOctet\":1}]}}", Encoding.UTF8);
             Check(NetworkProfiles.Read(path).DomainName == null, "an IP address is not a domain");
             Directory.Delete(dir, true);
+        }
+
+        static void FreeAddresses()
+        {
+            string dir = TempDir();
+            string path = Path.Combine(dir, "network-profiles.json");
+            File.WriteAllText(path, "{\"value\":{\"firstOctet\":10,\"segments\":[111,112]," +
+                "\"locations\":[{\"name\":\"Штаб\",\"thirdOctet\":171,\"prefixLength\":25,\"gatewayOctet\":129,\"firstHostOctet\":130,\"lastHostOctet\":133,\"dnsServers\":[\"10.121.1.2\"]}]}}", Encoding.UTF8);
+            NetworkProfiles p = NetworkProfiles.Read(path);
+            NetworkProfiles.Location l = p.Locations[0];
+            Check(p.Address(l, 112, 130) == "10.112.171.130" && p.Gateway(l, 112) == "10.112.171.129", "address and gateway of an office");
+            string data = Path.Combine(dir, "data");
+            Directory.CreateDirectory(data);
+            WriteRecord(data, "A.json", "{\"computerId\":\"A\",\"hostname\":\"FR-042-A\",\"ip\":\"10.112.171.130\"}");
+            WriteRecord(data, "B.json", "{\"computerId\":\"B\",\"hostname\":\"FR-042-B\",\"ip\":\"10.112.171.131\"}");
+            WriteRecord(data, "OWN.json", "{\"computerId\":\"OWN\",\"hostname\":\"IF-042-OWN\",\"ip\":\"10.112.171.132\"}");
+            WriteRecord(data, "C.json", "{\"computerId\":\"C\",\"ip\":null}");
+            File.WriteAllText(Path.Combine(data, "broken.json"), "{", Encoding.UTF8);
+            AddressBook book = AddressBook.Read(data, Path.Combine(data, "OWN.json"));
+            Check(book.Owner("10.112.171.130") == "FR-042-A" && book.Owner("10.112.171.132") == null, "own record does not take its address");
+            Check(book.FirstFree(p, l, 112, -1, null) == 132, "first free address: " + book.FirstFree(p, l, 112, -1, null));
+            Check(book.FirstFree(p, l, 112, 132, null) == 133, "next free address");
+            Check(book.FirstFree(p, l, 112, 133, null) == 132, "next free address goes round the range");
+            Check(book.FirstFree(p, l, 112, -1, new[] { "10.112.171.132" }) == 133, "address found in use on the network is skipped");
+            Check(book.FirstFree(p, l, 111, -1, null) == 130, "another segment is free");
+            book.Add("10.112.171.132, 10.112.171.133", "X");
+            Check(book.FirstFree(p, l, 112, -1, null) == -1, "whole range taken");
+            Check(AddressBook.Read(Path.Combine(dir, "none"), null).Used.Count == 0, "no data folder");
+            Directory.Delete(dir, true);
+
+            LanSetup.State s = new LanSetup.State();
+            s.Ip = "10.112.171.132"; s.Mask = "255.255.255.128"; s.Gateway = "10.112.171.129"; s.Dns.Add("10.121.1.2");
+            List<string> dns = new List<string> { "10.121.1.2" };
+            Check(LanSetup.Configured(s, "10.112.171.132", "255.255.255.128", "10.112.171.129", dns), "same static settings need no change");
+            Check(!LanSetup.Configured(s, "10.112.171.133", "255.255.255.128", "10.112.171.129", dns), "another address is a change");
+            s.Dhcp = true;
+            Check(!LanSetup.Configured(s, "10.112.171.132", "255.255.255.128", "10.112.171.129", dns), "DHCP is a change");
+
+            string leave = ComputerChange.LeaveScript("WORKGROUP");
+            Check(leave.Contains("FUnjoinOptions = [uint32]0") && leave.Contains("Name = 'WORKGROUP'") && !leave.Contains("Read-Secret") && !leave.Contains("Remove-Computer"),
+                "leaving uses no domain account and does not touch the AD object");
         }
 
         static void UsbSerials()

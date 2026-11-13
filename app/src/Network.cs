@@ -123,6 +123,70 @@ namespace CompInfo
             }
             return false;
         }
+
+        public string Address(Location l, int segment, int host)
+        {
+            return FirstOctet + "." + segment + "." + l.ThirdOctet + "." + host;
+        }
+
+        public string Gateway(Location l, int segment)
+        {
+            return Address(l, segment, l.GatewayOctet);
+        }
+    }
+
+    // Which office addresses are taken by computers in the local copy of the database (data\*.json).
+    public class AddressBook
+    {
+        // Address -> name of the computer whose record holds it.
+        public readonly Dictionary<string, string> Used = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        // ownPath: the record of this computer, its address is not taken by someone else.
+        public static AddressBook Read(string dataPath, string ownPath)
+        {
+            AddressBook book = new AddressBook();
+            if (!Directory.Exists(dataPath)) return book;
+            foreach (string file in Directory.GetFiles(dataPath, "*.json"))
+            {
+                if (ownPath != null && string.Equals(Path.GetFullPath(file), Path.GetFullPath(ownPath), StringComparison.OrdinalIgnoreCase)) continue;
+                JsonObject record;
+                try { record = Files.ReadRecord(file); }
+                catch (Exception) { continue; }
+                string name = record.Text("hostname");
+                if (string.IsNullOrEmpty(name)) name = Path.GetFileNameWithoutExtension(file);
+                book.Add(record.Text("ip"), name);
+            }
+            return book;
+        }
+
+        public void Add(string addresses, string name)
+        {
+            foreach (string a in (addresses ?? "").Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries))
+                if (!Used.ContainsKey(a)) Used[a] = name;
+        }
+
+        // Name of the computer that has this address in the database, or null.
+        public string Owner(string address)
+        {
+            string name;
+            return Used.TryGetValue(address ?? "", out name) ? name : null;
+        }
+
+        // First computer octet of the office range that nobody in the database has, after `after` (round),
+        // or -1 when the whole range is taken.
+        public int FirstFree(NetworkProfiles p, NetworkProfiles.Location l, int segment, int after, ICollection<string> alsoTaken)
+        {
+            int count = l.LastHostOctet - l.FirstHostOctet + 1;
+            if (count <= 0) return -1;
+            int start = after < l.FirstHostOctet || after >= l.LastHostOctet ? l.FirstHostOctet : after + 1;
+            for (int i = 0; i < count; i++)
+            {
+                int host = l.FirstHostOctet + (start - l.FirstHostOctet + i) % count;
+                string ip = p.Address(l, segment, host);
+                if (!Used.ContainsKey(ip) && (alsoTaken == null || !alsoTaken.Contains(ip))) return host;
+            }
+            return -1;
+        }
     }
 
     // Quick ping: own address, gateway, DNS, then domain or internet (quick-ping.ps1).

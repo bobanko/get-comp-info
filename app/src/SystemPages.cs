@@ -489,6 +489,8 @@ namespace CompInfo
         }
     }
     // «Имя компьютера» and «Домен» (set-computer-name.ps1, manage-computer-domain.ps1).
+    // Joining first sets a free office address from the database and gives the domain name prefix; leaving needs only
+    // a local administrator, gives back the internet name prefix and turns the network back to DHCP.
     public class ComputerPage : Page
     {
         readonly bool domainMode;
@@ -500,8 +502,17 @@ namespace CompInfo
         readonly FieldTable form = new FieldTable();
         readonly RadioButton internet = new RadioButton(), domainNet = new RadioButton();
         readonly FlowLayoutPanel networkRow = Ui.Row();
+        readonly CheckBox renameOnLeave = new CheckBox();
         readonly TextBox designation = Ui.Input(new TextBox());
         readonly Label preview;
+        // Joining: the address in the domain network.
+        readonly ComboBox lanAdapter = Ui.Combo(), office = Ui.Combo(), segment = Ui.Combo();
+        readonly FlowLayoutPanel ipRow = Ui.Row(), syncRow = Ui.Row();
+        readonly Label ipStart, ipNote, syncInfo, profilesNote;
+        readonly NumericUpDown host = new NumericUpDown();
+        readonly Button nextFree, syncNow;
+        // Leaving: adapters with a static address go back to DHCP.
+        readonly CheckBox dhcpOnLeave = new CheckBox();
         readonly TextBox localUser = Ui.Input(new TextBox()), localPassword = Ui.Input(new TextBox());
         readonly TextBox domainUser = Ui.Input(new TextBox()), domainPassword = Ui.Input(new TextBox());
         readonly CheckBox remember = new CheckBox();
@@ -509,14 +520,30 @@ namespace CompInfo
         readonly StatusLine status = new StatusLine();
         ComputerState current;
         string operation;   // Rename, Join, Leave
-        bool running;
+        bool running, syncing, filling, designationEdited;
+        NetworkProfiles profiles = new NetworkProfiles();
+        AddressBook book = new AddressBook();
+        List<Adapter> wired = new List<Adapter>();
+        readonly Dictionary<int, LanSetup.State> wiredStates = new Dictionary<int, LanSetup.State>();
+        List<Adapter> staticAdapters = new List<Adapter>();
+        // Addresses Windows found in use on the network during this session, though the database has no owner for them.
+        readonly HashSet<string> takenInNetwork = new HashSet<string>(StringComparer.Ordinal);
+        JsonObject handoff;   // form filled before the restart with administrator rights
+        const string KeepNetwork = "keep";
+
+        class Item
+        {
+            public string Text;
+            public object Value;
+            public override string ToString() { return Text; }
+        }
 
         public ComputerPage(bool domainMode)
         {
             this.domainMode = domainMode;
             Key = domainMode ? "domain" : "name";
             Title = domainMode ? L.T("Домен") : L.T("Имя компьютера");
-            Description = domainMode ? L.T("Ввод компьютера в домен gu.gvardia.mvs и вывод в рабочую группу WORKGROUP. После изменения нужна перезагрузка.")
+            Description = domainMode ? L.T("Ввод в домен gu.gvardia.mvs со свободным IP-адресом из базы и вывод в рабочую группу WORKGROUP с возвратом сети на DHCP. Префикс имени меняется вместе с доменом. После изменения нужна перезагрузка.")
                 : L.T("Переименование по правилам: ") + policy.InternetPrefix + "-" + policy.UnitCode + L.T("-… для интернета, ") + policy.DomainPrefix + "-" + policy.UnitCode + L.T("-… для доменной сети. После изменения нужна перезагрузка.");
             Icon = domainMode ? Glyph.Domain : Glyph.Tag;
             // The page opens normally; the shield marks that applying a change needs elevation.
@@ -541,10 +568,55 @@ namespace CompInfo
                 r.CheckedChanged += delegate { UpdatePreview(); };
                 networkRow.Controls.Add(r);
             }
+            renameOnLeave.Text = L.T("Сменить префикс на ") + policy.InternetPrefix + L.T(" (интернет)");
+            Check(renameOnLeave);
+            renameOnLeave.CheckedChanged += delegate { if (!filling) UpdateRows(); };
             designation.Width = em * 16;
             designation.MaxLength = 64;
-            designation.TextChanged += delegate { UpdatePreview(); };
+            designation.TextChanged += delegate { if (!filling) designationEdited = true; UpdatePreview(); };
             preview = Ui.Text("", Font, Theme.Accent);
+
+            lanAdapter.Width = em * 24;
+            lanAdapter.DropDownWidth = em * 34;
+            lanAdapter.SelectedIndexChanged += delegate { if (!filling) AdapterChanged(); };
+            office.Width = em * 18;
+            office.DropDownWidth = em * 24;
+            office.SelectedIndexChanged += delegate { if (!filling) OfficeChanged(); };
+            segment.Width = em * 5;
+            segment.SelectedIndexChanged += delegate { if (!filling) PickFree(-1); };
+            Font mono = new Font(Ui.MonoFont.FontFamily, 11f);
+            ipStart = Ui.Text("", mono, Theme.Text);
+            ipStart.Anchor = AnchorStyles.Left;
+            host.Font = mono;
+            host.Minimum = 0;
+            host.Maximum = 255;
+            host.Width = em * 4;
+            host.Margin = new Padding(0, 0, em / 2, 0);
+            host.BorderStyle = BorderStyle.FixedSingle;
+            host.BackColor = Theme.Surface;
+            host.ForeColor = Theme.Text;
+            Theme.Native(host);
+            host.ValueChanged += delegate { if (!filling) AddressChanged(); };
+            nextFree = Ui.Secondary(L.T("Следующий свободный"), null, Font);
+            nextFree.Click += delegate { PickFree((int)host.Value); };
+            ipNote = Ui.Text("", Font, Theme.Muted);
+            ipNote.Anchor = AnchorStyles.Left;
+            ipRow.Controls.Add(ipStart);
+            ipRow.Controls.Add(host);
+            ipRow.Controls.Add(nextFree);
+            ipRow.Controls.Add(ipNote);
+            syncNow = Ui.Secondary(L.T("Синхронизировать базу"), Glyph.Sync, Font);
+            syncNow.Click += delegate { SyncDatabase(); };
+            new ToolTip().SetToolTip(syncNow, L.T("Свободный адрес выбирается по локальной копии базы. Синхронизируйте её, пока есть интернет, чтобы видеть адреса, выданные коллегами."));
+            syncInfo = Ui.Text("", Font, Theme.Muted);
+            syncInfo.Anchor = AnchorStyles.Left;
+            syncRow.Controls.Add(syncNow);
+            syncRow.Controls.Add(syncInfo);
+            profilesNote = Ui.Text(L.T("Профили сети не загружены: синхронизируйте базу или настройте сеть в разделе «Настройка сети»."), Font, Theme.Warn);
+            dhcpOnLeave.Text = L.T("Переключить сеть на DHCP");
+            Check(dhcpOnLeave);
+            dhcpOnLeave.CheckedChanged += delegate { if (!filling) UpdatePreview(); };
+
             localUser.Width = domainUser.Width = em * 16;
             localPassword.Width = domainPassword.Width = em * 16;
             localPassword.UseSystemPasswordChar = domainPassword.UseSystemPasswordChar = true;
@@ -552,10 +624,18 @@ namespace CompInfo
             Ui.SetCue(domainUser, L.T("имя или ДОМЕН\\имя"));
             form.Font = Font;
             form.Add(L.T("Назначение сети"), networkRow);
+            form.Add(L.T("Имя"), renameOnLeave);
             form.Add(L.T("Обозначение"), designation);
             form.Add(L.T("Полное имя"), preview);
+            form.Add(L.T("База"), syncRow);
+            form.Add(L.T("Сеть"), profilesNote);
+            form.Add(L.T("Адаптер"), lanAdapter);
+            form.Add(L.T("Корпус"), office);
+            form.Add(L.T("Сегмент"), segment);
+            form.Add(L.T("IP-адрес"), ipRow);
             form.Add(L.T("Локальный администратор"), localUser);
             form.Add(L.T("Его пароль"), localPassword);
+            form.Add(L.T("Сеть"), dhcpOnLeave);
             form.Add(L.T("Доменная учётная запись"), domainUser);
             form.Add(L.T("Пароль"), domainPassword);
             remember.Text = L.T("Запомнить в comp-info.ini");
@@ -566,7 +646,7 @@ namespace CompInfo
             form.Add("", remember);
 
             apply = Ui.AdminPrimary(L.T("Применить"), Font);
-            apply.Click += delegate { Apply(); };
+            apply.Click += delegate { Apply(false); };
             Ui.Keys(apply, "Ctrl+Enter");
             FlowLayoutPanel actions = Ui.Row();
             actions.Controls.Add(apply);
@@ -590,21 +670,30 @@ namespace CompInfo
             Controls.Add(now);
         }
 
+        void Check(CheckBox c)
+        {
+            c.AutoSize = true;
+            c.ForeColor = Theme.Text;
+            c.Checked = true;
+        }
+
         public override bool CanLeave()
         {
-            if (running) Ui.Info(FindForm(), Title, L.T("Дождитесь окончания операции."));
-            return !running;
+            if (running || syncing) Ui.Info(FindForm(), Title, L.T("Дождитесь окончания операции."));
+            return !running && !syncing;
         }
+
+        public override void Resume(JsonObject form) { handoff = form; }
 
         public override void Opened()
         {
-            if (!running) Refresh(true);
+            if (!running && !syncing) Refresh(true);
         }
 
         public override bool Shortcut(Keys keys)
         {
-            if (keys == (Keys.Control | Keys.Enter)) { if (editor.Visible && apply.Enabled) Apply(); return true; }
-            if (keys == Keys.F5) { if (!running) Refresh(true); return true; }
+            if (keys == (Keys.Control | Keys.Enter)) { if (editor.Visible && apply.Enabled) Apply(false); return true; }
+            if (keys == Keys.F5) { if (!running && !syncing) Refresh(true); return true; }
             return false;
         }
 
@@ -618,6 +707,9 @@ namespace CompInfo
 
         async void Refresh(bool verify)
         {
+            // A handed-over form is used once, and only if the page comes to the same operation.
+            JsonObject resumed = handoff;
+            handoff = null;
             stateActions.Controls.Clear();
             editor.Visible = false;
             state.Set(Glyph.More, L.T("Чтение состояния компьютера…"), Theme.Muted);
@@ -679,7 +771,8 @@ namespace CompInfo
                 return;
             }
             state.Clear();
-            BuildEditor(s);
+            await BuildEditor(s);
+            if (resumed != null && resumed.Text("page") == Key && resumed.Text("operation") == operation) Fill(resumed);
         }
 
         void AdminButton()
@@ -687,92 +780,463 @@ namespace CompInfo
             StateButton(L.T("Продолжить с правами администратора"), Glyph.Shield, true, delegate { if (Main != null) Main.RestartAsAdministrator(Key); });
         }
 
-        void BuildEditor(ComputerState s)
+        async Task BuildEditor(ComputerState s)
         {
             operation = domainMode ? (s.PartOfDomain ? "Leave" : "Join") : "Rename";
-            bool named = operation != "Leave";
-            form.Show(networkRow, operation == "Rename" && !s.PartOfDomain);
-            form.Show(designation, named);
-            form.Show(preview, named);
-            form.Show(localUser, operation == "Leave");
-            form.Show(localPassword, operation == "Leave");
-            bool needsDomain = operation != "Rename" || s.PartOfDomain;
-            form.Show(domainUser, needsDomain);
-            form.Show(domainPassword, needsDomain);
-            form.Show(remember, needsDomain);
+            designationEdited = false;
+            filling = true;
             localPassword.Text = "";
             // Remembered domain account (comp-info.ini), if the user chose to keep it.
             DomainCredentials.Load(domainUser, domainPassword, remember);
             if (operation == "Rename") { internet.Checked = !s.PartOfDomain && !s.Name.StartsWith(policy.DomainPrefix + "-"); domainNet.Checked = !internet.Checked; }
-            else { domainNet.Checked = true; }
-            if (named)
-            {
-                string ip = null;
-                try { ip = ComputerSnapshot.MainIpAddress(); } catch (Exception) { }
-                string suggested = ComputerNaming.Suggested(s.Name, Prefix, policy, null, ip);
-                designation.Text = suggested.Substring((Prefix + "-" + policy.UnitCode + "-").Length);
-            }
+            else domainNet.Checked = operation == "Join";
+            renameOnLeave.Checked = dhcpOnLeave.Checked = true;
+            filling = false;
             apply.Text = operation == "Rename" ? L.T(" Переименовать") : operation == "Join" ? L.T(" Ввести в ") + policy.DomainName : L.T(" Вывести из ") + policy.DomainName;
+            UpdateRows();
             editor.Visible = true;
+            status.Clear();
+
+            string ip = null;
+            if (operation == "Join") await LoadJoinData();
+            else if (operation == "Leave") await LoadLeaveData();
+            if (operation != "Join") { try { ip = ComputerSnapshot.MainIpAddress(); } catch (Exception) { } }
+            SuggestDesignation(ip ?? PlannedAddress());
+            designationEdited = false;
             UpdatePreview();
-            if (designation.Visible) designation.Focus(); else localUser.Focus();
+            if (designation.Visible && operation != "Leave") designation.Focus();
+            else if (operation == "Leave") { if (localUser.Text.Length > 0) localPassword.Focus(); else localUser.Focus(); }
         }
 
-        string Prefix { get { return domainNet.Checked || operation != "Rename" ? policy.DomainPrefix : policy.InternetPrefix; } }
+        void SuggestDesignation(string ip)
+        {
+            string suggested = ComputerNaming.Suggested(current.Name, Prefix, policy, null, ip);
+            filling = true;
+            designation.Text = suggested.Substring((Prefix + "-" + policy.UnitCode + "-").Length);
+            filling = false;
+        }
+
+        // Rows of the operation: the name for all but a leave without renaming, network and database for joining,
+        // local administrator and DHCP for leaving, domain account where the domain is contacted.
+        void UpdateRows()
+        {
+            bool join = operation == "Join", leave = operation == "Leave";
+            bool named = !leave || renameOnLeave.Checked;
+            form.Show(networkRow, operation == "Rename" && current != null && !current.PartOfDomain);
+            form.Show(renameOnLeave, leave);
+            form.Show(designation, named);
+            form.Show(preview, named);
+            form.Show(syncRow, join);
+            form.Show(profilesNote, join && profiles.Missing);
+            bool lan = join && !profiles.Missing;
+            form.Show(lanAdapter, lan);
+            form.Show(office, lan);
+            bool keep = lan && Office == null;
+            form.Show(segment, lan && !keep);
+            form.Show(ipRow, lan && !keep);
+            form.Show(localUser, leave);
+            form.Show(localPassword, leave);
+            form.Show(dhcpOnLeave, leave && staticAdapters.Count > 0);
+            bool needsDomain = join || (operation == "Rename" && current != null && current.PartOfDomain);
+            form.Show(domainUser, needsDomain);
+            form.Show(domainPassword, needsDomain);
+            form.Show(remember, needsDomain);
+            UpdatePreview();
+        }
+
+        // ---------- leaving ----------
+
+        async Task LoadLeaveData()
+        {
+            List<LanSetup.State> states = null;
+            string admin = "";
+            try
+            {
+                staticAdapters = await Task.Run(delegate { return LanSetup.StaticAdapters(out states); });
+                admin = await Task.Run(delegate { return ComputerChange.DefaultLocalAdministrator(); });
+            }
+            catch (Exception e) { staticAdapters = new List<Adapter>(); status.Set(Glyph.Warning, L.T("Не удалось прочитать сетевые адаптеры: ") + e.Message, Theme.Warn); }
+            List<string> names = new List<string>();
+            for (int i = 0; i < staticAdapters.Count; i++)
+                names.Add(staticAdapters[i].Name + (states != null && states[i].Ip.Length > 0 && !states[i].Dhcp ? " (" + states[i].Ip + ")" : ""));
+            dhcpOnLeave.Text = L.T("Переключить на DHCP: ") + string.Join(", ", names);
+            if (localUser.Text.Trim().Length == 0) localUser.Text = admin;
+            UpdateRows();
+        }
+
+        // ---------- joining: database, adapter, office, address ----------
+
+        async Task LoadJoinData()
+        {
+            profiles = NetworkProfiles.Read(AppPaths.File("network-profiles.json"));
+            ShowSyncInfo();
+            string dataPath = AppPaths.Data;
+            try
+            {
+                book = await Task.Run(delegate { return AddressBook.Read(dataPath, OwnRecord(dataPath)); });
+                wired = await Task.Run(delegate
+                {
+                    List<Adapter> list = LanSetup.WiredAdapters();
+                    wiredStates.Clear();
+                    foreach (Adapter a in list) { try { wiredStates[a.Index] = LanSetup.Read(a.Guid); } catch (Exception) { } }
+                    return list;
+                });
+            }
+            catch (Exception e) { status.Set(Glyph.Warning, L.T("Не удалось прочитать базу или сетевые адаптеры: ") + e.Message, Theme.Warn); }
+
+            filling = true;
+            office.Items.Clear();
+            foreach (NetworkProfiles.Location l in profiles.Locations) office.Items.Add(new Item { Text = l.Name, Value = l });
+            office.Items.Add(new Item { Text = L.T("— не менять настройки сети"), Value = KeepNetwork });
+            lanAdapter.Items.Clear();
+            int select = 0;
+            foreach (Adapter a in wired)
+            {
+                bool good, bad;
+                LanSetup.State st = StateOf(a);
+                // Prefer the adapter that already has an office address.
+                NetworkProfiles.Location l; int seg, last;
+                if (st != null && !st.Dhcp && profiles.Match(st.Ip, out l, out seg, out last) && select == 0 && lanAdapter.Items.Count > 0) select = lanAdapter.Items.Count;
+                lanAdapter.Items.Add(new Item { Text = a.Name + " — " + LanSetup.StatusText(a, out good, out bad) + "  (" + a.Description + ")", Value = a });
+            }
+            if (lanAdapter.Items.Count > 0) lanAdapter.SelectedIndex = select;
+            filling = false;
+            if (wired.Count == 0 && !profiles.Missing) status.Set(Glyph.Warning, L.T("Проводные сетевые адаптеры не найдены."), Theme.Bad);
+            AdapterChanged();
+        }
+
+        // This computer's record in the database: its own address is not someone else's.
+        static string OwnRecord(string dataPath)
+        {
+            try
+            {
+                Dictionary<string, object> product = Wmi.First(Wmi.Cimv2, "SELECT UUID FROM Win32_ComputerSystemProduct");
+                Dictionary<string, object> bios = Wmi.First(Wmi.Cimv2, "SELECT SerialNumber FROM Win32_BIOS");
+                return Identity.Find(Wmi.Str(product, "UUID"), (Wmi.Str(bios, "SerialNumber") ?? "").Trim(), Identity.WindowsInstallationId(), dataPath).Path;
+            }
+            catch (Exception) { return null; }
+        }
+
+        void ShowSyncInfo()
+        {
+            string last = null;
+            try { last = CloudState.ForDisplay(AppPaths.Root).LastSyncAt; } catch (Exception) { }
+            DateTime when;
+            bool known = DateTime.TryParse(last ?? "", out when);
+            bool old = !known || (DateTime.Now - when).TotalHours > 12;
+            syncInfo.Text = (known ? L.T("последняя синхронизация: ") + Fmt.Date(last) : L.T("синхронизации ещё не было")) +
+                (old ? L.T("\r\nсинхронизируйте, пока есть интернет") : "");
+            syncInfo.ForeColor = old ? Theme.Warn : Theme.Muted;
+        }
+
+        Adapter SelectedAdapter { get { return lanAdapter.SelectedItem == null ? null : (Adapter)((Item)lanAdapter.SelectedItem).Value; } }
+
+        LanSetup.State StateOf(Adapter a)
+        {
+            LanSetup.State s;
+            return a != null && wiredStates.TryGetValue(a.Index, out s) ? s : null;
+        }
+
+        NetworkProfiles.Location Office { get { return office.SelectedItem == null ? null : ((Item)office.SelectedItem).Value as NetworkProfiles.Location; } }
+
+        int? Segment { get { return segment.SelectedItem == null ? (int?)null : (int)((Item)segment.SelectedItem).Value; } }
+
+        // The adapter's own office address is kept when nobody else in the database has it; otherwise the first free one.
+        void AdapterChanged()
+        {
+            if (profiles.Missing || office.Items.Count == 0) { UpdateRows(); return; }
+            LanSetup.State st = StateOf(SelectedAdapter);
+            NetworkProfiles.Location l; int seg, last;
+            if (st != null && !st.Dhcp && profiles.Match(st.Ip, out l, out seg, out last))
+            {
+                SelectOffice(l, seg);
+                if (book.Owner(st.Ip) == null) SetHost(last); else PickFree(-1);
+            }
+            else
+            {
+                if (office.SelectedItem == null) SelectOffice(profiles.Locations[0], -1);
+                PickFree(-1);
+            }
+            UpdateRows();
+        }
+
+        void SelectOffice(NetworkProfiles.Location l, int seg)
+        {
+            filling = true;
+            foreach (Item i in office.Items) if (ReferenceEquals(i.Value, l)) office.SelectedItem = i;
+            FillSegments(seg);
+            filling = false;
+        }
+
+        void FillSegments(int keep)
+        {
+            NetworkProfiles.Location l = Office;
+            int? previous = keep >= 0 ? keep : Segment;
+            segment.Items.Clear();
+            if (l == null) return;
+            foreach (int s in l.Segments ?? profiles.Segments)
+            {
+                segment.Items.Add(new Item { Text = s.ToString(), Value = s });
+                if (previous.HasValue && previous.Value == s) segment.SelectedIndex = segment.Items.Count - 1;
+            }
+            if (segment.SelectedIndex < 0 && segment.Items.Count > 0) segment.SelectedIndex = 0;
+            host.Minimum = l.FirstHostOctet;
+            host.Maximum = Math.Max(l.FirstHostOctet, l.LastHostOctet);
+        }
+
+        void OfficeChanged()
+        {
+            filling = true;
+            FillSegments(-1);
+            filling = false;
+            if (Office != null) PickFree(-1);
+            UpdateRows();
+        }
+
+        // First free address after `after` (-1: from the start of the range).
+        void PickFree(int after)
+        {
+            NetworkProfiles.Location l = Office;
+            if (l == null || !Segment.HasValue) { AddressChanged(); return; }
+            int free = book.FirstFree(profiles, l, Segment.Value, after, takenInNetwork);
+            SetHost(free >= 0 ? free : (after >= 0 ? after : l.FirstHostOctet));
+        }
+
+        void SetHost(int value)
+        {
+            filling = true;
+            host.Value = Math.Max(host.Minimum, Math.Min(host.Maximum, value));
+            filling = false;
+            AddressChanged();
+        }
+
+        string PlannedAddress()
+        {
+            NetworkProfiles.Location l = Office;
+            if (operation != "Join" || l == null || !Segment.HasValue) return null;
+            return profiles.Address(l, Segment.Value, (int)host.Value);
+        }
+
+        void AddressChanged()
+        {
+            NetworkProfiles.Location l = Office;
+            if (l == null || !Segment.HasValue) { ipStart.Text = ""; ipNote.Text = ""; UpdatePreview(); return; }
+            ipStart.Text = profiles.FirstOctet + "." + Segment.Value + "." + l.ThirdOctet + ".";
+            string ip = PlannedAddress();
+            string owner = book.Owner(ip);
+            LanSetup.State st = StateOf(SelectedAdapter);
+            bool good = false;
+            if (owner != null) ipNote.Text = L.T("занят: ") + owner;
+            else if (takenInNetwork.Contains(ip)) ipNote.Text = L.T("занят в сети");
+            else if (st != null && !st.Dhcp && st.Ip == ip) { ipNote.Text = L.T("текущий адрес ПК"); good = true; }
+            else if (book.FirstFree(profiles, l, Segment.Value, -1, takenInNetwork) < 0) ipNote.Text = L.T("свободных нет");
+            else { ipNote.Text = L.T("свободен по базе"); good = true; }
+            ipNote.ForeColor = good ? Theme.Good : Theme.Bad;
+            // A name made from the address follows it until the technician types a designation.
+            if (!designationEdited && current != null && !System.Text.RegularExpressions.Regex.IsMatch(current.Name, "^[A-Z]{2,3}-\\d{3}-.+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                SuggestDesignation(ip);
+            UpdatePreview();
+        }
+
+        async void SyncDatabase()
+        {
+            if (syncing || running) return;
+            syncing = true;
+            syncNow.Enabled = apply.Enabled = false;
+            status.Set(Glyph.More, L.T("Подключение к облаку…"), Theme.Muted);
+            try
+            {
+                SyncCounts c = await SyncDialogs.Run(this, delegate (string text) { status.Set(Glyph.More, text, Theme.Muted); });
+                if (c == null) status.Set(Glyph.Info, L.T("Синхронизация отменена: ключ не введён."), Theme.Warn);
+                else if (c.Errors.Count == 0) status.Set(Glyph.Check, L.T("База синхронизирована: получено новых ") + c.ReceivedNew + L.T(", обновлено ") + c.ReceivedUpdated + L.T(". Адрес выбран заново."), Theme.Good);
+                else status.Set(Glyph.Warning, L.T("Синхронизация завершена с ошибками (") + c.Errors.Count + "): " + c.Errors[0], Theme.Warn);
+            }
+            catch (Exception e) { status.Set(Glyph.Warning, L.T("Синхронизация не завершена: ") + e.Message, Theme.Bad); }
+            finally
+            {
+                syncing = false;
+                syncNow.Enabled = true;
+            }
+            if (operation == "Join" && !running) await LoadJoinData();
+            UpdatePreview();
+        }
+
+        // ---------- name, apply ----------
+
+        string Prefix { get { return operation == "Leave" ? policy.InternetPrefix : domainNet.Checked || operation != "Rename" ? policy.DomainPrefix : policy.InternetPrefix; } }
 
         string FullName { get { return Prefix + "-" + policy.UnitCode + "-" + ComputerNaming.Designation(designation.Text); } }
 
+        bool Renames { get { return operation != "Leave" || renameOnLeave.Checked; } }
+
         void UpdatePreview()
         {
-            if (operation == null || operation == "Leave") { apply.Enabled = !running; return; }
-            string name = FullName;
-            string issue = ComputerNaming.Issue(name, Prefix, policy);
-            preview.Text = name + (issue != null ? "   — " + issue : "");
-            preview.ForeColor = issue != null ? Theme.Bad : Theme.Accent;
-            preview.MaximumSize = new Size(Math.Max(Font.Height * 10, form.Width - Font.Height * 12), 0);
-            apply.Enabled = issue == null && !running;
+            if (operation == null) return;
+            string issue = null;
+            if (Renames)
+            {
+                string name = FullName;
+                issue = ComputerNaming.Issue(name, Prefix, policy);
+                preview.Text = name + (issue != null ? "   — " + issue : "");
+                preview.ForeColor = issue != null ? Theme.Bad : Theme.Accent;
+                preview.MaximumSize = new Size(Math.Max(Font.Height * 10, form.Width - Font.Height * 12), 0);
+            }
+            bool networkReady = operation != "Join" || profiles.Missing || Office == null || (SelectedAdapter != null && Segment.HasValue);
+            apply.Enabled = issue == null && networkReady && !running && !syncing;
         }
 
-        async void Apply()
+        ComputerChange.NetworkPlan NetworkPlan()
+        {
+            NetworkProfiles.Location l = Office;
+            Adapter a = SelectedAdapter;
+            if (operation != "Join" || profiles.Missing || l == null || a == null || !Segment.HasValue) return null;
+            ComputerChange.NetworkPlan n = new ComputerChange.NetworkPlan();
+            n.AdapterIndex = a.Index;
+            n.AdapterName = a.Name;
+            n.AdapterGuid = a.Guid;
+            n.Ip = PlannedAddress();
+            n.Mask = l.SubnetMask;
+            n.PrefixLength = l.PrefixLength;
+            n.Gateway = profiles.Gateway(l, Segment.Value);
+            n.Dns = new List<string>(l.DnsServers);
+            return n;
+        }
+
+        // Everything typed and chosen, for the copy started with administrator rights.
+        JsonObject FormData()
+        {
+            JsonObject o = new JsonObject();
+            o["page"] = Key;
+            o["operation"] = operation;
+            o["designation"] = designation.Text;
+            o["internet"] = internet.Checked;
+            o["renameOnLeave"] = renameOnLeave.Checked;
+            o["dhcpOnLeave"] = dhcpOnLeave.Checked;
+            o["localUser"] = localUser.Text;
+            o["localPassword"] = localPassword.Text;
+            o["domainUser"] = domainUser.Text;
+            o["domainPassword"] = domainPassword.Text;
+            o["remember"] = remember.Checked;
+            Adapter a = SelectedAdapter;
+            o["adapter"] = a != null ? a.Guid : null;
+            o["office"] = Office != null ? Office.Name : office.SelectedItem != null ? KeepNetwork : null;
+            o["segment"] = Segment.HasValue ? (object)Segment.Value : null;
+            o["host"] = (int)host.Value;
+            return o;
+        }
+
+        // Puts the handed-over form back and goes on with the change without asking again.
+        void Fill(JsonObject o)
+        {
+            filling = true;
+            if (o["internet"] is bool) { internet.Checked = (bool)o["internet"]; domainNet.Checked = !internet.Checked; }
+            if (o["renameOnLeave"] is bool) renameOnLeave.Checked = (bool)o["renameOnLeave"];
+            if (o["dhcpOnLeave"] is bool) dhcpOnLeave.Checked = (bool)o["dhcpOnLeave"];
+            designation.Text = o.Text("designation") ?? "";
+            localUser.Text = o.Text("localUser") ?? "";
+            localPassword.Text = o.Text("localPassword") ?? "";
+            domainUser.Text = o.Text("domainUser") ?? "";
+            domainPassword.Text = o.Text("domainPassword") ?? "";
+            if (o["remember"] is bool) remember.Checked = (bool)o["remember"];
+            filling = false;
+            designationEdited = true;
+            if (operation == "Join" && !profiles.Missing)
+            {
+                foreach (Item i in lanAdapter.Items)
+                    if (((Adapter)i.Value).Guid == o.Text("adapter")) { filling = true; lanAdapter.SelectedItem = i; filling = false; }
+                string officeName = o.Text("office");
+                if (officeName == KeepNetwork)
+                {
+                    filling = true;
+                    foreach (Item i in office.Items) if (KeepNetwork.Equals(i.Value)) office.SelectedItem = i;
+                    filling = false;
+                }
+                else
+                {
+                    NetworkProfiles.Location l = profiles.Locations.Find(delegate (NetworkProfiles.Location x) { return x.Name == officeName; });
+                    int seg;
+                    if (l != null && int.TryParse(o.Text("segment"), out seg)) SelectOffice(l, seg);
+                    int last;
+                    if (int.TryParse(o.Text("host"), out last)) SetHost(last);
+                }
+            }
+            UpdateRows();
+            if (apply.Enabled) Apply(true);
+        }
+
+        async void Apply(bool confirmed)
         {
             ComputerState s = current;
             ComputerChange.Request r = new ComputerChange.Request();
             r.Operation = operation;
-            r.Name = operation == "Leave" ? s.Name : FullName;
+            r.Name = operation == "Leave" && !renameOnLeave.Checked ? s.Name : FullName;
             r.LocalUser = localUser.Text.Trim();
             r.LocalPassword = localPassword.Text;
             r.DomainUser = domainUser.Text.Trim();
             r.DomainPassword = domainPassword.Text;
-            if (operation != "Rename" || s.PartOfDomain) DomainCredentials.Save(r.DomainUser, r.DomainPassword, remember.Checked);
+            r.Network = NetworkPlan();
+            if (operation == "Leave" && dhcpOnLeave.Checked) r.DhcpAdapters = new List<Adapter>(staticAdapters);
+            bool needsDomain = operation == "Join" || (operation == "Rename" && s.PartOfDomain);
+            if (needsDomain) DomainCredentials.Save(r.DomainUser, r.DomainPassword, remember.Checked);
             if (operation == "Leave" && r.LocalUser.Length == 0) { status.Set(Glyph.Warning, L.T("Укажите локального администратора: доменные профили не преобразуются в локальные."), Theme.Bad); return; }
-            if ((operation != "Rename" || s.PartOfDomain) && r.DomainUser.Length == 0) { status.Set(Glyph.Warning, L.T("Укажите доменную учётную запись с правом выполнения операции."), Theme.Bad); return; }
+            if (needsDomain && r.DomainUser.Length == 0) { status.Set(Glyph.Warning, L.T("Укажите доменную учётную запись с правом выполнения операции."), Theme.Bad); return; }
             string targetDomain = operation == "Join" ? policy.DomainName : operation == "Leave" ? policy.WorkgroupName : s.Domain;
-            string action = operation == "Rename" ? L.T("Переименование") : operation == "Join" ? L.T("Ввод в домен") : L.T("Вывод из домена");
-            string question = action + L.T("\n\nИмя: ") + s.Name + " → " + r.Name + L.T("\nДомен / рабочая группа: ") + s.Domain + " → " + targetDomain +
-                L.T("\n\nПотребуется перезагрузка. Новое состояние будет проверено при следующем открытии раздела.");
-            if (Ui.Ask(FindForm(), Title, question, Glyph.Warning, Theme.Warn, L.T("Применить изменения"), L.T("Назад")) != 0) return;
+            if (!confirmed)
+            {
+                string action = operation == "Rename" ? L.T("Переименование") : operation == "Join" ? L.T("Ввод в домен") : L.T("Вывод из домена");
+                string question = action + L.T("\n\nИмя: ") + s.Name + " → " + r.Name + L.T("\nДомен / рабочая группа: ") + s.Domain + " → " + targetDomain;
+                if (r.Network != null)
+                {
+                    string owner = book.Owner(r.Network.Ip);
+                    question += L.T("\nСеть: «") + r.Network.AdapterName + "» → " + r.Network.Ip + "/" + r.Network.PrefixLength + L.T(", шлюз ") + r.Network.Gateway +
+                        (r.Network.Dns.Count > 0 ? ", DNS " + string.Join(", ", r.Network.Dns) : "") +
+                        (owner != null ? L.T("\nВнимание: в базе этот адрес у ") + owner + "." : "");
+                }
+                if (r.DhcpAdapters.Count > 0)
+                {
+                    List<string> names = new List<string>();
+                    foreach (Adapter a in r.DhcpAdapters) names.Add(a.Name);
+                    question += L.T("\nСеть: ") + string.Join(", ", names) + L.T(" → автоматически (DHCP)");
+                }
+                if (operation == "Leave") question += L.T("\n\nДоменная учётная запись не нужна: объект компьютера в домене останется как есть.");
+                question += L.T("\n\nПотребуется перезагрузка. Новое состояние будет проверено при следующем открытии раздела.");
+                if (Ui.Ask(FindForm(), Title, question, Glyph.Warning, Theme.Warn, L.T("Применить изменения"), L.T("Назад")) != 0) return;
+            }
 
-            // Viewing and filling the form does not need UAC. Ask only after the user has confirmed a real change.
-            if (!PowerShell.IsAdministrator()) { if (Main != null) Main.RestartAsAdministrator(Key); return; }
+            // Viewing and filling the form does not need UAC. Ask only after the user has confirmed a real change;
+            // the new copy gets the whole form and goes on by itself.
+            if (!PowerShell.IsAdministrator()) { if (Main != null) Main.RestartAsAdministrator(Key, FormData()); return; }
 
             running = true;
-            apply.Enabled = false;
-            status.Set(Glyph.More, operation == "Rename" && !s.PartOfDomain ? L.T("Переименование…") : L.T("Проверка домена и выполнение команды Windows…"), Theme.Muted);
+            apply.Enabled = syncNow.Enabled = false;
+            status.Set(Glyph.More, L.T("Выполнение…"), Theme.Muted);
+            r.Progress = delegate (string text) { BeginInvoke(new MethodInvoker(delegate { status.Set(Glyph.More, text, Theme.Muted); })); };
             string dataPath = AppPaths.Data;
+            ComputerPolicy p = policy;
+            bool refresh = true;
             try
             {
                 bool changed = await Task.Run(delegate
                 {
-                    if (r.Operation != "Leave") ComputerChange.AssertInventoryReady(dataPath);
-                    return ComputerChange.Apply(r, policy);
+                    if (r.Operation != "Leave" || r.Name != s.Name) ComputerChange.AssertInventoryReady(dataPath);
+                    return ComputerChange.Apply(r, p);
                 });
                 if (!changed) { status.Set(Glyph.Check, L.T("Компьютер уже имеет это имя. Изменения не требуются."), Theme.Good); return; }
-                status.Set(Glyph.Check, L.T("Windows подтвердила команду. Ожидаемое имя: ") + r.Name + L.T("; домен / группа: ") + targetDomain +
-                    L.T(".\r\nПосле перезагрузки откройте этот раздел для проверки, затем соберите сведения о компьютере."), Theme.Good);
+                status.Set(r.Warnings.Count > 0 ? Glyph.Warning : Glyph.Check, L.T("Windows подтвердила команду. Ожидаемое имя: ") + r.Name + L.T("; домен / группа: ") + targetDomain +
+                    (r.Network != null ? L.T("; адрес ") + r.Network.Ip : "") +
+                    L.T(".\r\nПосле перезагрузки откройте этот раздел для проверки, затем соберите сведения о компьютере и синхронизируйте базу.") +
+                    (r.Warnings.Count > 0 ? "\r\n" + string.Join("\r\n", r.Warnings) : ""), r.Warnings.Count > 0 ? Theme.Warn : Theme.Good);
                 if (Ui.Ask(FindForm(), Title, L.T("Для завершения нужна перезагрузка компьютера."), Glyph.Power, Theme.Info, L.T("Перезагрузить сейчас"), L.T("Позже")) == 0) RestartComputer();
             }
             catch (Exception e)
             {
+                // Windows found the new address in use: remember it and offer the next free one.
+                if (e is ComputerChange.AddressInUseException)
+                {
+                    takenInNetwork.Add(r.Network.Ip);
+                    refresh = false;
+                    PickFree((int)host.Value);
+                }
                 status.Set(Glyph.Warning, e.Message + L.T("\r\nЕсли команда Windows уже запускалась, результат может быть частичным. Перезагрузите компьютер и откройте раздел для проверки."), Theme.Bad);
             }
             finally
@@ -780,7 +1244,8 @@ namespace CompInfo
                 r.LocalPassword = r.DomainPassword = null;
                 localPassword.Text = "";
                 running = false;
-                Refresh(false);
+                syncNow.Enabled = true;
+                if (refresh) Refresh(false); else UpdatePreview();
             }
         }
 
