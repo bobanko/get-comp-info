@@ -97,11 +97,12 @@ namespace CompInfo
         // Language or theme changed in «О программе»: the window is built again and opens it once more.
         static bool reopenAbout;
 
-        public StandaloneForm(string name, string description, Page page, Func<StandaloneAboutDialog> about, params Button[] buttons)
+        // name marks its coloured part in square brackets: «[SUS]pector», «you[SBee]».
+        public StandaloneForm(string name, Color highlight, string description, Page page, Func<StandaloneAboutDialog> about, params Button[] buttons)
         {
             this.page = page;
             this.about = about;
-            Text = name + " " + AppVersion.Text;
+            Text = TitleText.Plain(name) + " " + AppVersion.Text;
             Ui.WindowIcon(this);
             Font = Ui.BaseFont;
             BackColor = Theme.Back;
@@ -111,12 +112,8 @@ namespace CompInfo
             KeyPreview = true;
             int em = Font.Height;
 
-            Label title = new Label();
-            title.Text = name;
-            title.Font = new Font("Segoe UI Semibold", 15f);
-            title.ForeColor = Theme.Text;
+            TitleText title = new TitleText(name, new Font("Segoe UI Semibold", 15f), highlight);
             title.Dock = DockStyle.Top;
-            title.Height = title.Font.Height + em / 6;
 
             Label line = Ui.Paragraph(description, Font, Theme.Muted);
             line.Dock = DockStyle.Top;
@@ -202,7 +199,7 @@ namespace CompInfo
         // Language or theme was changed: the main window must be built again.
         public bool Rebuild;
 
-        public StandaloneAboutDialog(Image picture, string name, string subtitle, string[] sections, IniSettings settings)
+        public StandaloneAboutDialog(Image picture, string name, Color highlight, string subtitle, string[] sections, IniSettings settings)
         {
             Ui.Dialog(this);
             Text = L.T("О программе");
@@ -214,7 +211,7 @@ namespace CompInfo
             Padding = new Padding(em);
 
             FlowLayoutPanel text;
-            TableLayoutPanel t = About.Build(Font, em * 26, picture, name, subtitle, null, sections, out text);
+            TableLayoutPanel t = About.Build(Font, em * 26, picture, name, highlight, subtitle, null, sections, out text);
             text.Controls.Add(About.SiteRow(Font, Glyph.Open, About.WebSite, null));
 
             // Language and theme: rarely changed, so they are here and not in the main window.

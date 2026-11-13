@@ -434,6 +434,63 @@ namespace CompInfo
         }
     }
 
+    // A program name with a coloured part, as on chagear.top: «[SUS]pector», «you[SBee]», «CHAGEAR [Тулбокс]».
+    // The part in square brackets is drawn in the program's colour, the rest in the text colour.
+    public class TitleText : Control
+    {
+        readonly List<string> parts = new List<string>();
+        readonly List<bool> marked = new List<bool>();
+        readonly Color highlight;
+        readonly int inset;
+        const TextFormatFlags Flags = TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine;
+
+        public TitleText(string title, Font font, Color highlight)
+        {
+            this.highlight = highlight;
+            Font = font;
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.SupportsTransparentBackColor, true);
+            BackColor = Color.Transparent;
+            string rest = title ?? "";
+            while (rest.Length > 0)
+            {
+                int open = rest.IndexOf('['), close = open < 0 ? -1 : rest.IndexOf(']', open);
+                if (open < 0 || close < 0) { Add(rest, false); break; }
+                Add(rest.Substring(0, open), false);
+                Add(rest.Substring(open + 1, close - open - 1), true);
+                rest = rest.Substring(close + 1);
+            }
+            Text = Plain(title);
+            // The same left inset as the labels around it, so the name lines up with them.
+            inset = (TextRenderer.MeasureText("a", Font).Width - TextRenderer.MeasureText("a", Font, Size.Empty, Flags).Width) / 2;
+            Size = new Size(inset * 2 + StartOf(parts.Count), Font.Height + Font.Height / 6);
+        }
+
+        void Add(string part, bool isMarked)
+        {
+            if (part.Length == 0) return;
+            parts.Add(part);
+            marked.Add(isMarked);
+        }
+
+        // The name without the marks, for window titles.
+        public static string Plain(string title) { return (title ?? "").Replace("[", "").Replace("]", ""); }
+
+        // Where part i starts: the width of everything before it (trailing spaces included).
+        int StartOf(int i)
+        {
+            string before = string.Concat(parts.GetRange(0, i).ToArray());
+            if (before.Length == 0) return 0;
+            // GDI drops trailing spaces when measuring; a closing character keeps them, then it is taken away.
+            return TextRenderer.MeasureText(before + "|", Font, Size.Empty, Flags).Width - TextRenderer.MeasureText("|", Font, Size.Empty, Flags).Width;
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            for (int i = 0; i < parts.Count; i++)
+                TextRenderer.DrawText(e.Graphics, parts[i], Font, new Point(inset + StartOf(i), 0), marked[i] ? highlight : Theme.Text, Flags);
+        }
+    }
+
     // «О программе» of comp-info (AboutPage) and the standalone programs (StandaloneAboutDialog), as in SupraWeed:
     // the picture on the left; name, version, sections and how to reach the developer on the right.
     public static class About
@@ -443,6 +500,12 @@ namespace CompInfo
 
         // Builds everything up to the developer's e-mail; the caller adds its own links to the returned column.
         public static TableLayoutPanel Build(Font font, int width, Image picture, string title, string subtitle, string intro, string[] sections, out FlowLayoutPanel text)
+        {
+            return Build(font, width, picture, title, Theme.Accent, subtitle, intro, sections, out text);
+        }
+
+        // The title may mark a coloured part in square brackets (TitleText): «[SUS]pector».
+        public static TableLayoutPanel Build(Font font, int width, Image picture, string title, Color highlight, string subtitle, string intro, string[] sections, out FlowLayoutPanel text)
         {
             int em = font.Height;
             TableLayoutPanel t = new TableLayoutPanel();
@@ -469,7 +532,14 @@ namespace CompInfo
             text.Margin = Padding.Empty;
             t.Controls.Add(text, 1, 0);
 
-            text.Controls.Add(Line(title, new Font("Segoe UI Semibold", 16f), Theme.Text, width, 0));
+            Font titleFont = new Font("Segoe UI Semibold", 16f);
+            if (title.IndexOf('[') >= 0)
+            {
+                TitleText name = new TitleText(title, titleFont, highlight);
+                name.Margin = new Padding(0, 0, 0, em / 8);
+                text.Controls.Add(name);
+            }
+            else text.Controls.Add(Line(title, titleFont, Theme.Text, width, 0));
             text.Controls.Add(Line(subtitle, font, Theme.Text, width, 0));
             text.Controls.Add(Line(L.T("Версия ") + AppVersion.Text + (PowerShell.IsAdministrator() ? L.T(" · запущена с правами администратора") : ""), font, Theme.Muted, width, em / 2));
             if (!string.IsNullOrEmpty(intro)) text.Controls.Add(Line(intro, font, Theme.Text, width, em / 2));

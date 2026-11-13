@@ -1,4 +1,5 @@
 using System;
+using System.Drawing;
 
 namespace CompInfo
 {
@@ -9,8 +10,11 @@ namespace CompInfo
         // Only harmless UI preferences: theme and language.
         public static readonly IniSettings Settings = new IniSettings("youSBee.ini", "youSBee settings", "theme", "language");
 
+        // «SBee» is honey yellow, as on chagear.top.
+        static Color Highlight { get { return Theme.Dark ? Color.FromArgb(245, 184, 46) : Color.FromArgb(180, 122, 0); } }
+
         public YouSBeeForm()
-            : base("youSBee",
+            : base("you[SBee]", Highlight,
                 L.T("Серийные номера флешек и USB-дисков."),
                 new UsbPage(), AboutDialog)
         {
@@ -20,7 +24,7 @@ namespace CompInfo
 
         static StandaloneAboutDialog AboutDialog()
         {
-            return new StandaloneAboutDialog(Ui.YouSBeeImage, "youSBee",
+            return new StandaloneAboutDialog(Ui.YouSBeeImage, "you[SBee]", Highlight,
                 L.T("Показывает серийные номера флешек и USB-дисков, чтобы их было удобно переписать или вставить в заявку."), Sections, Settings);
         }
 

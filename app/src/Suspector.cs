@@ -1,4 +1,5 @@
 using System;
+using System.Drawing;
 using System.Windows.Forms;
 
 namespace CompInfo
@@ -10,8 +11,11 @@ namespace CompInfo
         // Only harmless UI preferences: theme, language and where the file table is.
         public static readonly IniSettings Settings = new IniSettings("SUSpector.ini", "SUSpector settings", "theme", "language", "layout");
 
+        // «SUS» is purple, as on chagear.top.
+        static Color Highlight { get { return Theme.Dark ? Color.FromArgb(165, 133, 255) : Color.FromArgb(109, 63, 208); } }
+
         public SuspectorForm()
-            : base("SUSpector",
+            : base("[SUS]pector", Highlight,
                 L.T("Проверка и подготовка компьютера перед внешней проверкой. Результаты остаются на этом компьютере."),
                 new SecurityPage(), AboutDialog, UpdateButton())
         {
@@ -30,7 +34,7 @@ namespace CompInfo
 
         static StandaloneAboutDialog AboutDialog()
         {
-            return new StandaloneAboutDialog(Ui.SuspectorImage, "SUSpector",
+            return new StandaloneAboutDialog(Ui.SuspectorImage, "[SUS]pector", Highlight,
                 L.T("Помогает проверить и подготовить компьютер перед внешней проверкой безопасности."), Sections, Settings);
         }
 
