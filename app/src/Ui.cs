@@ -16,7 +16,7 @@ namespace CompInfo
             Copy = "", Save = "", Search = "", Check = "", Cross = "", Warning = "",
             Shield = "", Open = "", Back = "", Forward = "", Folder = "", Settings = "",
             Circle = "", Dash = "", More = "", Info = "", Cloud = "", Upload = "",
-            Power = "", Lock = "", Person = "", Theme = "", Delete = "\uE74D", DockBottom = "\uE90E", DockRight = "\uE90D", Play = "", Globe = "\uE774";
+            Power = "", Lock = "", Person = "", Theme = "", Delete = "\uE74D", Pin = "\uE718", Pinned = "\uE842", DockBottom = "\uE90E", DockRight = "\uE90D", Play = "", Globe = "\uE774";
         public const string Sun = "\uE706", Moon = "\uE708";
 
         static string family;
@@ -502,11 +502,12 @@ namespace CompInfo
         // Builds everything up to the developer's e-mail; the caller adds its own links to the returned column.
         public static TableLayoutPanel Build(Font font, int width, Image picture, string title, string subtitle, string intro, string[] sections, out FlowLayoutPanel text)
         {
-            return Build(font, width, picture, title, Theme.Accent, Email, subtitle, intro, sections, out text);
+            return Build(font, width, picture, null, title, Theme.Accent, Email, subtitle, intro, sections, out text);
         }
 
         // The title may mark a coloured part in square brackets (TitleText): «[SUS]pector».
-        public static TableLayoutPanel Build(Font font, int width, Image picture, string title, Color highlight, string email,
+        // underPicture (the language and theme block) goes right under the picture.
+        public static TableLayoutPanel Build(Font font, int width, Image picture, Control underPicture, string title, Color highlight, string email,
             string subtitle, string intro, string[] sections, out FlowLayoutPanel text)
         {
             int em = font.Height;
@@ -524,7 +525,20 @@ namespace CompInfo
             pic.SizeMode = PictureBoxSizeMode.Zoom;
             pic.Size = new Size(side, side);
             pic.Margin = new Padding(0, 0, em, 0);
-            t.Controls.Add(pic, 0, 0);
+            if (underPicture == null) t.Controls.Add(pic, 0, 0);
+            else
+            {
+                FlowLayoutPanel left = new FlowLayoutPanel();
+                left.FlowDirection = FlowDirection.TopDown;
+                left.WrapContents = false;
+                left.AutoSize = true;
+                left.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+                left.Margin = pic.Margin;
+                pic.Margin = Padding.Empty;
+                left.Controls.Add(pic);
+                left.Controls.Add(underPicture);
+                t.Controls.Add(left, 0, 0);
+            }
 
             text = new FlowLayoutPanel();
             text.FlowDirection = FlowDirection.TopDown;
@@ -561,6 +575,41 @@ namespace CompInfo
                 try { Clipboard.SetText(email); copied.Text = L.T("скопировано ✓"); } catch (Exception) { }
             }));
             return t;
+        }
+
+        // Language and theme under the picture of «О программе» (all programs): rarely changed, so they live there
+        // and not in the main windows. save keeps the choice, rebuild builds the windows again in it.
+        public static FlowLayoutPanel Appearance(Font font, int width, Action<string, string> save, Action rebuild)
+        {
+            int em = font.Height;
+            Segmented language = new Segmented(new[] { "УКР", "ENG", "РУС" }, false,
+                new[] { "Українська", "English", "Русский" }, Array.IndexOf(L.Codes, L.Code));
+            language.Size = new Size(width, em * 3 / 2);
+            language.Margin = new Padding(0, 0, 0, em / 3);
+            language.Changed += delegate (int index)
+            {
+                L.Choice = L.Codes[index];
+                save("language", L.Codes[index]);
+                rebuild();
+            };
+            string[] themes = { "light", "system", "dark" };
+            Segmented theme = new Segmented(new[] { Glyph.Sun, Glyph.Theme, Glyph.Moon }, true,
+                new[] { L.T("Светлая тема"), L.T("Как в Windows"), L.T("Тёмная тема") },
+                Array.IndexOf(themes, Theme.Choice) < 0 ? 1 : Array.IndexOf(themes, Theme.Choice));
+            theme.Size = new Size(width, em * 3 / 2);
+            theme.Margin = new Padding(0);
+            theme.Changed += delegate (int index)
+            {
+                Theme.Choice = themes[index];
+                save("theme", themes[index]);
+                rebuild();
+            };
+            FlowLayoutPanel block = Ui.Row();
+            block.FlowDirection = FlowDirection.TopDown;
+            block.Margin = new Padding(0, em * 2 / 3, 0, 0);
+            block.Controls.Add(language);
+            block.Controls.Add(theme);
+            return block;
         }
 
         public static Label Line(string s, Font font, Color color, int width, int bottom)

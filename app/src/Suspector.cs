@@ -9,7 +9,7 @@ namespace CompInfo
     public class SuspectorForm : StandaloneForm
     {
         // Only harmless UI preferences: theme, language and where the file table is.
-        public static readonly IniSettings Settings = new IniSettings("SUSpector.ini", "SUSpector settings", "theme", "language", "layout");
+        public static readonly IniSettings Settings = new IniSettings("SUSpector.ini", "SUSpector settings", "theme", "language", "layout", "window");
 
         // «SUS» is purple, as on chagear.top.
         static Color Highlight { get { return Theme.Dark ? Color.FromArgb(165, 133, 255) : Color.FromArgb(109, 63, 208); } }

@@ -8,23 +8,45 @@ namespace CompInfo
     // (see YOUSBEE.md). The window, «О программе» and the start-up are shared with SUSpector (Standalone.cs).
     public class YouSBeeForm : StandaloneForm
     {
-        // Only harmless UI preferences: theme and language.
-        public static readonly IniSettings Settings = new IniSettings("youSBee.ini", "youSBee settings", "theme", "language");
+        // Only harmless UI preferences: theme, language, window place and whether it stays on top.
+        public static readonly IniSettings Settings = new IniSettings("youSBee.ini", "youSBee settings", "theme", "language", "window", "pinned");
 
         // «SBee» is honey yellow, as on chagear.top.
         static Color Highlight { get { return Theme.Dark ? Color.FromArgb(245, 184, 46) : Color.FromArgb(180, 122, 0); } }
 
         public YouSBeeForm()
-            : this(new UsbPage()) { }
+            : this(new UsbPage(), Ui.Secondary("", Glyph.Pin, Ui.BaseFont)) { }
 
-        // «Обновить» and «О программе» sit in the top right corner, so the page's own row with «Обновить» is hidden.
-        YouSBeeForm(UsbPage page)
-            : base("you[SBee]", Highlight, L.T("Серийные номера флешек и USB-дисков."), page, AboutDialog, true, RefreshButton(page))
+        // The pin, «Обновить» and «О программе» sit in the top right corner, so the page's own row with «Обновить» is hidden.
+        YouSBeeForm(UsbPage page, Button pin)
+            : base("you[SBee]", Highlight, L.T("Серийные номера флешек."), page, AboutDialog, true, pin, RefreshButton(page))
         {
             page.ShowToolbar = false;
+            // On top of other windows, so it stays visible while the number goes into a request in the browser.
+            // An icon-only button, as narrow as it is tall.
+            int em = Font.Height;
+            pin.Text = "";
+            pin.ImageAlign = ContentAlignment.MiddleCenter;
+            pin.Padding = new Padding(em / 3, em / 6, em / 3, em / 6);
+            TopMost = Settings.Get("pinned", "off") == "on";
+            ShowPin(pin, TopMost);
+            pin.Click += delegate
+            {
+                TopMost = !TopMost;
+                Settings.Set("pinned", TopMost ? "on" : "off");
+                ShowPin(pin, TopMost);
+            };
             // A small utility: the table has only a few short columns.
             // Room for about five drives: rarely more than three are connected at once.
             SizeInEm(31, 18, 28, 15);
+        }
+
+        static void ShowPin(Button pin, bool pinned)
+        {
+            int em = pin.Font.Height;
+            pin.Image = Glyph.Image(pinned ? Glyph.Pinned : Glyph.Pin, (int)(em * 0.95f), pinned ? Theme.Accent : Theme.Text);
+            pin.BackColor = pinned ? Theme.AccentSoft : Theme.Surface;
+            new ToolTip().SetToolTip(pin, pinned ? L.T("Окно поверх остальных — нажмите, чтобы открепить") : L.T("Закрепить окно поверх остальных"));
         }
 
         static Button RefreshButton(UsbPage page)

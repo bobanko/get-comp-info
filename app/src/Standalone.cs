@@ -245,44 +245,10 @@ namespace CompInfo
             Padding = new Padding(em);
 
             FlowLayoutPanel text;
-            TableLayoutPanel t = About.Build(Font, em * 26, picture, name, highlight, email, subtitle, null, sections, out text);
+            // Language and theme right under the picture; a change closes the dialog and builds the window again.
+            FlowLayoutPanel appearance = About.Appearance(Font, em * 7, settings.Set, delegate { Rebuild = true; Close(); });
+            TableLayoutPanel t = About.Build(Font, em * 26, picture, appearance, name, highlight, email, subtitle, null, sections, out text);
             text.Controls.Add(About.SiteRow(Font, Glyph.Open, About.WebSite, null));
-
-            // Language and theme: rarely changed, so they are here, under the picture at the very bottom,
-            // and not in the main window.
-            int side = em * 7;
-            Segmented language = new Segmented(new[] { "УКР", "ENG", "РУС" }, false,
-                new[] { "Українська", "English", "Русский" }, Array.IndexOf(L.Codes, L.Code));
-            language.Size = new Size(side, em * 3 / 2);
-            language.Margin = new Padding(0, 0, 0, em / 3);
-            language.Changed += delegate (int index)
-            {
-                L.Choice = L.Codes[index];
-                settings.Set("language", L.Codes[index]);
-                Rebuild = true;
-                Close();
-            };
-            string[] themes = { "light", "system", "dark" };
-            Segmented theme = new Segmented(new[] { Glyph.Sun, Glyph.Theme, Glyph.Moon }, true,
-                new[] { L.T("Светлая тема"), L.T("Как в Windows"), L.T("Тёмная тема") },
-                Array.IndexOf(themes, Theme.Choice) < 0 ? 1 : Array.IndexOf(themes, Theme.Choice));
-            theme.Size = new Size(side, em * 3 / 2);
-            theme.Margin = new Padding(0);
-            theme.Changed += delegate (int index)
-            {
-                Theme.Choice = themes[index];
-                settings.Set("theme", themes[index]);
-                Rebuild = true;
-                Close();
-            };
-            FlowLayoutPanel choices = Ui.Row();
-            choices.FlowDirection = FlowDirection.TopDown;
-            choices.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
-            choices.Margin = new Padding(0, em, 0, 0);
-            choices.Controls.Add(language);
-            choices.Controls.Add(theme);
-            new ToolTip().SetToolTip(language, L.T("Язык и тема"));
-            t.Controls.Add(choices, 0, 1);
 
             Button close = Ui.Primary(L.T("Закрыть"), null, Font);
             close.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
@@ -342,8 +308,9 @@ namespace CompInfo
                 return 0;
             }
 
-            Rectangle? bounds = null;
+            // Place and size of the window from the last run, if they still fit on a screen.
             FormWindowState state = FormWindowState.Normal;
+            Rectangle? bounds = ReadBounds(settings.Get("window", ""), out state);
             while (true)
             {
                 Theme.ApplyChoice();
@@ -356,11 +323,35 @@ namespace CompInfo
                     form.WindowState = state;
                 }
                 Application.Run(form);
-                if (!form.Reopen) break;
                 bounds = form.WindowState == FormWindowState.Normal ? form.Bounds : form.RestoreBounds;
                 state = form.WindowState == FormWindowState.Maximized ? FormWindowState.Maximized : FormWindowState.Normal;
+                if (!form.Reopen) break;
             }
+            Rectangle last = bounds.Value;
+            settings.Set("window", string.Format("{0},{1},{2},{3}{4}", last.X, last.Y, last.Width, last.Height,
+                state == FormWindowState.Maximized ? ",max" : ""));
             return 0;
+        }
+
+        // "x,y,width,height[,max]" of the ini; null when missing, broken or off every screen.
+        static Rectangle? ReadBounds(string value, out FormWindowState state)
+        {
+            state = FormWindowState.Normal;
+            string[] parts = (value ?? "").Split(',');
+            int x, y, w, h;
+            if (parts.Length < 4 || !int.TryParse(parts[0], out x) || !int.TryParse(parts[1], out y) ||
+                !int.TryParse(parts[2], out w) || !int.TryParse(parts[3], out h) || w < 200 || h < 150) return null;
+            Rectangle r = new Rectangle(x, y, w, h);
+            foreach (Screen screen in Screen.AllScreens)
+            {
+                Rectangle seen = Rectangle.Intersect(screen.WorkingArea, r);
+                if (seen.Width >= 100 && seen.Height >= 50)
+                {
+                    if (parts.Length > 4 && parts[4] == "max") state = FormWindowState.Maximized;
+                    return r;
+                }
+            }
+            return null;
         }
 
         public static string Option(string[] args, string name, int offset)

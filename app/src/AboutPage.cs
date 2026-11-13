@@ -39,7 +39,13 @@ namespace CompInfo
             int width = em * 30;
 
             FlowLayoutPanel text;
-            TableLayoutPanel t = About.Build(Font, width, L.Code == "ru" ? Ui.FaceRuImage : Ui.FaceImage, MarkedName(L.T("CHAGEAR Тулбокс")),
+            // Language and theme under the picture; a change builds the main window again and comes back here.
+            FlowLayoutPanel appearance = About.Appearance(Font, em * 7, Settings.Set, delegate
+            {
+                MainForm form = FindForm() as MainForm;
+                if (form != null) form.Rebuild();
+            });
+            TableLayoutPanel t = About.Build(Font, width, L.Code == "ru" ? Ui.FaceRuImage : Ui.FaceImage, appearance, MarkedName(L.T("CHAGEAR Тулбокс")),
                 Theme.Dark ? Color.FromArgb(121, 166, 232) : Color.FromArgb(61, 111, 182), About.Email, L.T("Учёт компьютеров при подготовке и выдаче сотрудникам"),
                 L.T("Программа собирает сведения о компьютере (имя, серийный номер, сеть, ESET), хранит их на флешке и синхронизирует ") +
                 L.T("с облачной базой. Здесь же — настройка сети по профилям корпусов, имя компьютера и домен, быстрая проверка связи ") +

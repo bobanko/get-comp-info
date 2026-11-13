@@ -152,25 +152,7 @@ namespace CompInfo
             // Docked controls stack from the last added, so add them in reverse.
             for (int i = stack.Count - 1; i >= 0; i--) menu.Controls.Add(stack[i]);
 
-            // Bottom: theme (system in the middle) and language switches, then «О программе».
-            string[] themes = { "light", "system", "dark" };
-            Segmented theme = new Segmented(new[] { Glyph.Sun, Glyph.Theme, Glyph.Moon }, true,
-                new[] { L.T("Светлая тема"), L.T("Как в Windows"), L.T("Тёмная тема") }, Array.IndexOf(themes, Theme.Choice) < 0 ? 1 : Array.IndexOf(themes, Theme.Choice));
-            theme.Changed += delegate (int i) { Theme.Choice = themes[i]; Settings.Set("theme", themes[i]); Rebuild(); };
-            Segmented language = new Segmented(new[] { "УКР", "ENG", "РУС" }, false,
-                new[] { "Українська", "English", "Русский" }, Array.IndexOf(L.Codes, L.Code));
-            language.Changed += delegate (int i) { L.Choice = L.Codes[i]; Settings.Set("language", L.Codes[i]); Rebuild(); };
-            foreach (Segmented s in new[] { language, theme })
-            {
-                s.Dock = DockStyle.Bottom;
-                s.Height = em * 3 / 2;
-                Panel gap = new Panel();
-                gap.Dock = DockStyle.Bottom;
-                gap.Height = em / 3;
-                gap.BackColor = Theme.Sidebar;
-                menu.Controls.Add(gap);
-                menu.Controls.Add(s);
-            }
+            // Bottom: «О программе», where language and theme are chosen as well.
             menu.Controls.Add(about);
         }
 
