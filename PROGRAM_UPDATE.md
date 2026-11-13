@@ -18,8 +18,11 @@
 
 Версию поднимает `tools\update-version.BAT [toolbox|suspector|yousbee]` (по умолчанию тулбокс), собирает
 `tools\build.BAT [toolbox] [suspector] [yousbee]` (без аргументов — все три, проверки `app\tests` идут всегда).
-`tools\release.BAT` выпускает только тулбокс; SUSpector — `update-version.BAT suspector`, коммит `chore: SUSpector version …`,
+`tools\release.BAT` выпускает только тулбокс; SUSpector — `update-version.BAT suspector`, раздел новой версии
+в `app\SUSpector.notes` («Что нового»: строка с номером версии, затем строки `- …`), коммит `chore: SUSpector version …`,
 тег `suspector-vВЕРСИЯ` и push: GitHub Actions по такому тегу собирает и публикует только SUSpector.
+«Что нового» SUSpector пишется вручную, а не из журнала коммитов: его файлы общие с тулбоксом и youSBee,
+и журнал перечислял бы чужие изменения. Без раздела для выпускаемой версии сборка архива останавливается.
 
 ```text
 Разработчик                GitHub Actions                       Cloudflare                     Флешка / компьютер

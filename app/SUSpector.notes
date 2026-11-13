@@ -1,0 +1,11 @@
+# What's new in SUSpector, shown in its update dialog and on the download page.
+# A line with a version starts its section, then one "- " line per change. tools\build-suspector-release.ps1
+# takes the section of the version it builds and stops when there is none: write it when raising the version.
+
+2026.11.13.1
+- feat: security check tags, bulk delete by tag and side-by-side tables
+- feat: SupraWeed files are locked against deletion
+- feat: language and theme move into «О программе»
+- feat: downloads and updates go through chagear.top
+- style: coloured part of the program name, as on chagear.top
+- style: bigger table layout switch, as tall as the run button

@@ -33,12 +33,21 @@ $built = (Get-Item -LiteralPath $exe).VersionInfo.FileVersion
 if ($built -ne $Version) { throw "SUSpector.exe is version $built, expected $Version." }
 
 $commit = ([string](Invoke-Git @('rev-parse', 'HEAD'))).Trim()
-# What changed since the previous SUSpector release (before separate tags: since the last common v* tag),
-# only commits that touched the programs' code.
-$previousTag = Invoke-Git @('describe', '--tags', '--abbrev=0', '--match', 'suspector-v*', '--exclude', "suspector-v$Version", 'HEAD') -AllowFailure
-if (-not $previousTag) { $previousTag = Invoke-Git @('describe', '--tags', '--abbrev=0', '--match', 'v*', 'HEAD') -AllowFailure }
-$range = if ($previousTag) { @("$(([string]$previousTag).Trim())..HEAD") } else { @('-n', '20', 'HEAD') }
-$notes = @(Invoke-Git (@('log', '--pretty=format:%s') + $range + @('--', 'app')) | Where-Object { $_ -and $_ -notmatch '^chore: (SUSpector )?version' })
+# What's new comes from app\SUSpector.notes, written by hand: SUSpector shares its source files with the toolbox
+# and youSBee, so the commit log of those files also lists changes its users never see.
+function Get-SuspectorNotes {
+    param([string]$Path, [string]$Version)
+    $notes = @()
+    $inSection = $false
+    foreach ($line in [IO.File]::ReadAllLines($Path, [Text.Encoding]::UTF8)) {
+        $text = $line.Trim()
+        if ($text -match '^\d{4}\.\d{2}\.\d{2}\.\d+$') { $inSection = $text -eq $Version; continue }
+        if ($inSection -and $text -match '^-\s+(.+)$') { $notes += $Matches[1].Trim() }
+    }
+    return $notes
+}
+$notes = @(Get-SuspectorNotes (Join-Path $root 'app\SUSpector.notes') $Version)
+if ($notes.Count -eq 0) { throw "app\SUSpector.notes has no section for $Version. Write what's new in this version there." }
 
 if (-not $OutputDirectory) { $OutputDirectory = Join-Path $root 'dist' }
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
