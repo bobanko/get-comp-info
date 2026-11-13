@@ -103,6 +103,9 @@ rem Version information of one program: file, title (in quotes), version.
 rem Without it .NET runs the program in 4.0 compatibility mode (e.g. Uri drops trailing dots of record ids).
 >> %1 echo [assembly: System.Runtime.Versioning.TargetFramework(".NETFramework,Version=v4.8", FrameworkDisplayName = ".NET Framework 4.8")]
 >> %1 echo [assembly: AssemblyProduct("%~2")]
+rem Shown in the file properties; SignPath checks the product name and version of every signed file (CODE_SIGNING.md).
+>> %1 echo [assembly: AssemblyCompany("CHAGEAR")]
+>> %1 echo [assembly: AssemblyCopyright("Copyright (c) 2026 bobanko. GPL-3.0-or-later")]
 >> %1 echo [assembly: AssemblyFileVersion("%3")]
 >> %1 echo [assembly: AssemblyInformationalVersion("%3")]
 >> %1 echo namespace CompInfo { public static class AppVersion { public const string Text = "%3"; } }
