@@ -27,7 +27,10 @@ namespace CompInfo
             int em = Font.Height;
             pin.Text = "";
             pin.ImageAlign = ContentAlignment.MiddleCenter;
-            pin.Padding = new Padding(em / 3, em / 6, em / 3, em / 6);
+            pin.AutoSize = false;
+            int side;
+            using (Button sample = Ui.Secondary(L.T("Обновить"), Glyph.Refresh, Font)) side = sample.PreferredSize.Height;
+            pin.Size = new Size(side, side);
             TopMost = Settings.Get("pinned", "off") == "on";
             ShowPin(pin, TopMost);
             pin.Click += delegate
@@ -44,7 +47,17 @@ namespace CompInfo
         static void ShowPin(Button pin, bool pinned)
         {
             int em = pin.Font.Height;
-            pin.Image = Glyph.Image(pinned ? Glyph.Pinned : Glyph.Pin, (int)(em * 0.95f), pinned ? Theme.Accent : Theme.Text);
+            int size = (int)(em * 0.95f);
+            if (!pinned) pin.Image = Glyph.Image(Glyph.Pin, size, Theme.Text);
+            else
+            {
+                // The filled pin of the icon font has no needle: the outline pin is drawn over the fill.
+                Bitmap image = Glyph.Image(Glyph.Pinned, size, Theme.Accent);
+                using (Graphics g = Graphics.FromImage(image))
+                using (Bitmap outline = Glyph.Image(Glyph.Pin, size, Theme.Accent))
+                    g.DrawImage(outline, 0, 0);
+                pin.Image = image;
+            }
             pin.BackColor = pinned ? Theme.AccentSoft : Theme.Surface;
             new ToolTip().SetToolTip(pin, pinned ? L.T("Окно поверх остальных — нажмите, чтобы открепить") : L.T("Закрепить окно поверх остальных"));
         }

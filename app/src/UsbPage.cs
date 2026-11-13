@@ -31,6 +31,7 @@ namespace CompInfo
         readonly Bitmap driveIcon, removedIcon, emptyIcon;
         readonly Timer fade = new Timer();
         bool loading, again, againManual, loaded, compact;
+        int hoverRow = -1;
 
         public UsbPage()
         {
@@ -65,11 +66,7 @@ namespace CompInfo
             DataGridViewButtonColumn copy = new DataGridViewButtonColumn();
             copy.HeaderText = "";
             copy.FlatStyle = FlatStyle.Flat;
-            copy.DefaultCellStyle.BackColor = Theme.Accent;
-            copy.DefaultCellStyle.ForeColor = Theme.OnAccent;
-            copy.DefaultCellStyle.SelectionBackColor = Theme.AccentHover;
-            copy.DefaultCellStyle.SelectionForeColor = Theme.OnAccent;
-            copy.DefaultCellStyle.Padding = new Padding(em / 4, 3, em / 4, 3);
+            // The button itself is drawn by PaintCopyButton; the cell keeps the row colours.
             grid.Columns.Add(copy);
             grid.Columns[DiskColumn].AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
             // Volume labels are short (FAT32 up to 11, exFAT up to 15 characters); a longer device name is cut
@@ -88,7 +85,9 @@ namespace CompInfo
             grid.CellDoubleClick += delegate (object o, DataGridViewCellEventArgs e) { if (e.RowIndex >= 0 && e.ColumnIndex != CopyColumn) Copy(e.RowIndex); };
             grid.KeyDown += delegate (object o, KeyEventArgs k) { if (k.Control && k.KeyCode == Keys.C && grid.CurrentRow != null) { k.Handled = true; Copy(grid.CurrentRow.Index); } };
             grid.Paint += PaintEmpty;
-            grid.CellPainting += PaintCopyIcon;
+            grid.CellPainting += PaintCopyButton;
+            grid.CellMouseEnter += delegate (object o, DataGridViewCellEventArgs e) { Hover(e.ColumnIndex == CopyColumn ? e.RowIndex : -1); };
+            grid.MouseLeave += delegate { Hover(-1); };
             // In a narrow window «Копировать» becomes a copy icon.
             grid.Resize += delegate
             {
@@ -202,13 +201,14 @@ namespace CompInfo
                 UsbDisk d = e.Disk;
                 bool has = d.Serial.Length > 0;
                 string name = d.VolumeName.Length > 0 ? d.VolumeName : d.Name;
-                int i = grid.Rows.Add(e.Connected ? driveIcon : removedIcon, d.DriveLetters.Length > 0 ? d.DriveLetters : "—", name,
+                string letter = d.DriveLetters.Length > 0 ? d.DriveLetters : "—";
+                int i = grid.Rows.Add(e.Connected ? driveIcon : removedIcon, e.Connected ? letter : L.T("отключена"), name,
                     string.Format(L.T("{0:N1} ГБ"), d.Size / 1073741824.0),
                     has ? d.Serial : L.T("устройство не сообщает номер"), has ? L.T("Копировать") : "");
                 DataGridViewRow row = grid.Rows[i];
                 row.Tag = e;
                 row.Cells[IconColumn].ToolTipText = e.Connected ? L.T("Подключена") : L.T("Отключена — «Обновить» уберёт её из списка");
-                row.Cells[DiskColumn].ToolTipText = L.T("Диск ") + d.Number;
+                row.Cells[DiskColumn].ToolTipText = L.T("Диск ") + d.Number + (e.Connected ? "" : " (" + letter + ")");
                 row.Cells[NameColumn].ToolTipText = d.VolumeName.Length > 0 && d.Name.Length > 0 ? d.VolumeName + " — " + d.Name : name;
                 Style(row, e);
                 if (e == selected) grid.CurrentCell = row.Cells[DiskColumn];
@@ -232,22 +232,28 @@ namespace CompInfo
             if (e.CopiedUntil != DateTime.MinValue && e.CopiedUntil <= now) e.CopiedUntil = DateTime.MinValue;
             bool has = e.Disk.Serial.Length > 0;
             Color text = e.Connected ? Theme.Text : Theme.Muted;
-            for (int c = 0; c < CopyColumn; c++)
+            // Removed: a soft red row, «отключена» in red instead of the letter; just arrived: a soft green row.
+            Color back = !e.Connected ? Theme.BadLight : e.HighlightUntil != DateTime.MinValue ? Theme.GoodLight : Color.Empty;
+            for (int c = 0; c <= CopyColumn; c++)
             {
-                row.Cells[c].Style.ForeColor = c == SerialColumn && !has ? Theme.Warn : text;
-                row.Cells[c].Style.BackColor = e.HighlightUntil != DateTime.MinValue ? Theme.GoodLight : Color.Empty;
+                row.Cells[c].Style.ForeColor = c == SerialColumn && !has ? Theme.Warn : c == DiskColumn && !e.Connected ? Theme.Bad : text;
+                row.Cells[c].Style.BackColor = back;
+                row.Cells[c].Style.SelectionBackColor = back.IsEmpty ? Color.Empty : Theme.Mix(back, Theme.Selection, 0.5);
             }
             if (!has) row.Cells[SerialColumn].Style.Font = Font;
-            DataGridViewCell button = row.Cells[CopyColumn];
-            if (!has)
-            {
-                // No serial: the button cell looks like an empty cell.
-                button.Style.BackColor = button.Style.SelectionBackColor = Theme.Surface;
-                return;
-            }
-            bool copied = e.CopiedUntil != DateTime.MinValue;
-            button.Value = copied ? L.T("Скопировано ✓") : L.T("Копировать");
-            button.Style.BackColor = button.Style.SelectionBackColor = copied ? Theme.Good : Color.Empty;
+            if (!has) return;
+            row.Cells[CopyColumn].Value = e.CopiedUntil != DateTime.MinValue ? L.T("Скопировано ✓") : L.T("Копировать");
+            grid.InvalidateCell(row.Cells[CopyColumn]);
+        }
+
+        void Hover(int row)
+        {
+            if (row == hoverRow) return;
+            int old = hoverRow;
+            hoverRow = row;
+            if (old >= 0 && old < grid.Rows.Count) grid.InvalidateCell(CopyColumn, old);
+            if (row >= 0 && row < grid.Rows.Count) grid.InvalidateCell(CopyColumn, row);
+            grid.Cursor = row >= 0 ? Cursors.Hand : Cursors.Default;
         }
 
         void Copy(int index)
@@ -290,19 +296,30 @@ namespace CompInfo
             TextRenderer.DrawText(e.Graphics, text, Font, new Point(area.X + (area.Width - size.Width) / 2, top + emptyIcon.Height + em / 2), Theme.Muted);
         }
 
-        // Narrow window: the copy button shows a copy icon (a check right after copying) instead of text.
-        void PaintCopyIcon(object sender, DataGridViewCellPaintingEventArgs e)
+        // «Копировать» as a rounded button with a margin inside the cell: blue, green right after copying,
+        // plain for a removed drive; in a narrow window a copy icon (a check after copying) instead of text.
+        void PaintCopyButton(object sender, DataGridViewCellPaintingEventArgs e)
         {
-            if (!compact || e.RowIndex < 0 || e.ColumnIndex != CopyColumn) return;
+            if (e.RowIndex < 0 || e.ColumnIndex != CopyColumn) return;
+            e.PaintBackground(e.CellBounds, (e.State & DataGridViewElementStates.Selected) != 0);
+            e.Handled = true;
             Entry entry = grid.Rows[e.RowIndex].Tag as Entry;
             if (entry == null || entry.Disk.Serial.Length == 0) return;
-            e.PaintBackground(e.CellBounds, (e.State & DataGridViewElementStates.Selected) != 0);
             int em = Font.Height;
-            Rectangle box = Rectangle.Inflate(e.CellBounds, -em / 4, -em / 4);
-            bool copied = entry.CopiedUntil != DateTime.MinValue;
-            using (SolidBrush brush = new SolidBrush(copied ? Theme.Good : Theme.Accent)) e.Graphics.FillRectangle(brush, box);
-            Glyph.Draw(e.Graphics, copied ? Glyph.Check : Glyph.Copy, box, Theme.OnAccent, em * 0.8f);
-            e.Handled = true;
+            Rectangle box = new Rectangle(e.CellBounds.X + em / 4, e.CellBounds.Y + em / 4, e.CellBounds.Width - em / 2 - 1, e.CellBounds.Height - em / 2 - 1);
+            bool copied = entry.CopiedUntil != DateTime.MinValue, hover = e.RowIndex == hoverRow;
+            Color fill = copied ? Theme.Good : !entry.Connected ? Theme.Surface : hover ? Theme.AccentHover : Theme.Accent;
+            Color ink = copied || entry.Connected ? Theme.OnAccent : Theme.Text;
+            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            using (System.Drawing.Drawing2D.GraphicsPath shape = Shapes.Round(box, em / 3))
+            {
+                using (SolidBrush brush = new SolidBrush(fill)) e.Graphics.FillPath(brush, shape);
+                if (!copied && !entry.Connected)
+                    using (Pen border = new Pen(hover ? Theme.Accent : Theme.Border)) e.Graphics.DrawPath(border, shape);
+            }
+            if (compact) Glyph.Draw(e.Graphics, copied ? Glyph.Check : Glyph.Copy, box, ink, em * 0.8f);
+            else TextRenderer.DrawText(e.Graphics, Convert.ToString(e.Value), Font, box, ink,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
         }
     }
 }
