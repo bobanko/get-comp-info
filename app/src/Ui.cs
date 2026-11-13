@@ -903,7 +903,14 @@ namespace CompInfo
             if (width <= 0) return;
             Size s = TextRenderer.MeasureText(Text.Length == 0 ? " " : Text, Font, new Size(width, int.MaxValue), TextFormatFlags.WordBreak);
             int h = Math.Max(s.Height, Font.Height) + 2 + Padding.Vertical + inner * 2 - (inner > 0 ? Font.Height / 4 : 0);
-            if (Height != h) Height = h;
+            if (Height == h) return;
+            Height = h;
+            // The height changes while the parent lays out its children: a docked status line would keep the old
+            // place (e.g. below the visible part of the page), so the parent lays them out again once this layout is over.
+            Control parent = Parent;
+            if (parent == null || Dock == DockStyle.None) return;
+            if (IsHandleCreated) BeginInvoke((MethodInvoker)delegate { if (!parent.IsDisposed) parent.PerformLayout(); });
+            else parent.PerformLayout();
         }
 
         protected override void OnPaint(PaintEventArgs e)

@@ -23,7 +23,8 @@ namespace CompInfo
         {
             page.ShowToolbar = false;
             // A small utility: the table has only a few short columns.
-            SizeInEm(31, 21, 28, 16);
+            // Room for about five drives: rarely more than three are connected at once.
+            SizeInEm(31, 18, 28, 15);
         }
 
         static Button RefreshButton(UsbPage page)
