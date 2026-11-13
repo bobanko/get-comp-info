@@ -22,6 +22,8 @@ namespace CompInfo
         public static Color Folder { get { return Dark ? Color.FromArgb(255, 196, 61) : Color.FromArgb(222, 146, 0); } }
         // Flash drive icons are orange, like the youSBee icon.
         public static Color Flash { get { return Dark ? Color.FromArgb(255, 170, 60) : Color.FromArgb(232, 126, 4); } }
+        // Violet of SUSpector: its name and the security section of the toolbox.
+        public static Color Suspector { get { return Dark ? Color.FromArgb(165, 133, 255) : Color.FromArgb(109, 63, 208); } }
 
         static Color C(int rgb) { return Color.FromArgb((rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255); }
 

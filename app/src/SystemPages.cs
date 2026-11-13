@@ -20,16 +20,19 @@ namespace CompInfo
             Margin = new Padding(0);
         }
 
+        // Above zero: every row is this tall and its label and field are centred in it, so the form lines up on a grid.
+        public int RowHeight;
+
         public Label Add(string label, Control field)
         {
             int em = Font.Height;
             Label l = Ui.Text(label, Font, Theme.Muted);
             l.Anchor = AnchorStyles.Left;
-            l.Margin = new Padding(0, em / 4, em, em / 4);
-            field.Margin = new Padding(0, em / 6, 0, em / 6);
+            l.Margin = RowHeight > 0 ? new Padding(0, 0, em, 0) : new Padding(0, em / 4, em, em / 4);
+            field.Margin = RowHeight > 0 ? new Padding(0) : new Padding(0, em / 6, 0, em / 6);
             if (field is TextBox && ((TextBox)field).Multiline) field.Anchor = AnchorStyles.Left | AnchorStyles.Right;
             else field.Anchor = AnchorStyles.Left;
-            RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            RowStyles.Add(RowHeight > 0 ? new RowStyle(SizeType.Absolute, RowHeight) : new RowStyle(SizeType.AutoSize));
             Controls.Add(l, 0, RowCount);
             Controls.Add(field, 1, RowCount);
             RowCount++;
@@ -39,8 +42,11 @@ namespace CompInfo
         public void Show(Control field, bool visible)
         {
             field.Visible = visible;
-            Control label = GetControlFromPosition(0, GetRow(field));
+            int row = GetRow(field);
+            Control label = GetControlFromPosition(0, row);
             if (label != null) label.Visible = visible;
+            // A fixed-height row keeps its height when hidden: fold it.
+            if (row >= 0 && row < RowStyles.Count && RowStyles[row].SizeType == SizeType.Absolute) RowStyles[row].Height = visible ? RowHeight : 0;
         }
     }
 
@@ -102,9 +108,11 @@ namespace CompInfo
         int officeNameWidth;
         readonly StatusLine profilesNote = new StatusLine();
         readonly Label summary;
+        readonly DataGridView compare;
         readonly Button apply;
         readonly StatusLine status = new StatusLine();
-        readonly Label applied;
+        LanSetup.State currentState;   // of the selected adapter, null while it is read
+        string currentNote = "";
         NetworkProfiles profiles = new NetworkProfiles();
         List<Adapter> adapters = new List<Adapter>();
         bool running, filling;
@@ -197,8 +205,29 @@ namespace CompInfo
             // Building names are long: their list may run under the computer column.
             ip.SetColumnSpan(officeList, 4);
 
+            // What the adapter has now next to what it will have: differences are highlighted.
+            compare = Ui.Grid(Font);
+            compare.Columns.Add("field", "");
+            compare.Columns.Add("now", L.T("Сейчас"));
+            compare.Columns.Add("planned", L.T("После применения"));
+            compare.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            compare.Columns[0].FillWeight = 20;
+            compare.Columns[1].FillWeight = 40;
+            compare.Columns[2].FillWeight = 40;
+            compare.Columns[0].DefaultCellStyle.ForeColor = Theme.Muted;
+            foreach (DataGridViewColumn c in compare.Columns) c.SortMode = DataGridViewColumnSortMode.NotSortable;
+            compare.ScrollBars = ScrollBars.None;
+            compare.TabStop = false;
+            compare.Dock = DockStyle.Top;
+            compare.SelectionChanged += delegate { compare.ClearSelection(); };
+            Panel compareBox = new Panel();
+            compareBox.Dock = DockStyle.Top;
+            compareBox.AutoSize = true;
+            compareBox.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            compareBox.Padding = new Padding(0, em, 0, 0);
+            compareBox.Controls.Add(compare);
             summary = Ui.Paragraph("", Font, Theme.Text);
-            summary.Padding = new Padding(0, em, 0, em / 2);
+            summary.Padding = new Padding(0, em / 2, 0, em / 2);
             apply = Ui.AdminPrimary(L.T("Применить настройки"), Font);
             apply.Click += delegate { Apply(); };
             Ui.Keys(apply, "Ctrl+Enter");
@@ -207,12 +236,11 @@ namespace CompInfo
             actions.Dock = DockStyle.Top;
             status.Dock = DockStyle.Top;
             status.Padding = new Padding(0, em / 2, 0, 0);
-            applied = Ui.Paragraph("", Font, Theme.Text);
 
-            Controls.Add(applied);
             Controls.Add(status);
             Controls.Add(actions);
             Controls.Add(summary);
+            Controls.Add(compareBox);
             Controls.Add(ip);
             Controls.Add(adapterRow);
             Controls.Add(profilesNote);
@@ -355,20 +383,16 @@ namespace CompInfo
         {
             int request = ++currentRead;
             Adapter a = SelectedAdapter;
-            applied.Text = "";
+            currentState = null;
+            currentNote = "";
+            UpdateSummary();
             if (a == null) return;
             LanSetup.State state;
             try { state = await Task.Run(delegate { return LanSetup.Read(a.Guid); }); }
             catch (Exception) { state = null; }
             if (request != currentRead || IsDisposed || running) return;
             if (state == null) return;
-
-            List<string> lines = new List<string> { L.T("Сейчас на адаптере «") + a.Name + "»:" };
-            lines.Add("   " + L.T("Режим:  ") + (state.Dhcp ? L.T("автоматически (DHCP)") : L.T("вручную")));
-            if (state.Ip.Length > 0) lines.Add("   IPv4:  " + state.Ip + (state.Mask.Length > 0 ? L.T(" (маска ") + state.Mask + ")" : ""));
-            else if (state.Dhcp) lines.Add("   IPv4:  " + L.T("ещё не получен от роутера"));
-            if (state.Gateway.Length > 0) lines.Add("   " + L.T("Шлюз") + ":  " + state.Gateway);
-            for (int i = 0; i < state.Dns.Count; i++) lines.Add("   DNS " + (i + 1) + ":  " + state.Dns[i] + (state.DnsManual ? "" : L.T(" (от роутера)")));
+            currentState = state;
 
             NetworkProfiles.Location location;
             int segment, last;
@@ -380,8 +404,7 @@ namespace CompInfo
                 host.Value = last;
             }
             else if (state.Ip.Length > 0 && !profiles.Missing)
-                lines.Add(L.T("Адрес не относится к профилям корпусов: выберите корпус и номер компьютера."));
-            applied.Text = string.Join("\r\n", lines);
+                currentNote = L.T("Адрес не относится к профилям корпусов: выберите корпус и номер компьютера.");
             UpdateSummary();
         }
 
@@ -463,19 +486,64 @@ namespace CompInfo
             string ip, gateway, error;
             bool ok = Plan(out ip, out gateway, out error);
             apply.Enabled = ok && !running;
-            if (!ok) { summary.ForeColor = Theme.Muted; summary.Text = error; return; }
-            summary.ForeColor = Theme.Text;
-            if (l == null)
+            bool changes = FillCompare(l, ok ? ip : null);
+            List<string> notes = new List<string>();
+            if (!ok) notes.Add(error);
+            else if (l == null) notes.Add(L.T("Статические IPv4-адреса, шлюз и вручную заданные DNS будут сброшены."));
+            if (ok && currentState != null && !changes) notes.Add(L.T("Адаптер уже настроен так: применять нечего."));
+            if (currentNote.Length > 0) notes.Add(currentNote);
+            summary.ForeColor = ok ? Theme.Text : Theme.Muted;
+            summary.Text = string.Join("\r\n", notes);
+        }
+
+        // Rows «now» and «after applying»; returns whether anything changes.
+        bool FillCompare(NetworkProfiles.Location l, string plannedIp)
+        {
+            LanSetup.State s = currentState;
+            bool dhcp = l == null;
+            string auto = L.T("от роутера"), none = "—";
+            string plannedGateway = l != null && Segment.HasValue ? profiles.Gateway(l, Segment.Value) : none;
+            List<string[]> rows = new List<string[]>();
+            List<bool> same = new List<bool>();
+            Action<string, string, string, bool> add = delegate (string name, string now, string planned, bool equal)
             {
-                summary.Text = L.T("IP-адрес, маска, шлюз и DNS — автоматически от роутера (DHCP).\r\nСтатические IPv4-адреса, шлюз и вручную заданные DNS будут сброшены.");
-                return;
+                rows.Add(new[] { name, now, planned });
+                same.Add(equal);
+            };
+            add(L.T("Режим"), s == null ? none : s.Dhcp ? L.T("автоматически (DHCP)") : L.T("вручную"),
+                dhcp ? L.T("автоматически (DHCP)") : L.T("вручную"), s != null && s.Dhcp == dhcp);
+            add(L.T("IP-адрес"), s == null ? none : s.Ip.Length > 0 ? s.Ip : s.Dhcp ? L.T("ещё не получен от роутера") : none,
+                dhcp ? auto : plannedIp ?? none, s != null && (dhcp ? s.Dhcp : !s.Dhcp && s.Ip == plannedIp));
+            add(L.T("Маска"), s == null || s.Mask.Length == 0 ? none : s.Mask,
+                dhcp ? auto : l.SubnetMask, s != null && (dhcp ? s.Dhcp : !s.Dhcp && s.Mask == l.SubnetMask));
+            add(L.T("Шлюз"), s == null || s.Gateway.Length == 0 ? none : s.Gateway,
+                dhcp ? auto : plannedGateway, s != null && (dhcp ? s.Dhcp : !s.Dhcp && s.Gateway == plannedGateway));
+            int dnsRows = Math.Max(1, Math.Max(s == null ? 0 : s.Dns.Count, dhcp ? 1 : l.DnsServers.Count));
+            for (int i = 0; i < dnsRows; i++)
+            {
+                string now = s != null && i < s.Dns.Count ? s.Dns[i] + (s.DnsManual ? "" : L.T(" (от роутера)")) : none;
+                string planned = dhcp ? (i == 0 ? auto : none) : i < l.DnsServers.Count ? l.DnsServers[i] : none;
+                bool equal = s != null && (dhcp ? !s.DnsManual : s.DnsManual && i < s.Dns.Count && i < l.DnsServers.Count && s.Dns[i] == l.DnsServers[i] ||
+                    s.DnsManual && i >= s.Dns.Count && i >= l.DnsServers.Count);
+                add("DNS " + (i + 1), now, planned, equal);
             }
-            List<string> lines = new List<string>();
-            lines.Add(L.T("IP-адрес:  ") + ip);
-            lines.Add(L.T("Маска:  ") + l.SubnetMask);
-            lines.Add(L.T("Шлюз:  ") + gateway);
-            for (int i = 0; i < l.DnsServers.Count; i++) lines.Add("DNS " + (i + 1) + ":  " + l.DnsServers[i]);
-            summary.Text = string.Join("\r\n", lines);
+
+            compare.Rows.Clear();
+            bool changes = false;
+            for (int i = 0; i < rows.Count; i++)
+            {
+                int n = compare.Rows.Add(rows[i][0], rows[i][1], rows[i][2]);
+                DataGridViewRow row = compare.Rows[n];
+                Color back = same[i] ? Theme.Surface : Theme.WarnLight;
+                row.DefaultCellStyle.BackColor = row.DefaultCellStyle.SelectionBackColor = back;
+                row.Cells[1].Style.Font = row.Cells[2].Style.Font = Ui.MonoFont;
+                row.Cells[1].Style.ForeColor = rows[i][1] == none ? Theme.Muted : Theme.Text;
+                row.Cells[2].Style.ForeColor = rows[i][2] == none ? Theme.Muted : same[i] ? Theme.Text : Theme.Accent;
+                if (!same[i]) changes = true;
+            }
+            compare.Height = compare.ColumnHeadersHeight + compare.RowTemplate.Height * rows.Count + 2;
+            compare.ClearSelection();
+            return changes;
         }
 
         async void Apply()
@@ -489,7 +557,6 @@ namespace CompInfo
             if (Ui.Ask(FindForm(), L.T("Настройка сети"), question, Glyph.Network, Theme.Info, L.T("Применить"), L.T("Отмена")) != 0) return;
             running = true;
             apply.Enabled = false;
-            applied.Text = "";
             status.Set(Glyph.More, L.T("Применение настроек…"), Theme.Muted);
             try
             {
@@ -511,7 +578,7 @@ namespace CompInfo
                 string note = await Task.Run(delegate { return RecordUpdate.Save(expected, out saved); });
                 status.Set(Glyph.Check, L.T("Настройки сети применены.") + (l == null ? L.T(" Получение настроек от роутера может занять некоторое время.") : "") + "\r\n" + note,
                     saved ? Theme.Good : Theme.Warn);
-                // The reloaded adapter list below shows the new settings under «Сейчас на адаптере».
+                // The reloaded adapter list below shows the new settings in the «Сейчас» column.
             }
             catch (OperationCanceledException e) { status.Set(Glyph.Info, e.Message, Theme.Warn); }
             catch (Exception e) { status.Set(Glyph.Warning, L.T("Не удалось завершить настройку сети: ") + e.Message, Theme.Bad); }
@@ -607,15 +674,15 @@ namespace CompInfo
             renameOnLeave.Text = L.T("Сменить префикс на ") + policy.InternetPrefix + L.T(" (интернет)");
             Check(renameOnLeave);
             renameOnLeave.CheckedChanged += delegate { if (!filling) UpdateRows(); };
-            designation.Width = em * 16;
+            designation.Width = em * 9;
             designation.MaxLength = 64;
             designation.TextChanged += delegate { if (!filling) designationEdited = true; UpdatePreview(); };
             preview = Ui.Text("", Font, Theme.Accent);
 
-            lanAdapter.Width = em * 24;
+            lanAdapter.Width = em * 20;
             lanAdapter.DropDownWidth = em * 34;
             lanAdapter.SelectedIndexChanged += delegate { if (!filling) AdapterChanged(); };
-            office.Width = em * 18;
+            office.Width = em * 20;
             office.DropDownWidth = em * 24;
             office.SelectedIndexChanged += delegate { if (!filling) OfficeChanged(); };
             segment.Width = em * 5;
@@ -635,6 +702,7 @@ namespace CompInfo
             host.ValueChanged += delegate { if (!filling) AddressChanged(); };
             nextFree = Ui.Secondary(L.T("Следующий свободный"), null, Font);
             nextFree.Click += delegate { PickFree((int)host.Value); };
+            nextFree.Padding = new Padding(em / 2, 0, em / 2, 0);
             ipNote = Ui.Text("", Font, Theme.Muted);
             ipNote.Anchor = AnchorStyles.Left;
             ipRow.Controls.Add(ipStart);
@@ -643,6 +711,7 @@ namespace CompInfo
             ipRow.Controls.Add(ipNote);
             syncNow = Ui.Secondary(L.T("Синхронизировать базу"), Glyph.Sync, Font);
             syncNow.Click += delegate { SyncDatabase(); };
+            syncNow.Padding = new Padding(em / 2, 0, em / 2, 0);
             new ToolTip().SetToolTip(syncNow, L.T("Свободный адрес выбирается по локальной копии базы. Синхронизируйте её, пока есть интернет, чтобы видеть адреса, выданные коллегами."));
             syncInfo = Ui.Text("", Font, Theme.Muted);
             syncInfo.Anchor = AnchorStyles.Left;
@@ -653,12 +722,13 @@ namespace CompInfo
             Check(dhcpOnLeave);
             dhcpOnLeave.CheckedChanged += delegate { if (!filling) UpdatePreview(); };
 
-            localUser.Width = domainUser.Width = em * 16;
-            localPassword.Width = domainPassword.Width = em * 16;
+            localUser.Width = domainUser.Width = em * 9;
+            localPassword.Width = domainPassword.Width = em * 9;
             localPassword.UseSystemPasswordChar = domainPassword.UseSystemPasswordChar = true;
             Ui.SetCue(localUser, L.T(".\\имя"));
             Ui.SetCue(domainUser, L.T("имя или ДОМЕН\\имя"));
             form.Font = Font;
+            form.RowHeight = em * 7 / 4;
             form.Add(L.T("Назначение сети"), networkRow);
             form.Add(L.T("Имя"), renameOnLeave);
             form.Add(L.T("Обозначение"), designation);

@@ -139,7 +139,7 @@ namespace CompInfo
         public static ComputerSnapshot Collect()
         {
             ComputerSnapshot s = new ComputerSnapshot();
-            Dictionary<string, object> cs = Wmi.First(Wmi.Cimv2, "SELECT Name, Manufacturer, Model, PartOfDomain, Domain FROM Win32_ComputerSystem");
+            Dictionary<string, object> cs = Wmi.First(Wmi.Cimv2, "SELECT Name, Manufacturer, Model, PartOfDomain, Domain, UserName FROM Win32_ComputerSystem");
             Dictionary<string, object> bios = Wmi.First(Wmi.Cimv2, "SELECT SerialNumber FROM Win32_BIOS");
             Dictionary<string, object> product = Wmi.First(Wmi.Cimv2, "SELECT UUID FROM Win32_ComputerSystemProduct");
             Dictionary<string, object> os = Wmi.First(Wmi.Cimv2, "SELECT Caption FROM Win32_OperatingSystem");
@@ -159,7 +159,10 @@ namespace CompInfo
             {
                 if (a.Status == "Up" && a.Mac.Length > 0) { s.Mac = a.Mac; break; }
             }
-            s.Username = Environment.UserName;
+            // The user signed in at the computer, not the account of this process: a copy started with
+            // administrator rights may run as the administrator from the UAC window. Remote sessions have none.
+            string sessionUser = Wmi.Str(cs, "UserName") ?? "";
+            s.Username = sessionUser.Length > 0 ? sessionUser.Substring(sessionUser.LastIndexOf('\\') + 1) : Environment.UserName;
             return s;
         }
 

@@ -29,6 +29,7 @@ namespace CompInfo
             string shot = Option(args, "--screenshot", 1);
             if (shot != null)
             {
+                CollectPage.AutoSave = false;
                 Theme.ApplyChoice();
                 L.ApplyChoice();
                 return Screenshot(new MainForm(), shot, Option(args, "--screenshot", 2), Option(args, "--screenshot", 3));

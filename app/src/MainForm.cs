@@ -17,6 +17,8 @@ namespace CompInfo
         public string Icon;
         public bool NeedsAdmin;
         public bool NeedsInternet;
+        // Own colour of the menu icon (sections that are also separate programs), or empty for the usual one.
+        public Color IconColor = Color.Empty;
 
         public Page()
         {
@@ -128,17 +130,23 @@ namespace CompInfo
             ClientSize = new Size(Math.Min(em * 56, screen.Width * 9 / 10), Math.Min(em * 34, screen.Height * 9 / 10));
             MinimumSize = new Size(em * 44, em * 31);
 
+            // The domain is the main operation; network and name are steps of their own when needed.
             pages.Add(new CollectPage());
+            pages.Add(new ComputerPage(true));
             pages.Add(new LanPage());
             pages.Add(new ComputerPage(false));
-            pages.Add(new ComputerPage(true));
             pages.Add(new PingPage());
-            pages.Add(new SecurityPage());
             pages.Add(new SearchPage());
             pages.Add(new DatabasePage());
-            pages.Add(new UsbPage());
             pages.Add(new SyncPage());
             pages.Add(new UpdatePage());
+            // Also separate programs (SUSpector, youSBee): at the bottom, in the colours of their icons.
+            SecurityPage security = new SecurityPage();
+            security.IconColor = Theme.Suspector;
+            pages.Add(security);
+            UsbPage usb = new UsbPage();
+            usb.IconColor = Theme.Flash;
+            pages.Add(usb);
             pages.Add(new AboutPage());
 
             // Right side: page title, description and the page itself.
@@ -192,8 +200,8 @@ namespace CompInfo
                 Rebuild();
             };
             List<Control> stack = new List<Control>();
+            List<Control> bottom = new List<Control>();
             stack.Add(brand);
-            NavButton about = null;
             foreach (Page p in pages)
             {
                 NavButton b = new NavButton(p);
@@ -205,14 +213,13 @@ namespace CompInfo
                 string shortcut = p is AboutPage ? "   (Ctrl+0)" : number <= 9 ? "   (Ctrl+" + number + ")" : "";
                 tip.SetToolTip(b, (p.Title ?? "") + shortcut);
                 buttons.Add(b);
-                // «О программе» sits at the bottom, next to the theme switch.
-                if (p is AboutPage) { about = b; b.Dock = DockStyle.Bottom; } else stack.Add(b);
+                // The sections that are also separate programs and «О программе» (language and theme) sit at the bottom.
+                if (p is AboutPage || p is SecurityPage || p is UsbPage) { b.Dock = DockStyle.Bottom; bottom.Add(b); } else stack.Add(b);
             }
-            // Docked controls stack from the last added, so add them in reverse.
+            // The last added control docks first (outermost): the top list in reverse, the bottom one in order,
+            // so «О программе» ends up at the very bottom.
             for (int i = stack.Count - 1; i >= 0; i--) menu.Controls.Add(stack[i]);
-
-            // Bottom: «О программе», where language and theme are chosen as well.
-            menu.Controls.Add(about);
+            foreach (Control b in bottom) menu.Controls.Add(b);
         }
 
         // Builds the window again (colours are read while controls are built).
@@ -237,6 +244,9 @@ namespace CompInfo
             Page start = Find(StartPage ?? "") ?? pages[0];
             if (Handoff != null) { start.Resume(Handoff); Handoff = null; }
             if (current == null) Open(start);
+            // The record of this computer is read and saved right after the start, whatever section opens first.
+            CollectPage collect = Find("collect") as CollectPage;
+            if (collect != null && collect != start) collect.StartInBackground();
         }
 
         protected override void OnFormClosing(FormClosingEventArgs e)
@@ -446,7 +456,7 @@ namespace CompInfo
                 using (SolidBrush b = new SolidBrush(back)) e.Graphics.FillRectangle(b, r);
                 if (selected)
                     using (SolidBrush b = new SolidBrush(Theme.Accent)) e.Graphics.FillRectangle(b, 0, r.Top + em / 3, 3, r.Height - em * 2 / 3);
-                Color iconColor = selected ? Theme.Accent : Theme.Muted;
+                Color iconColor = Page != null && !Page.IconColor.IsEmpty ? Page.IconColor : selected ? Theme.Accent : Theme.Muted;
                 CompInfo.Glyph.Draw(e.Graphics, Glyph, new Rectangle(em / 3, r.Top, em * 3 / 2, r.Height), iconColor, em * 0.9f);
                 int right = em / 3;
                 if (Page != null && Page.NeedsAdmin) right += em * 3 / 2;

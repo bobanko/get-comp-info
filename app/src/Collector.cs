@@ -34,7 +34,23 @@ namespace CompInfo
                 if (legacy.Count == 1) c.Legacy = legacy[0];
             }
             c.ResolvePath(dataPath);
+            c.ExpectPendingChange();
             return c;
+        }
+
+        // Before the restart Windows still reports the old name and domain. A rename or domain change waiting for the
+        // restart is saved as it will be, or an automatic save would put the old values back into the record.
+        void ExpectPendingChange()
+        {
+            ComputerState s;
+            try { s = ComputerState.Read(); }
+            catch (Exception) { return; }
+            if (s.PendingName != null) Snapshot.Hostname = s.PendingName;
+            if (s.Receipt != null && !s.RebootedSinceReceipt)
+            {
+                if (s.ReceiptValue("Name").Length > 0) Snapshot.Hostname = s.ReceiptValue("Name");
+                if (s.ReceiptValue("Domain").Length > 0) { Snapshot.Domain = s.ReceiptValue("Domain"); Snapshot.PartOfDomain = s.ReceiptMember; }
+            }
         }
 
         // The user confirmed that the old record belongs to this computer.

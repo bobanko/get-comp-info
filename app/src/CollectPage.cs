@@ -6,27 +6,32 @@ using System.Windows.Forms;
 
 namespace CompInfo
 {
-    // «Сбор информации»: reads this computer, compares with its saved record and saves it to data\.
+    // «Сбор информации»: reads this computer, compares with its saved record and saves it to data\ by itself:
+    // right after the program starts, whenever the data differ from the record, and after the comment is edited.
     public class CollectPage : Page
     {
+        // Off for screenshots of the interface: they must not write to the database.
+        public static bool AutoSave = true;
+
         readonly ProgressBar progress = new ProgressBar();
         readonly StatusLine state = new StatusLine();
         readonly DataGridView grid;
         readonly TextBox comment = Ui.Input(new TextBox());
-        readonly Button save;
         readonly Button again;
         readonly StatusLine result = new StatusLine();
         readonly LinkLabel showFile = new LinkLabel();
         readonly TableLayoutPanel body = new TableLayoutPanel();
+        // The comment is saved a moment after typing stops, and at once when the page or the window closes.
+        readonly Timer commentTimer = new Timer();
         Collection collection;
-        bool started, busy;
+        bool started, busy, filling;
 
         public CollectPage()
         {
             Key = "collect";
             Title = L.T("Сбор информации о компьютере");
             NavTitle = L.T("Сбор информации");
-            Description = L.T("Имя, серийный номер, сеть и другие сведения об этом компьютере сохраняются в базу на флешке.");
+            Description = L.T("Имя, серийный номер, сеть и другие сведения об этом компьютере сохраняются в базу на флешке сами: при запуске программы и при любом изменении, в том числе комментария.");
             Icon = Glyph.Computer;
             int em = Font.Height;
 
@@ -49,24 +54,29 @@ namespace CompInfo
             foreach (DataGridViewColumn c in grid.Columns) c.SortMode = DataGridViewColumnSortMode.NotSortable;
             grid.Margin = new Padding(0, 0, 0, em / 2);
 
-            Label commentLabel = Ui.Text(L.T("Комментарий (необязательно): кабинет, ответственный, особенности"), Font, Theme.Text);
+            Label commentLabel = Ui.Text(L.T("Комментарий (необязательно): кабинет, ответственный, особенности. Сохраняется сам."), Font, Theme.Text);
             commentLabel.Margin = new Padding(0, 0, 0, em / 4);
             comment.MaxLength = 500;
             comment.Margin = new Padding(0, 0, 0, em / 2);
-            comment.TextChanged += delegate { if (collection != null) ShowComparison(); };
+            commentTimer.Interval = 1000;
+            commentTimer.Tick += delegate { commentTimer.Stop(); SaveChanges(); };
+            comment.TextChanged += delegate
+            {
+                if (collection == null || filling) return;
+                ShowComparison();
+                commentTimer.Stop();
+                commentTimer.Start();
+            };
             comment.KeyDown += delegate (object o, KeyEventArgs k)
             {
-                if (k.KeyCode == Keys.Enter && save.Enabled) { k.SuppressKeyPress = true; Save(); }
+                if (k.KeyCode == Keys.Enter) { k.SuppressKeyPress = true; FlushComment(); }
             };
+            comment.Leave += delegate { FlushComment(); };
 
-            save = Ui.Primary(L.T("Сохранить в базу"), Glyph.Save, Font);
-            save.Click += delegate { Save(); };
             again = Ui.Secondary(L.T("Собрать заново"), Glyph.Refresh, Font);
             again.Click += delegate { Collect(); };
-            Ui.Keys(save, "Ctrl+S");
             Ui.Keys(again, "F5");
             FlowLayoutPanel actions = Ui.Row();
-            actions.Controls.Add(save);
             actions.Controls.Add(again);
             actions.Margin = new Padding(0, 0, 0, em / 3);
 
@@ -101,16 +111,32 @@ namespace CompInfo
             body.Controls.Add(c, 0, body.RowStyles.Count - 1);
         }
 
+        // Every opening reads the computer again: whatever changed since (name, address, domain) is saved at once.
         public override void Opened()
         {
-            if (!started) { started = true; Collect(); }
+            started = true;
+            if (!busy) Collect();
             else comment.Focus();
+        }
+
+        // Called when the program starts on another section: the computer is read and saved in the background.
+        public void StartInBackground()
+        {
+            if (started) return;
+            started = true;
+            Collect();
+        }
+
+        public override bool CanLeave()
+        {
+            FlushComment();
+            return true;
         }
 
         public override bool Shortcut(Keys keys)
         {
             if (keys == Keys.F5) { Collect(); return true; }
-            if (keys == (Keys.Control | Keys.S)) { if (save.Enabled) Save(); return true; }
+            if (keys == (Keys.Control | Keys.S)) { FlushComment(); return true; }
             return false;
         }
 
@@ -120,12 +146,19 @@ namespace CompInfo
             progress.Visible = value;
             again.Enabled = !value;
             comment.Enabled = !value && collection != null;
-            save.Enabled = !value && collection != null && collection.HasChanges(comment.Text);
+        }
+
+        void FlushComment()
+        {
+            if (!commentTimer.Enabled) return;
+            commentTimer.Stop();
+            SaveChanges();
         }
 
         async void Collect()
         {
             if (busy) return;
+            FlushComment();
             collection = null;
             grid.Rows.Clear();
             result.Clear();
@@ -136,6 +169,13 @@ namespace CompInfo
             try
             {
                 Collection c = await Task.Run(delegate { return Collection.Start(dataPath); });
+                if (c.Legacy != null && Parent == null)
+                {
+                    // Read in the background while another section is open: ask when the user comes here.
+                    started = false;
+                    state.Set(Glyph.Info, L.T("Найдена старая запись с таким же именем компьютера: откройте этот раздел, чтобы решить, чья она."), Theme.Warn);
+                    return;
+                }
                 if (c.Legacy != null)
                 {
                     string text = L.T("Найдена старая запись без UUID и серийного номера с таким же именем компьютера:\n\n") +
@@ -156,10 +196,17 @@ namespace CompInfo
                     return;
                 }
                 collection = c;
+                filling = true;
                 comment.Text = c.PreviousComment;
+                filling = false;
                 ShowComparison();
-                comment.Focus();
-                comment.SelectionStart = comment.Text.Length;
+                busy = false;
+                SaveChanges();
+                if (Parent != null)
+                {
+                    comment.Focus();
+                    comment.SelectionStart = comment.Text.Length;
+                }
             }
             catch (Exception e)
             {
@@ -197,12 +244,12 @@ namespace CompInfo
             if (!hasPrevious)
                 state.Set(Glyph.Info, L.T("Этого компьютера ещё нет в базе — будет создана новая запись."), Theme.Info);
             else if (changes == 0)
-                state.Set(Glyph.Check, L.T("Запись уже есть в базе и совпадает с текущими данными, сохранять нечего. Предыдущий сбор: ") +
+                state.Set(Glyph.Check, L.T("Запись в базе совпадает с данными компьютера. Последнее сохранение: ") +
                     Fmt.Date(c.Previous.Text("collectedAt")) + ".", Theme.Good);
             else
-                state.Set(Glyph.Warning, L.T("Запись уже есть в базе. Изменения (") + changes + L.T(") выделены — сохраните, чтобы обновить запись. Предыдущий сбор: ") +
+                state.Set(Glyph.Warning, L.T("Изменения (") + changes + L.T(") выделены и сейчас сохранятся. Последнее сохранение: ") +
                     Fmt.Date(c.Previous.Text("collectedAt")) + ".", Theme.Warn);
-            SetBusy(false);
+            SetBusy(busy);
         }
 
         static string Shown(string value)
@@ -210,15 +257,22 @@ namespace CompInfo
             return string.IsNullOrEmpty(value) ? L.T("(не указано)") : value;
         }
 
-        void Save()
+        // Saves the record when it differs from the saved one and names what changed.
+        void SaveChanges()
         {
-            if (collection == null || busy) return;
+            if (collection == null || busy || !AutoSave || !collection.HasChanges(comment.Text)) return;
+            bool isNew = collection.Previous == null;
+            List<string> changed = new List<string>();
+            if (!isNew)
+                foreach (Collection.Field f in collection.Compare(collection.Build(comment.Text, "")))
+                    if (f.Changed) changed.Add(f.Label);
             try
             {
                 JsonObject saved = collection.Save(comment.Text);
                 collection.Previous = saved;
                 ShowComparison();
-                result.Set(Glyph.Check, L.T("Сохранено ") + DateTime.Now.ToString("HH:mm") + ": " + System.IO.Path.GetFileName(collection.FilePath), Theme.Good);
+                result.Set(Glyph.Check, (isNew ? L.T("Новая запись сохранена в базу в ") : L.T("Сохранено в базу в ")) + DateTime.Now.ToString("HH:mm") +
+                    (changed.Count > 0 ? L.T(". Изменилось: ") + string.Join(", ", changed) : "") + ".", Theme.Good);
                 showFile.Visible = true;
             }
             catch (Exception e)
