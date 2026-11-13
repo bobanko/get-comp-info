@@ -78,7 +78,7 @@ namespace CompInfo
             grid.Columns[SerialColumn].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
             grid.Columns[SerialColumn].MinimumWidth = em * 7;
             grid.Columns[SerialColumn].DefaultCellStyle.Font = new Font(Ui.MonoFont, FontStyle.Bold);
-            grid.Columns[CopyColumn].Width = em * 6;
+            grid.Columns[CopyColumn].Width = CopyWidth();
             grid.RowTemplate.Height = em * 2;
             foreach (DataGridViewColumn c in grid.Columns) c.SortMode = DataGridViewColumnSortMode.NotSortable;
             grid.CellContentClick += delegate (object o, DataGridViewCellEventArgs e) { if (e.ColumnIndex == CopyColumn && e.RowIndex >= 0) Copy(e.RowIndex); };
@@ -94,14 +94,14 @@ namespace CompInfo
                 bool narrow = grid.Width < em * 28;
                 if (narrow == compact) return;
                 compact = narrow;
-                grid.Columns[CopyColumn].Width = compact ? em * 2 + em / 2 : em * 6;
+                grid.Columns[CopyColumn].Width = compact ? em * 2 + em / 2 : CopyWidth();
                 grid.Invalidate();
             };
 
             status.Dock = DockStyle.Bottom;
             status.Padding = new Padding(0, em / 2, 0, 0);
 
-            // Ends the highlight of new drives and the «Скопировано ✓» of the buttons.
+            // Ends the highlight of new drives and the «Скопировано» of the buttons.
             fade.Interval = 300;
             fade.Tick += delegate
             {
@@ -224,7 +224,7 @@ namespace CompInfo
         }
 
         // Colours of a row: grey when the drive is removed, lit up for a few seconds when it has just arrived,
-        // and «Скопировано ✓» on the button right after copying.
+        // and «Скопировано» with a check on the button right after copying.
         void Style(DataGridViewRow row, Entry e)
         {
             DateTime now = DateTime.Now;
@@ -236,13 +236,15 @@ namespace CompInfo
             Color back = !e.Connected ? Theme.BadLight : e.HighlightUntil != DateTime.MinValue ? Theme.GoodLight : Color.Empty;
             for (int c = 0; c <= CopyColumn; c++)
             {
-                row.Cells[c].Style.ForeColor = c == SerialColumn && !has ? Theme.Warn : c == DiskColumn && !e.Connected ? Theme.Bad : text;
+                Color fore = c == SerialColumn && !has ? Theme.Warn : c == DiskColumn && !e.Connected ? Theme.Bad : text;
+                // A selected row keeps its colours: «отключена» stays red, a removed drive stays grey.
+                row.Cells[c].Style.ForeColor = row.Cells[c].Style.SelectionForeColor = fore;
                 row.Cells[c].Style.BackColor = back;
                 row.Cells[c].Style.SelectionBackColor = back.IsEmpty ? Color.Empty : Theme.Mix(back, Theme.Selection, 0.5);
             }
             if (!has) row.Cells[SerialColumn].Style.Font = Font;
             if (!has) return;
-            row.Cells[CopyColumn].Value = e.CopiedUntil != DateTime.MinValue ? L.T("Скопировано ✓") : L.T("Копировать");
+            row.Cells[CopyColumn].Value = e.CopiedUntil != DateTime.MinValue ? L.T("Скопировано") : L.T("Копировать");
             grid.InvalidateCell(row.Cells[CopyColumn]);
         }
 
@@ -276,9 +278,32 @@ namespace CompInfo
         {
             Bitmap icon = Glyph.Image(Glyph.Usb, em, Theme.Muted);
             using (Graphics g = Graphics.FromImage(icon))
-            using (Bitmap cross = Glyph.Image(Glyph.Cross, em * 3 / 5, Theme.Bad))
-                g.DrawImage(cross, icon.Width - cross.Width, icon.Height - cross.Height);
+            {
+                // A bold red cross over the lower right corner, with a ring of the row colour around it,
+                // so it reads well over the grey drive.
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                float stroke = Math.Max(2f, em / 7f), side = em * 0.5f, x = em - side - stroke / 2, y = em - side - stroke / 2;
+                using (Pen ring = new Pen(Theme.BadLight, stroke * 2.4f))
+                using (Pen cross = new Pen(Theme.Bad, stroke))
+                {
+                    ring.StartCap = ring.EndCap = cross.StartCap = cross.EndCap = System.Drawing.Drawing2D.LineCap.Round;
+                    foreach (Pen pen in new[] { ring, cross })
+                    {
+                        g.DrawLine(pen, x, y, x + side, y + side);
+                        g.DrawLine(pen, x + side, y, x, y + side);
+                    }
+                }
+            }
             return icon;
+        }
+
+        // Width of the copy column: icon, gap and the longer label, plus the button's padding and margin.
+        int CopyWidth()
+        {
+            int em = Font.Height, text = 0;
+            foreach (string label in new[] { L.T("Копировать"), L.T("Скопировано") })
+                text = Math.Max(text, TextRenderer.MeasureText(label, Font, Size.Empty, TextFormatFlags.NoPadding).Width);
+            return em / 2 + em / 2 + em + em / 3 + text + em / 2 + em / 2;
         }
 
         // An empty table says what to do.
@@ -317,9 +342,16 @@ namespace CompInfo
                 if (!copied && !entry.Connected)
                     using (Pen border = new Pen(hover ? Theme.Accent : Theme.Border)) e.Graphics.DrawPath(border, shape);
             }
-            if (compact) Glyph.Draw(e.Graphics, copied ? Glyph.Check : Glyph.Copy, box, ink, em * 0.8f);
-            else TextRenderer.DrawText(e.Graphics, Convert.ToString(e.Value), Font, box, ink,
-                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+            string glyph = copied ? Glyph.Check : Glyph.Copy;
+            if (compact) { Glyph.Draw(e.Graphics, glyph, box, ink, em * 0.8f); return; }
+            // The icon and the label centred together: the copy icon by default, a check after copying.
+            string label = Convert.ToString(e.Value);
+            const TextFormatFlags flags = TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine;
+            int textWidth = TextRenderer.MeasureText(label, Font, Size.Empty, flags).Width, gap = em / 3;
+            int left = box.X + Math.Max(0, (box.Width - em - gap - textWidth) / 2);
+            Glyph.Draw(e.Graphics, glyph, new Rectangle(left, box.Y, em, box.Height), ink, em * 0.8f);
+            TextRenderer.DrawText(e.Graphics, label, Font, new Rectangle(left + em + gap, box.Y, box.Right - left - em - gap, box.Height), ink,
+                flags | TextFormatFlags.EndEllipsis);
         }
     }
 }
