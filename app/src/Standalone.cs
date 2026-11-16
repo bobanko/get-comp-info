@@ -25,7 +25,39 @@ namespace CompInfo
         }
 
         public string FileName { get { return fileName; } }
-        string Path { get { return System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, fileName); } }
+
+        string path;
+        string Path { get { if (path == null) path = Locate(); return path; } }
+
+        // On a flash drive the ini stays next to the exe, so the settings travel with it and nothing is left on
+        // the computers it runs on. Anywhere else (desktop, Downloads) it goes to %APPDATA%\CHAGEAR, so no extra
+        // file appears beside the program; an ini left there by an older version is moved over once.
+        string Locate()
+        {
+            string beside = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, fileName);
+            try
+            {
+                if (new DriveInfo(System.IO.Path.GetPathRoot(beside)).DriveType == DriveType.Removable) return beside;
+            }
+            catch (Exception) { }   // a network path has no drive letter: treat it as a fixed disk
+            string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            if (string.IsNullOrEmpty(appData)) return beside;
+            string profile = System.IO.Path.Combine(System.IO.Path.Combine(appData, "CHAGEAR"), fileName);
+            try
+            {
+                if (File.Exists(beside))
+                {
+                    if (File.Exists(profile)) File.Delete(beside);
+                    else
+                    {
+                        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(profile));
+                        File.Move(beside, profile);
+                    }
+                }
+            }
+            catch (Exception) { if (!File.Exists(profile)) return beside; }   // could not move: keep reading the old ini
+            return profile;
+        }
 
         Dictionary<string, string> Read()
         {
@@ -60,6 +92,7 @@ namespace CompInfo
                 StringBuilder text = new StringBuilder("; " + header + "\r\n[settings]\r\n");
                 foreach (string key in keys)
                     if (values.ContainsKey(key)) text.Append(key).Append('=').Append(values[key]).Append("\r\n");
+                Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path));
                 File.WriteAllText(Path, text.ToString(), new UTF8Encoding(false));
             }
             catch (Exception) { }   // a read-only flash drive simply keeps the defaults
