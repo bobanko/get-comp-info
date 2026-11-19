@@ -51,6 +51,28 @@ describe('console upload', () => {
     expect(history.body.history[0]).toMatchObject({ revision: 1, action: 'create', source: 'console', changedBy: email });
   });
 
+  it('keeps the inventory mark set in the web when the console sends a record without it', async () => {
+    const { key } = await harvesterKey();
+    const id = unique('dev');
+    await consoleRequest(key, 'PUT', `/devices/${id}`, { baseRevision: null, data: deviceData(id) });
+    const editor = await addUser('editor');
+    const marked = await webRequest(editor, 'PATCH', `/devices/${id}`, { baseRevision: 1, changes: { inventoried: true } });
+    expect(marked.body.device.data.inventoried).toBe(true);
+
+    // An older program drops fields it does not know.
+    const upload = await consoleRequest(key, 'PUT', `/devices/${id}`, { baseRevision: 2, data: deviceData(id, { comment: 'new' }) });
+    expect(upload.status).toBe(200);
+    expect(upload.body.device.data).toMatchObject({ comment: 'new', inventoried: true });
+
+    // The console may still send the value explicitly.
+    const unmarked = await consoleRequest(key, 'PUT', `/devices/${id}`, { baseRevision: 3, data: deviceData(id, { comment: 'new', inventoried: false }) });
+    expect(unmarked.body.device.data.inventoried).toBe(false);
+
+    const wrong = await webRequest(editor, 'PATCH', `/devices/${id}`, { baseRevision: 4, changes: { inventoried: 'yes' } });
+    expect(wrong.status).toBe(400);
+    expect(wrong.body.error.code).toBe('invalid_inventoried');
+  });
+
   it('remembers which key made the change', async () => {
     const email = await addUser('harvester');
     const flash = await addKey(email, 'Флешка Кости');

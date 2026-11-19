@@ -4,6 +4,9 @@ import type { ApiKeyInfo, User } from './types';
 
 // The old manual "added to external database" mark is replaced by the computed cloud status.
 export const DEPRECATED_FIELDS = ['addedToExternalDatabase', 'addedToExternalDatabaseAt'];
+// Set by people in the web interface, not collected by the console (app Records.WebFields).
+// A console upload without them keeps the cloud value: older program versions drop unknown fields.
+export const WEB_FIELDS = ['inventoried'];
 export const MAX_DATA_BYTES = 64 * 1024;
 const MAX_ID_LENGTH = 200;
 
@@ -86,6 +89,9 @@ export function normalizeData(id: string, data: unknown): Record<string, unknown
   const computerId = result.computerId;
   if (typeof computerId === 'string' && computerId !== '' && computerId !== id) {
     fail(400, 'id_mismatch', `The record computerId (${computerId}) does not match the id ${id}.`);
+  }
+  if ('inventoried' in result && typeof result.inventoried !== 'boolean' && result.inventoried !== null) {
+    fail(400, 'invalid_inventoried', 'inventoried must be true or false.');
   }
   if (new TextEncoder().encode(JSON.stringify(result)).length > MAX_DATA_BYTES) {
     fail(413, 'too_large', 'The device record is larger than 64 KB.');
@@ -216,6 +222,14 @@ async function raceLost(db: D1Database, id: string): Promise<WriteResult> {
   return { status: 'conflict', current: toDevice(row) };
 }
 
+function keepWebFields(current: Record<string, unknown>, incoming: Record<string, unknown>): Record<string, unknown> {
+  const result = { ...incoming };
+  for (const field of WEB_FIELDS) {
+    if (!(field in result) && field in current) result[field] = current[field];
+  }
+  return result;
+}
+
 // Console upload. baseRevision is the cloud revision the local copy was based on (null for a new record).
 export async function putDevice(
   db: D1Database,
@@ -229,6 +243,7 @@ export async function putDevice(
     let action: Action = 'create';
     if (row) {
       const current = toDevice(row);
+      incoming = keepWebFields(current.data, incoming);
       if (current.deleted) {
         if (!options.restore) return { status: 'deleted', current };
         action = 'restore';

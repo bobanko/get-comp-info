@@ -31,6 +31,7 @@ export const FIELD_LABELS = {
   comment: 'Комментарий',
   windows: 'Windows',
   esetInstalled: 'ESET установлен',
+  inventoried: 'Инвентаризация',
   collectedAt: 'Дата сбора',
   createdAt: 'Дата создания',
 };
@@ -38,7 +39,20 @@ export const FIELD_LABELS = {
 export const FIELD_ORDER = Object.keys(FIELD_LABELS);
 
 // Fields an editor may change in the web interface. Identity and collection dates come from the console.
-export const EDITABLE_FIELDS = ['hostname', 'ip', 'mac', 'serial', 'manufacturer', 'model', 'username', 'windows', 'comment'];
+export const EDITABLE_FIELDS = ['hostname', 'ip', 'mac', 'serial', 'manufacturer', 'model', 'username', 'windows', 'comment', 'inventoried'];
+
+// Yes/no fields: a checkbox in the edit form; a missing value means "no".
+export const BOOLEAN_FIELDS = ['inventoried'];
+
+// Shown in the card even when the record does not have them yet.
+export const ALWAYS_SHOWN_FIELDS = ['inventoried'];
+
+// Inventory mark, set by people in the web interface (the console keeps it, never sets it).
+export function isInventoried(device) {
+  return device.data.inventoried === true;
+}
+
+export const INVENTORY_LABELS = { yes: 'Да', no: 'Нет' };
 
 export function fieldLabel(name) {
   return FIELD_LABELS[name] ?? name;
@@ -175,11 +189,13 @@ function searchText(device) {
 
 // Every word of the query must occur somewhere in the record.
 // duplicatesOf: a DUPLICATE_FIELDS name to keep only devices repeating that field (empty: all).
-export function filterDevices(devices, { query = '', eset = 'all', duplicatesOf = '' } = {}) {
+// inventory: 'all' | 'yes' | 'no'.
+export function filterDevices(devices, { query = '', eset = 'all', inventory = 'all', duplicatesOf = '' } = {}) {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   const duplicates = duplicatesOf ? duplicateValues(devices, duplicatesOf) : null;
   return devices.filter((device) => {
     if (eset !== 'all' && esetState(device.data.esetInstalled) !== eset) return false;
+    if (inventory !== 'all' && isInventoried(device) !== (inventory === 'yes')) return false;
     if (duplicates && !isDuplicate(device, duplicatesOf, duplicates)) return false;
     if (words.length === 0) return true;
     const text = searchText(device);
@@ -205,6 +221,7 @@ export const SORT_KEYS = {
   model: (d) => [d.data.manufacturer, d.data.model].filter((v) => !isBlank(v)).join(' '),
   windows: (d) => d.data.windows,
   eset: (d) => ['missing', 'unknown', 'installed'].indexOf(esetState(d.data.esetInstalled)),
+  inventoried: (d) => (isInventoried(d) ? 1 : 0),
   collectedAt: (d) => parseDate(d.data.collectedAt)?.getTime() ?? null,
   comment: (d) => d.data.comment,
   updatedAt: (d) => parseDate(d.updatedAt)?.getTime() ?? null,
@@ -261,7 +278,9 @@ export function diffRecords(before, after) {
 export function changedFields(original, edited) {
   const changes = {};
   for (const [name, value] of Object.entries(edited)) {
-    if (displayValue(original[name]) !== value) changes[name] = value;
+    // A checkbox gives true/false; a missing value counts as false.
+    const before = typeof value === 'boolean' ? original[name] === true : displayValue(original[name]);
+    if (before !== value) changes[name] = value;
   }
   return changes;
 }

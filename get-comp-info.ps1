@@ -361,6 +361,8 @@ if ($null -ne $previousComputer) {
         # Legacy records only have the date of their last collection.
         $computer.createdAt = $previousComputer.collectedAt
     }
+    # Set in the web interface, not on the computer: keep it.
+    if ($null -ne $previousComputer.inventoried) { $computer.inventoried = $previousComputer.inventoried }
 }
 
 $json = $computer | ConvertTo-Json -Depth 5

@@ -109,6 +109,9 @@ namespace CompInfo
                 if (!string.IsNullOrWhiteSpace(Previous.Text("createdAt"))) r["createdAt"] = Previous["createdAt"];
                 // Legacy records only have the date of their last collection.
                 else if (!string.IsNullOrWhiteSpace(Previous.Text("collectedAt"))) r["createdAt"] = Previous["collectedAt"];
+                // Fields set in the web interface, not on the computer, are kept.
+                foreach (string name in Records.WebFields)
+                    if (Previous[name] != null) r[name] = Previous[name];
             }
             return r;
         }

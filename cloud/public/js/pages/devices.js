@@ -14,8 +14,10 @@ import {
   formatDate,
   hasRole,
   hostnameIssue,
+  INVENTORY_LABELS,
   isBlank,
   isDuplicate,
+  isInventoried,
   isRecent,
   sortDevices,
 } from '../logic.js';
@@ -28,6 +30,7 @@ const COLUMNS = [
   { key: 'model', label: 'Модель' },
   { key: 'windows', label: 'Windows', hidden: true },
   { key: 'eset', label: 'ESET' },
+  { key: 'inventoried', label: 'Инвентаризация' },
   { key: 'collectedAt', label: 'Собрано' },
   { key: 'comment', label: 'Комментарий' },
   { key: 'updatedAt', label: 'Изменено в облаке', hidden: true },
@@ -39,13 +42,25 @@ const state = {
   showDeleted: false,
   query: '',
   eset: 'all',
+  inventory: 'all', // 'all' | 'yes' | 'no'
   duplicatesOf: null, // 'ip' | 'hostname' | 'serial' | null
   sort: readSetting('devices.sort', { key: 'hostname', direction: 'asc' }),
-  columns: readSetting(
-    'devices.columns',
-    COLUMNS.filter((column) => !column.hidden).map((column) => column.key),
-  ),
+  columns: savedColumns(),
 };
+
+// The saved column choice; columns added to the site after it was saved are shown once (unless hidden by default).
+function savedColumns() {
+  const defaults = COLUMNS.filter((column) => !column.hidden).map((column) => column.key);
+  const columns = readSetting('devices.columns', defaults);
+  // Columns that existed before the list of known columns was saved.
+  const known = readSetting('devices.knownColumns', ['hostname', 'ip', 'username', 'serial', 'model', 'windows', 'eset', 'collectedAt', 'comment', 'updatedAt']);
+  const added = defaults.filter((key) => !known.includes(key) && !columns.includes(key));
+  writeSetting('devices.knownColumns', COLUMNS.map((column) => column.key));
+  if (added.length === 0) return columns;
+  const result = [...columns, ...added];
+  writeSetting('devices.columns', result);
+  return result;
+}
 
 export async function renderDevices({ me, main }, { reload = false } = {}) {
   if (!state.devices || reload) {
@@ -111,12 +126,28 @@ export async function renderDevices({ me, main }, { reload = false } = {}) {
     Object.entries(ESET_LABELS).map(([value, label]) => h('option', { value, selected: state.eset === value }, `ESET: ${label.toLowerCase()}`)),
   );
 
+  const inventorySelect = h(
+    'select',
+    {
+      'aria-label': 'Фильтр по инвентаризации',
+      onchange: (event) => {
+        state.inventory = event.target.value;
+        redraw();
+      },
+    },
+    h('option', { value: 'all' }, 'Инвентаризация: все'),
+    Object.entries(INVENTORY_LABELS).map(([value, label]) =>
+      h('option', { value, selected: state.inventory === value }, `Инвентаризация: ${label.toLowerCase()}`),
+    ),
+  );
+
   let duplicates = duplicateFilter(redraw);
   const toolbar = h(
     'div',
     { class: 'toolbar' },
     search,
     esetSelect,
+    inventorySelect,
     duplicates,
     hasRole(me, 'admin') &&
       h(
@@ -179,7 +210,12 @@ function duplicateFilter(redraw) {
 }
 
 function currentRows() {
-  const filtered = filterDevices(state.devices, { query: state.query, eset: state.eset, duplicatesOf: state.duplicatesOf });
+  const filtered = filterDevices(state.devices, {
+    query: state.query,
+    eset: state.eset,
+    inventory: state.inventory,
+    duplicatesOf: state.duplicatesOf,
+  });
   return sortDevices(filtered, state.sort.key, state.sort.direction);
 }
 
@@ -315,6 +351,14 @@ function cell(key, device, duplicates, now) {
       const status = esetState(data.esetInstalled);
       return h('td', {}, h('span', { class: `badge eset-${status}` }, ESET_LABELS[status]));
     }
+    case 'inventoried':
+      return h(
+        'td',
+        {},
+        isInventoried(device)
+          ? h('span', { class: 'badge badge-ok' }, INVENTORY_LABELS.yes)
+          : h('span', { class: 'badge badge-muted' }, INVENTORY_LABELS.no),
+      );
     case 'collectedAt':
       return h('td', { class: isRecent(data.collectedAt, now) ? 'nowrap recent' : 'nowrap', title: isRecent(data.collectedAt, now) ? 'Собрано за последние 7 дней' : undefined }, formatDate(data.collectedAt));
     case 'comment':

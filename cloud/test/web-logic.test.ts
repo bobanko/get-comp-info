@@ -14,6 +14,7 @@ import {
   hasRole,
   hostnameIssue,
   ipSortValue,
+  isInventoried,
   isRecent,
   shortAge,
   sortDevices,
@@ -306,5 +307,20 @@ describe('field change dates', () => {
     expect(changes.ip.revision).toBe(1);
     expect(changes).not.toHaveProperty('user');
     expect(fieldChanges([])).toEqual({});
+  });
+});
+
+describe('inventory mark', () => {
+  it('filters, sorts and compares the mark', () => {
+    const list = [device('A', { inventoried: true }), device('B', {}), device('C', { inventoried: false })];
+    expect(isInventoried(list[0])).toBe(true);
+    expect(isInventoried(list[1])).toBe(false);
+    expect(filterDevices(list, { inventory: 'yes' }).map((d: { id: string }) => d.id)).toEqual(['A']);
+    expect(filterDevices(list, { inventory: 'no' }).map((d: { id: string }) => d.id)).toEqual(['B', 'C']);
+    expect(sortDevices(list, 'inventoried', 'desc')[0].id).toBe('A');
+    expect(changedFields({}, { inventoried: false })).toEqual({});
+    expect(changedFields({}, { inventoried: true })).toEqual({ inventoried: true });
+    expect(changedFields({ inventoried: true }, { inventoried: true })).toEqual({});
+    expect(changedFields({ inventoried: true }, { inventoried: false })).toEqual({ inventoried: false });
   });
 });

@@ -277,6 +277,9 @@ namespace CompInfo
             Check(c.HasChanges("other"), "comment change is a change");
             c.Previous = Json.ParseObject("{\"collectedAt\":\"2020-01-01T00:00:00\"}");
             Check((string)c.Build("", "now")["createdAt"] == "2020-01-01T00:00:00", "legacy createdAt from collectedAt");
+            Check(!c.Build("", "now").Has("inventoried"), "no inventory mark unless the web set it");
+            c.Previous = Json.ParseObject("{\"inventoried\":true}");
+            Check(c.Build("", "now")["inventoried"] is bool && (bool)c.Build("", "now")["inventoried"], "the inventory mark from the web is kept");
 
             // Saved right after a change made by the program: expected name, domain and address.
             c.Previous = Json.ParseObject("{\"username\":\"petrenko\",\"comment\":\"кабинет 5\"}");

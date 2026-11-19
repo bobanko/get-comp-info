@@ -124,6 +124,9 @@ namespace CompInfo
         // The old manual "added to external database" mark is replaced by the computed cloud status.
         public static readonly string[] DeprecatedFields = { "addedToExternalDatabase", "addedToExternalDatabaseAt" };
 
+        // Set by people in the web interface, not collected: a new collection keeps them (cloud devices.ts WEB_FIELDS).
+        public static readonly string[] WebFields = { "inventoried" };
+
         // computerId, or the file name for legacy records without it.
         public static string CloudId(JsonObject record, string fileName)
         {

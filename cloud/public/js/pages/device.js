@@ -1,7 +1,10 @@
 import { api } from '../api.js';
 import { errorBox, h, replace, toast } from '../dom.js';
 import {
+  ALWAYS_SHOWN_FIELDS,
   authorLabel,
+  BOOLEAN_FIELDS,
+  INVENTORY_LABELS,
   authorTitle,
   changedFields,
   deviceAuthor,
@@ -82,13 +85,21 @@ function valueNode(name, value) {
     const status = esetState(value);
     return h('span', { class: `badge eset-${status}` }, ESET_LABELS[status]);
   }
+  if (name === 'inventoried') {
+    return value === true
+      ? h('span', { class: 'badge badge-ok' }, INVENTORY_LABELS.yes)
+      : h('span', { class: 'badge badge-muted' }, INVENTORY_LABELS.no);
+  }
   if (/At$/.test(name) && !isBlank(value)) return h('span', { title: displayValue(value) }, formatDate(value));
   if (isBlank(value)) return h('span', { class: 'muted' }, value === undefined ? '—' : 'не указано');
   return h('span', { class: ['ip', 'mac', 'serial', 'smbiosUuid', 'computerId'].includes(name) ? 'mono' : undefined }, displayValue(value));
 }
 
 function orderedFields(data) {
-  return [...FIELD_ORDER.filter((name) => name in data), ...Object.keys(data).filter((name) => !FIELD_ORDER.includes(name))];
+  return [
+    ...FIELD_ORDER.filter((name) => name in data || ALWAYS_SHOWN_FIELDS.includes(name)),
+    ...Object.keys(data).filter((name) => !FIELD_ORDER.includes(name)),
+  ];
 }
 
 // When the field got its current value; a click shows that revision in the history.
@@ -138,7 +149,9 @@ function editForm(context, device, history, view, redraw) {
       class: 'edit',
       onsubmit: async (event) => {
         event.preventDefault();
-        const edited = Object.fromEntries(Object.entries(inputs).map(([name, input]) => [name, input.value]));
+        const edited = Object.fromEntries(
+          Object.entries(inputs).map(([name, input]) => [name, input.type === 'checkbox' ? input.checked : input.value]),
+        );
         const changes = changedFields(device.data, edited);
         if (Object.keys(changes).length === 0) {
           redraw({ editing: false });
@@ -169,6 +182,11 @@ function editForm(context, device, history, view, redraw) {
       renderDevice(context, device.id);
     }),
     EDITABLE_FIELDS.map((name) => {
+      if (BOOLEAN_FIELDS.includes(name)) {
+        const input = h('input', { type: 'checkbox', name, checked: view.draft?.[name] ?? device.data[name] === true });
+        inputs[name] = input;
+        return h('label', { class: 'check' }, input, name === 'inventoried' ? 'Инвентаризировано' : fieldLabel(name));
+      }
       const initial = view.draft?.[name] ?? displayValue(device.data[name]);
       const input =
         name === 'comment'
