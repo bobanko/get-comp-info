@@ -212,9 +212,22 @@ export async function renderDevices({ me, main }, { reload = false } = {}) {
   );
 
   let duplicates = duplicateFilter(redraw);
+  // Phones: the search row at the bottom of the screen, within reach of the thumb (default), or at the top.
+  const searchAtBottom = h('label', { class: 'check mobile-only' },
+    h('input', {
+      type: 'checkbox',
+      checked: readSetting('devices.searchBottom', true),
+      onchange: (event) => {
+        writeSetting('devices.searchBottom', event.target.checked);
+        toolbar.classList.toggle('at-bottom', event.target.checked);
+      },
+    }),
+    'Поиск внизу экрана',
+  );
+
   const toolbar = h(
     'div',
-    { class: 'toolbar devices-toolbar' },
+    { class: readSetting('devices.searchBottom', true) ? 'toolbar devices-toolbar at-bottom' : 'toolbar devices-toolbar' },
     h('div', { class: 'search-box' }, search, clear),
     filtersToggle,
     h(
@@ -223,6 +236,7 @@ export async function renderDevices({ me, main }, { reload = false } = {}) {
       esetSelect,
       inventorySelect,
       sortSelect,
+      searchAtBottom,
       duplicates,
       hasRole(me, 'admin') &&
         h(
@@ -246,9 +260,26 @@ export async function renderDevices({ me, main }, { reload = false } = {}) {
   );
 
   replace(main, h('h1', { class: 'devices-title' }, 'Устройства'), toolbar, count, tableHost);
+  trackKeyboard();
   redraw();
   // Not on touch screens: the keyboard would cover the list on the way back from a device card.
   if (state.query && !matchMedia('(pointer: coarse)').matches) search.focus();
+}
+
+// The search row at the bottom must stay above the on-screen keyboard. Browsers that do not shrink the page
+// for the keyboard (iOS Safari) only shrink the visual viewport: --keyboard is the part it covers (app.css).
+let keyboardTracked = false;
+function trackKeyboard() {
+  const viewport = window.visualViewport;
+  if (keyboardTracked || !viewport) return;
+  keyboardTracked = true;
+  const update = () => {
+    const covered = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+    document.documentElement.style.setProperty('--keyboard', `${Math.round(covered)}px`);
+  };
+  viewport.addEventListener('resize', update);
+  viewport.addEventListener('scroll', update);
+  update();
 }
 
 function visibleColumns() {

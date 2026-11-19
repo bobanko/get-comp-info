@@ -493,6 +493,18 @@ details summary { cursor: pointer; }
     position: sticky; top: 0; z-index: 8;
     margin: 0 -16px; padding: 8px 16px; background: var(--bg); border-bottom: 1px solid var(--border);
   }
+  /* Search at the bottom (the default; a checkbox in "Фильтры" moves it back up): fixed above the keyboard,
+     the filters open above the search row. */
+  .devices-toolbar.at-bottom {
+    position: fixed; top: auto; left: 0; right: 0; bottom: var(--keyboard, 0px);
+    margin: 0; padding-bottom: calc(8px + env(safe-area-inset-bottom));
+    flex-wrap: wrap-reverse;
+    border-bottom: 0; border-top: 1px solid var(--border); box-shadow: 0 -6px 18px rgb(0 0 0 / 12%);
+  }
+  .devices-toolbar.at-bottom.open .toolbar-extra { padding: 0 0 4px; }
+  .devices-toolbar.at-bottom .menu-body { top: auto; bottom: calc(100% + 4px); }
+  main:has(.devices-toolbar.at-bottom) { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
+  .toolbar-extra label.mobile-only { display: inline-flex; }
   .toolbar .search-box { flex: 1 1 auto; min-width: 0; }
   .filters-toggle { display: inline-flex; padding: 8px 12px; }
   .filters-toggle[aria-expanded='true'] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
