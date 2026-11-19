@@ -53,7 +53,10 @@ function Get-InventoryIdentity {
             }
         }
     })
-    if ($matches.Count -gt 1) { throw 'Найдено несколько записей этого компьютера. Сначала устраните дубликаты в базе.' }
+    if ($matches.Count -gt 1) {
+        $list = ($matches | ForEach-Object { "$($_.Id) ($(if ($_.Record.hostname) { $_.Record.hostname } else { '?' }))" }) -join '; '
+        throw "Найдено несколько записей этого компьютера: $list. Удалите лишнюю в веб-интерфейсе (карточка записи → «Удалить»), затем синхронизируйте базу."
+    }
     $path = $null
     if ($matches.Count -eq 1) {
         $id = $matches[0].Id

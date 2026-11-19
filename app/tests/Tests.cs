@@ -154,8 +154,10 @@ namespace CompInfo
 
                 WriteRecord(dir, "dup.json", "{\"computerId\":\"DUP\",\"windowsMachineGuid\":\"" + win + "\"}");
                 bool refused = false;
-                try { Identity.Find(uuid, "SER1", win, dir); } catch (InvalidDataException) { refused = true; }
+                string why = "";
+                try { Identity.Find(uuid, "SER1", win, dir); } catch (InvalidDataException e) { refused = true; why = e.Message; }
                 Check(refused, "two records of one computer must stop the collection");
+                Check(why.Contains("OLD-HOST (pc1)") && why.Contains("DUP (?)") && why.Contains("веб-интерфейсе"), "duplicates are named: " + why);
 
                 string legacyDir = TempDir();
                 WriteRecord(legacyDir, "PC-7.json", "{\"hostname\":\"PC-7\",\"serial\":\"Default string\"}");

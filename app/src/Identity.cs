@@ -101,7 +101,17 @@ namespace CompInfo
                     }
                 }
             }
-            if (matches.Count > 1) throw new InvalidDataException(L.T("Найдено несколько записей этого компьютера. Сначала устраните дубликаты в базе."));
+            if (matches.Count > 1)
+            {
+                List<string> list = new List<string>();
+                foreach (Match m in matches)
+                {
+                    string date = Fmt.Date(m.Record.Text("collectedAt"));
+                    list.Add(m.Id + " (" + (m.Record.Text("hostname") ?? "?") + (date == "" ? "" : ", " + date) + ")");
+                }
+                throw new InvalidDataException(L.T("Найдено несколько записей этого компьютера: ") + string.Join("; ", list) +
+                    L.T(". Удалите лишнюю в веб-интерфейсе (карточка записи → «Удалить»), затем синхронизируйте базу."));
+            }
             Result result = new Result();
             result.InstallationId = installationId;
             if (matches.Count == 1)
