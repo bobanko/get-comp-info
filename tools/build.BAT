@@ -45,7 +45,7 @@ call :version obj\SuspectorVersion.cs "SUSpector" %SUSVER%
 call :version obj\YouSBeeVersion.cs "youSBee" %YSBVER%
 
 set "REFS=/r:System.Management.dll /r:System.Web.Extensions.dll /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll /r:System.DirectoryServices.AccountManagement.dll"
-set "CORE=obj\Version.cs app\src\Json.cs app\src\Store.cs app\src\Identity.cs app\src\Machine.cs app\src\Network.cs app\src\Export.cs app\src\Collector.cs app\src\Cloud.cs app\src\Shell.cs app\src\SystemChanges.cs app\src\Security.cs app\src\DocumentSearch.cs app\src\Lang.cs app\src\Strings.cs"
+set "CORE=obj\Version.cs app\src\Json.cs app\src\Store.cs app\src\LooseSearch.cs app\src\Identity.cs app\src\Machine.cs app\src\Network.cs app\src\Export.cs app\src\Collector.cs app\src\Cloud.cs app\src\Shell.cs app\src\SystemChanges.cs app\src\Security.cs app\src\DocumentSearch.cs app\src\Lang.cs app\src\Strings.cs"
 set "UI=app\src\Theme.cs app\src\Ui.cs app\src\MainForm.cs app\src\CollectPage.cs app\src\DatabasePage.cs app\src\ToolPages.cs app\src\UsbPage.cs app\src\FileChips.cs app\src\SecurityPage.cs app\src\SearchPage.cs app\src\CloudPages.cs app\src\SystemPages.cs app\src\AboutPage.cs app\src\Program.cs"
 set "SUSPECTOR_CORE=obj\SuspectorVersion.cs app\src\Json.cs app\src\Store.cs app\src\Identity.cs app\src\Machine.cs app\src\Network.cs app\src\Shell.cs app\src\SystemChanges.cs app\src\Security.cs app\src\SuspectorUpdate.cs app\src\Lang.cs app\src\Strings.cs"
 set "SUSPECTOR_UI=app\src\Theme.cs app\src\Ui.cs app\src\Standalone.cs app\src\FileChips.cs app\src\SecurityPage.cs app\src\SuspectorUpdateDialog.cs app\src\Suspector.cs"

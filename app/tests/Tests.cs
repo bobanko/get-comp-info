@@ -38,6 +38,7 @@ namespace CompInfo
             Run("free addresses from the database", FreeAddresses);
             Run("USB serial numbers", UsbSerials);
             Run("collected record", CollectedRecord);
+            Run("search in any alphabet", LooseSearchMatches);
             Run("cloud state", CloudStateFile);
             Run("computer names match PowerShell", ComputerNames);
             Run("security document scan", SecurityDocumentScan);
@@ -296,6 +297,34 @@ namespace CompInfo
             c.Apply(leave);
             after = c.Build("", "now");
             Check(after.Text("hostname") == "IF-042-PC" && !(bool)after["partOfDomain"] && after["ip"] == null, "leave: the old static address is not saved again");
+        }
+
+        // Same cases as the web interface (cloud/test/web-logic.test.ts).
+        static void LooseSearchMatches()
+        {
+            string[][] found =
+            {
+                new[] { "IF-042-BOB", "боб" }, new[] { "Бобров", "bob" }, new[] { "vmyshko komp", "мишко" }, new[] { "Мишко", "mishko" },
+                new[] { "Дмитрий", "dmitriy" }, new[] { "Київ", "kyiv" }, new[] { "Kharkiv", "харків" }, new[] { "Tsentr", "центр" },
+                new[] { "juristka mujichekk sprava", "мужичек" }, new[] { "юристка мужичек", "mujichek" }, new[] { "melnik s4 vaxa comp", "ваха" },
+                new[] { "ваха", "vaxa" }, new[] { "Zhytomyr", "житомир" }, new[] { "borsch", "борщ" }, new[] { "10.100.22.131", "10.100" },
+            };
+            foreach (string[] f in found) Check(LooseSearch.Matches(f[0], f[1], null), f[1] + " finds " + f[0]);
+            Check(!LooseSearch.Matches("лука миша", "kompik", null), "unrelated words do not match");
+            Check(!LooseSearch.Matches("10.10.22.131", "10.100", null), "digits stay exact");
+            Func<string, string, string> ranges = delegate (string text, string word)
+            {
+                List<string> parts = new List<string>();
+                foreach (int[] r in LooseSearch.MatchRanges(text, new[] { word })) parts.Add(r[0] + "-" + r[1]);
+                return string.Join(",", parts);
+            };
+            Check(ranges("IF-042-BOB", "боб") == "7-10", "highlight of a Latin match: " + ranges("IF-042-BOB", "боб"));
+            Check(ranges("vmyshko komp", "мишко") == "1-7", "highlight inside a word: " + ranges("vmyshko komp", "мишко"));
+            Check(ranges("Харків", "kharkiv") == "0-6", "highlight of a Cyrillic match: " + ranges("Харків", "kharkiv"));
+            Check(ranges("Bob bob", "bob") == "0-3,4-7", "every occurrence: " + ranges("Bob bob", "bob"));
+            Check(ranges("juristka mujichekk", "мужичек") == "9-18", "informal spelling highlighted whole: " + ranges("juristka mujichekk", "мужичек"));
+            Check(LooseSearch.WordKeys("жжжжжжжжжжжж").Count <= 32, "variants are limited");
+            Check(LooseSearch.Words("  Боб   ip ").Count == 2, "query words");
         }
 
         static void CloudStateFile()
