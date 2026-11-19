@@ -12,6 +12,20 @@ import { renderUsers } from './pages/users.js';
 const main = document.getElementById('main');
 const nav = document.getElementById('nav');
 const whoami = document.getElementById('whoami');
+const topbar = document.querySelector('.topbar');
+const menuToggle = document.getElementById('menu-toggle');
+const menuCurrent = document.getElementById('menu-current');
+
+function setMenuOpen(open) {
+  topbar.classList.toggle('open', open);
+  menuToggle.setAttribute('aria-expanded', String(open));
+}
+
+menuToggle.addEventListener('click', () => setMenuOpen(!topbar.classList.contains('open')));
+// A tap on the section already open changes no hash: close the menu anyway.
+nav.addEventListener('click', (event) => {
+  if (event.target.closest('a')) setMenuOpen(false);
+});
 
 const PAGES = [
   { hash: '#/devices', icon: '💻', label: 'Устройства', role: 'viewer' },
@@ -75,6 +89,13 @@ async function refreshPendingRequests() {
 }
 
 function renderNav(current) {
+  const page = PAGES.find((p) => current.startsWith(p.hash));
+  replace(
+    menuCurrent,
+    page && h('span', { class: 'nav-icon', 'aria-hidden': 'true' }, page.icon),
+    page?.label ?? 'Меню',
+    pendingRequests > 0 && h('span', { class: 'nav-count', title: 'Запросы на доступ' }, String(pendingRequests)),
+  );
   replace(
     nav,
     PAGES.filter((page) => hasRole(me, page.role)).map((page) =>
@@ -94,6 +115,7 @@ async function route() {
   const hash = location.hash || '#/devices';
   if (currentHash === '#/devices') listScroll = window.scrollY;
   currentHash = hash;
+  setMenuOpen(false);
   renderNav(hash);
   const context = {
     me,

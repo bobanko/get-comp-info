@@ -76,7 +76,10 @@ export async function renderDevices({ me, main }, { reload = false } = {}) {
 
   const count = h('p', { class: 'muted count' });
   const tableHost = h('div', { class: 'table-wrap table-scroll' });
-  const redraw = () => drawTable(tableHost, count);
+  const redraw = () => {
+    drawTable(tableHost, count);
+    updateFiltersToggle();
+  };
 
   // Fetches the list again and redraws only the table and the repeat counters: the toolbar
   // stays in place, so it does not flicker. A newer reload wins over a slower older one.
@@ -101,17 +104,84 @@ export async function renderDevices({ me, main }, { reload = false } = {}) {
     redraw();
   };
 
+  const clear = h(
+    'button',
+    {
+      type: 'button',
+      class: 'search-clear',
+      'aria-label': 'Очистить поиск',
+      hidden: state.query === '',
+      onclick: () => {
+        search.value = '';
+        state.query = '';
+        clear.hidden = true;
+        redraw();
+        search.focus();
+      },
+    },
+    '×',
+  );
   const search = h('input', {
     type: 'search',
     class: 'search',
     placeholder: 'Поиск по всем полям',
     value: state.query,
     'aria-label': 'Поиск по всем полям',
+    // Phone keyboards: a "search" Enter key, no capitals or autocorrection in host names and serials.
+    enterkeyhint: 'search',
+    autocomplete: 'off',
+    autocapitalize: 'off',
+    autocorrect: 'off',
+    spellcheck: 'false',
     oninput: (event) => {
       state.query = event.target.value;
+      clear.hidden = state.query === '';
       redraw();
     },
+    // The list is already filtered while typing: Enter only hides the phone keyboard to show the results.
+    onkeydown: (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        search.blur();
+      }
+    },
   });
+
+  // Phones: everything but the search is behind this button; the number counts the active filters.
+  const filtersToggle = h('button', {
+    type: 'button',
+    class: 'button filters-toggle',
+    'aria-expanded': 'false',
+    onclick: () => filtersToggle.setAttribute('aria-expanded', String(toolbar.classList.toggle('open'))),
+  });
+  function updateFiltersToggle() {
+    const active = [state.eset !== 'all', state.inventory !== 'all', Boolean(state.duplicatesOf), state.showDeleted].filter(Boolean).length;
+    replace(filtersToggle, 'Фильтры', active > 0 && h('span', { class: 'n' }, String(active)));
+  }
+
+  // Phones have no table header to sort by.
+  const sortSelect = h(
+    'select',
+    {
+      class: 'mobile-only',
+      'aria-label': 'Сортировка',
+      onchange: (event) => {
+        const [key, direction] = event.target.value.split(':');
+        state.sort = { key, direction };
+        writeSetting('devices.sort', state.sort);
+        redraw();
+      },
+    },
+    COLUMNS.flatMap((column) =>
+      ['asc', 'desc'].map((direction) =>
+        h(
+          'option',
+          { value: `${column.key}:${direction}`, selected: state.sort.key === column.key && state.sort.direction === direction },
+          `Сортировка: ${column.label} ${direction === 'asc' ? '↑' : '↓'}`,
+        ),
+      ),
+    ),
+  );
 
   const esetSelect = h(
     'select',
@@ -144,34 +214,41 @@ export async function renderDevices({ me, main }, { reload = false } = {}) {
   let duplicates = duplicateFilter(redraw);
   const toolbar = h(
     'div',
-    { class: 'toolbar' },
-    search,
-    esetSelect,
-    inventorySelect,
-    duplicates,
-    hasRole(me, 'admin') &&
-      h(
-        'label',
-        { class: 'check' },
-        h('input', {
-          type: 'checkbox',
-          checked: state.showDeleted,
-          onchange: (event) => {
-            state.showDeleted = event.target.checked;
-            reloadList();
-          },
-        }),
-        'Удалённые',
-      ),
-    columnPicker(redraw),
-    h('span', { class: 'spacer' }),
-    h('button', { class: 'button', onclick: reloadList }, 'Обновить'),
-    h('button', { class: 'button', onclick: () => exportCsv() }, 'Экспорт CSV'),
+    { class: 'toolbar devices-toolbar' },
+    h('div', { class: 'search-box' }, search, clear),
+    filtersToggle,
+    h(
+      'div',
+      { class: 'toolbar-extra' },
+      esetSelect,
+      inventorySelect,
+      sortSelect,
+      duplicates,
+      hasRole(me, 'admin') &&
+        h(
+          'label',
+          { class: 'check' },
+          h('input', {
+            type: 'checkbox',
+            checked: state.showDeleted,
+            onchange: (event) => {
+              state.showDeleted = event.target.checked;
+              reloadList();
+            },
+          }),
+          'Удалённые',
+        ),
+      columnPicker(redraw),
+      h('span', { class: 'spacer' }),
+      h('button', { class: 'button', onclick: reloadList }, 'Обновить'),
+      h('button', { class: 'button', onclick: () => exportCsv() }, 'Экспорт CSV'),
+    ),
   );
 
-  replace(main, h('h1', {}, 'Устройства'), toolbar, count, tableHost);
+  replace(main, h('h1', { class: 'devices-title' }, 'Устройства'), toolbar, count, tableHost);
   redraw();
-  if (state.query) search.focus();
+  // Not on touch screens: the keyboard would cover the list on the way back from a device card.
+  if (state.query && !matchMedia('(pointer: coarse)').matches) search.focus();
 }
 
 function visibleColumns() {
@@ -309,7 +386,13 @@ function drawTable(host, count) {
           if (event.key === 'Enter') open();
         },
       },
-      columns.map((column) => cell(column.key, device, duplicates, now)),
+      columns.map((column) => {
+        const td = cell(column.key, device, duplicates, now);
+        // Phones lay the row out as a card by column (app.css).
+        td.dataset.col = column.key;
+        td.dataset.label = column.label;
+        return td;
+      }),
     );
   });
 
@@ -354,7 +437,7 @@ function cell(key, device, duplicates, now) {
     case 'inventoried':
       return h(
         'td',
-        {},
+        { class: isInventoried(device) ? undefined : 'not-inventoried' },
         isInventoried(device)
           ? h('span', { class: 'badge badge-ok' }, INVENTORY_LABELS.yes)
           : h('span', { class: 'badge badge-muted' }, INVENTORY_LABELS.no),

@@ -196,6 +196,24 @@ textarea { width: 100%; resize: vertical; }
 .toolbar .search { flex: 1 1 260px; min-width: 200px; }
 .spacer { flex: 1; }
 
+/* Search with its own clear button (the native one is missing on Android). */
+.toolbar .search-box { position: relative; display: flex; flex: 1 1 260px; min-width: 200px; }
+.search-box .search { flex: 1; min-width: 0; padding-right: 30px; }
+.search-box .search::-webkit-search-cancel-button { display: none; }
+.search-clear {
+  position: absolute; top: 50%; right: 4px; transform: translateY(-50%);
+  width: 26px; height: 26px; padding: 0; border: 0; border-radius: 50%;
+  background: none; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer;
+}
+.search-clear:hover { background: var(--surface-2); color: var(--text); }
+/* Wide screens: the extra controls sit in the toolbar row as before; phones fold them (see below). */
+.toolbar-extra { display: contents; }
+.filters-toggle, .mobile-only, .menu-toggle { display: none; }
+.filters-toggle .n {
+  min-width: 18px; padding: 0 5px; border-radius: 999px; background: var(--accent); color: var(--accent-text);
+  font-size: 11px; font-weight: 700; line-height: 18px; text-align: center;
+}
+
 .menu { position: relative; }
 .menu summary { list-style: none; }
 .menu summary::-webkit-details-marker { display: none; }
@@ -451,9 +469,68 @@ details summary { cursor: pointer; }
   body:has(.table-scroll) { height: auto; display: block; overflow: visible; }
   body:has(.table-scroll) main { display: block; }
   body:has(.table-scroll) main > .table-scroll { overflow-x: auto; }
-  .topbar { flex-wrap: wrap; gap: 8px 16px; padding: 10px 16px; }
-  .whoami { margin-left: 0; width: 100%; }
-  main { padding: 16px 16px 40px; }
+  main { padding: 12px 16px 40px; }
+  /* 16px keeps iOS from zooming into a field on focus. */
+  input, select, textarea { font-size: 16px; }
+
+  /* Top bar: brand and one menu button; the sections open under it. It scrolls away,
+     the search row of the device list stays on top instead. */
+  .topbar { position: static; flex-wrap: wrap; gap: 8px; padding: 8px 16px; }
+  .menu-toggle {
+    display: inline-flex; align-items: center; gap: 8px; margin-left: auto; padding: 6px 10px;
+    border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; cursor: pointer;
+  }
+  .menu-toggle .burger { font-size: 16px; line-height: 1; color: var(--muted); }
+  .menu-toggle .nav-icon { margin-right: 4px; }
+  .topbar #nav, .topbar .whoami { display: none; }
+  .topbar.open #nav { display: flex; flex-direction: column; gap: 2px; width: 100%; }
+  .topbar.open #nav a { padding: 10px 12px; }
+  .topbar.open .whoami { display: flex; width: 100%; margin: 0; padding: 8px 12px 4px; border-top: 1px solid var(--border); }
+
+  /* Device list: the search row sticks to the top; the rest is behind "Фильтры". */
+  .devices-title { display: none; }
+  .devices-toolbar {
+    position: sticky; top: 0; z-index: 8;
+    margin: 0 -16px; padding: 8px 16px; background: var(--bg); border-bottom: 1px solid var(--border);
+  }
+  .toolbar .search-box { flex: 1 1 auto; min-width: 0; }
+  .filters-toggle { display: inline-flex; padding: 8px 12px; }
+  .filters-toggle[aria-expanded='true'] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .toolbar-extra { display: none; }
+  .devices-toolbar.open .toolbar-extra { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; padding-top: 4px; }
+  .toolbar-extra select { flex: 1 1 100%; }
+  .toolbar-extra .mobile-only { display: block; }
+  .toolbar-extra .segmented { flex: 1 1 100%; }
+  .toolbar-extra .segmented button { flex: 1; justify-content: center; }
+  .toolbar-extra .spacer { display: none; }
+  .search-clear { width: 32px; height: 32px; }
+
+  /* Device rows as cards: name and IP first, then small details, the comment last. */
+  table.devices thead { display: none; }
+  table.devices, table.devices tbody { display: block; }
+  table.devices tbody tr { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  table.devices tbody tr:last-child { border-bottom: 0; }
+  table.devices td { display: block; padding: 0; border: 0; max-width: 100%; }
+  table.devices td:empty { display: none; }
+  table.devices td[data-col='hostname'] { order: 0; flex: 1 1 auto; min-width: 0; font-size: 15px; white-space: normal; overflow-wrap: anywhere; }
+  table.devices td[data-col='ip'] { order: 1; }
+  table.devices td:not([data-col='hostname']):not([data-col='ip']):not([data-col='comment']) { order: 2; font-size: 12px; color: var(--muted); }
+  table.devices td.dup:not([data-col='hostname']):not([data-col='ip']) { color: var(--danger); }
+  table.devices td.recent { color: var(--ok); }
+  /* Name and IP alone on the first line: a full-width break right after the IP. */
+  table.devices tbody tr::after { content: ''; order: 1; flex-basis: 100%; height: 0; }
+  table.devices td[data-col='collectedAt']::before,
+  table.devices td[data-col='updatedAt']::before { content: attr(data-label) ': '; font-weight: 400; color: var(--muted); }
+  table.devices td[data-col='serial']::before { content: 'S/N '; font-family: system-ui, sans-serif; color: var(--muted); }
+  table.devices td[data-col='eset']::before { content: 'ESET '; }
+  table.devices td[data-col='inventoried']::before { content: 'Инв. '; }
+  /* No mark means not inventoried: only the "yes" is worth the space on a phone. */
+  table.devices td.not-inventoried { display: none; }
+  table.devices td[data-col='updatedAt'] div { display: inline; margin-left: 4px; }
+  table.devices td[data-col='comment'] {
+    order: 3; flex-basis: 100%; max-width: none; white-space: normal;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
   .fields { grid-template-columns: 1fr; gap: 2px; }
   .fields dd { margin-bottom: 8px; }
   .history-item { grid-template-columns: 40px 1fr; }
