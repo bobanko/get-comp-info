@@ -133,6 +133,12 @@ export async function renderDevices({ me, main }, { reload = false } = {}) {
     autocapitalize: 'off',
     autocorrect: 'off',
     spellcheck: 'false',
+    // A plain search field, not a login, card or address: browsers (Chrome on iPhone) then offer no
+    // passwords, cards or locations above the keyboard. A neutral name avoids "user"/"email"-like guesses.
+    name: 'device-filter',
+    inputmode: 'search',
+    'aria-autocomplete': 'none',
+    'data-form-type': 'other',
     oninput: (event) => {
       state.query = event.target.value;
       clear.hidden = state.query === '';
@@ -228,7 +234,13 @@ export async function renderDevices({ me, main }, { reload = false } = {}) {
   const toolbar = h(
     'div',
     { class: readSetting('devices.searchBottom', true) ? 'toolbar devices-toolbar at-bottom' : 'toolbar devices-toolbar' },
-    h('div', { class: 'search-box' }, search, clear),
+    // A search form (never submitted): autofill treats its field as a search box.
+    h(
+      'form',
+      { class: 'search-box', role: 'search', autocomplete: 'off', onsubmit: (event) => event.preventDefault() },
+      search,
+      clear,
+    ),
     filtersToggle,
     h(
       'div',

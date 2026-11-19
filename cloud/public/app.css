@@ -197,7 +197,7 @@ textarea { width: 100%; resize: vertical; }
 .spacer { flex: 1; }
 
 /* Search with its own clear button (the native one is missing on Android). */
-.toolbar .search-box { position: relative; display: flex; flex: 1 1 260px; min-width: 200px; }
+.toolbar .search-box { position: relative; display: flex; flex: 1 1 260px; min-width: 200px; margin: 0; }
 .search-box .search { flex: 1; min-width: 0; padding-right: 30px; }
 .search-box .search::-webkit-search-cancel-button { display: none; }
 .search-clear {
