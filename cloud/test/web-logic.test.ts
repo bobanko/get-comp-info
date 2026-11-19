@@ -8,12 +8,14 @@ import {
   devicesToCsv,
   diffRecords,
   duplicateValues,
+  fieldChanges,
   filterDevices,
   formatDate,
   hasRole,
   hostnameIssue,
   ipSortValue,
   isRecent,
+  shortAge,
   sortDevices,
 } from '../public/js/logic.js';
 import {
@@ -275,5 +277,34 @@ describe('change authors', () => {
   it('finds devices by the key name', () => {
     const devices = [device('A', {}, { updatedByKey: 'kostya' }), device('B', {})];
     expect(filterDevices(devices, { query: 'kostya' }).map((d: { id: string }) => d.id)).toEqual(['A']);
+  });
+});
+
+describe('field change dates', () => {
+  it('formats a compact age', () => {
+    const now = new Date('2026-11-19T12:00:00Z');
+    expect(shortAge('2026-11-19T11:59:50Z', now)).toBe('1 мин');
+    expect(shortAge('2026-11-19T11:15:00Z', now)).toBe('45 мин');
+    expect(shortAge('2026-11-19T07:00:00Z', now)).toBe('5 ч');
+    expect(shortAge('2026-11-16T12:00:00Z', now)).toBe('3 д');
+    expect(shortAge('2026-09-01T12:00:00Z', now)).toBe('2 мес');
+    expect(shortAge('2025-08-01T12:00:00Z', now)).toBe('1 г');
+    expect(shortAge('', now)).toBe('');
+  });
+
+  it('finds the revision that set each current value', () => {
+    // Newest first, as the API returns the history.
+    const history = [
+      { revision: 4, action: 'restore', changedAt: 'd', data: { hostname: 'B', ip: '2', comment: 'x' } },
+      { revision: 3, action: 'delete', changedAt: 'c', data: { hostname: 'B', ip: '2', comment: 'x' } },
+      { revision: 2, action: 'update', changedAt: 'b', data: { hostname: 'B', ip: '2', comment: 'x' } },
+      { revision: 1, action: 'create', changedAt: 'a', data: { hostname: 'A', ip: '2', user: 'u' } },
+    ];
+    const changes: Record<string, { revision: number }> = fieldChanges(history);
+    expect(changes.hostname.revision).toBe(2);
+    expect(changes.comment.revision).toBe(2);
+    expect(changes.ip.revision).toBe(1);
+    expect(changes).not.toHaveProperty('user');
+    expect(fieldChanges([])).toEqual({});
   });
 });

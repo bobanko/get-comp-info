@@ -89,6 +89,34 @@ export function formatDate(value) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+// Compact age for the field list: "5 мин", "3 ч", "12 д", "2 мес", "1 г".
+export function shortAge(value, now = new Date()) {
+  const date = parseDate(value);
+  if (!date) return '';
+  const minutes = Math.max(0, Math.floor((now.getTime() - date.getTime()) / 60_000));
+  if (minutes < 60) return `${Math.max(1, minutes)} мин`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} ч`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days} д`;
+  if (days < 365) return `${Math.floor(days / 30)} мес`;
+  return `${Math.floor(days / 365)} г`;
+}
+
+// For every field: the history entry (newest first, as the API returns it) that last set its value.
+export function fieldChanges(history) {
+  const result = {};
+  let previous = null;
+  for (const entry of [...history].reverse()) {
+    for (const change of diffRecords(previous, entry.data)) {
+      if (change.kind === 'removed') delete result[change.name];
+      else result[change.name] = entry;
+    }
+    previous = entry.data;
+  }
+  return result;
+}
+
 export function isRecent(value, now = new Date(), days = 7) {
   const date = parseDate(value);
   return date !== null && now.getTime() - date.getTime() <= days * 24 * 60 * 60 * 1000 && date.getTime() <= now.getTime() + 60_000;

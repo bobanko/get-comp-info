@@ -11,12 +11,15 @@ import {
   ESET_LABELS,
   esetState,
   FIELD_ORDER,
+  fieldChanges,
   fieldLabel,
   formatDate,
   hasRole,
   HISTORY_ACTIONS,
   HISTORY_SOURCES,
   isBlank,
+  isRecent,
+  shortAge,
 } from '../logic.js';
 import { invalidateDevices } from './devices.js';
 
@@ -68,7 +71,7 @@ function draw(context, device, history, view) {
     h(
       'div',
       { class: 'card-grid' },
-      h('section', { class: 'panel' }, view.editing ? editForm(context, device, history, view, redraw) : dataList(device)),
+      h('section', { class: 'panel' }, view.editing ? editForm(context, device, history, view, redraw) : dataList(device, history, view, redraw)),
       h('section', { class: 'panel' }, historyPanel(history, view, redraw)),
     ),
   );
@@ -88,13 +91,37 @@ function orderedFields(data) {
   return [...FIELD_ORDER.filter((name) => name in data), ...Object.keys(data).filter((name) => !FIELD_ORDER.includes(name))];
 }
 
-function dataList(device) {
+// When the field got its current value; a click shows that revision in the history.
+function ageNode(entry, view, redraw) {
+  if (!entry) return null;
+  const author = authorLabel(entry.changedByName, entry.changedBy, entry.changedByKey);
+  return h(
+    'button',
+    {
+      type: 'button',
+      class: [
+        'age',
+        isRecent(entry.changedAt) ? 'recent' : '',
+        entry.revision === view.selectedRevision ? 'active' : '',
+      ].join(' ').trim(),
+      title: `Изменено ${formatDate(entry.changedAt)} · ${author} · ревизия #${entry.revision}`,
+      onclick: () => redraw({ selectedRevision: entry.revision }),
+    },
+    shortAge(entry.changedAt),
+  );
+}
+
+function dataList(device, history, view, redraw) {
+  const changes = fieldChanges(history);
   return [
     h('h2', {}, 'Данные'),
     h(
       'dl',
       { class: 'fields' },
-      orderedFields(device.data).flatMap((name) => [h('dt', {}, fieldLabel(name)), h('dd', {}, valueNode(name, device.data[name]))]),
+      orderedFields(device.data).flatMap((name) => [
+        h('dt', {}, fieldLabel(name)),
+        h('dd', { class: 'with-age' }, h('span', { class: 'value' }, valueNode(name, device.data[name])), ageNode(changes[name], view, redraw)),
+      ]),
       h('dt', {}, 'Ревизия в облаке'),
       h('dd', {}, String(device.revision)),
       h('dt', {}, 'Изменено в облаке'),

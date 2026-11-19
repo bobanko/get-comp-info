@@ -340,6 +340,16 @@ td > .badge:first-child, dd > .badge:first-child { margin-left: 0; }
 .fields { display: grid; grid-template-columns: minmax(140px, max-content) 1fr; gap: 6px 16px; margin: 0; }
 .fields dt { color: var(--muted); }
 .fields dd { margin: 0; overflow-wrap: anywhere; }
+/* Value on the left, a small age of the value on the right ("3 д"); the full date is in the tooltip. */
+.fields dd.with-age { display: flex; align-items: baseline; gap: 8px; }
+.fields dd.with-age .value { flex: 1; min-width: 0; }
+.fields .age {
+  flex: none; padding: 0 4px; border: 0; border-radius: 4px; background: none; cursor: pointer;
+  color: var(--muted); opacity: 0.7; font: inherit; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.fields .age:hover, .fields .age:focus-visible { opacity: 1; background: var(--surface-2); }
+.fields .age.recent { color: var(--ok); opacity: 1; }
+.fields .age.active { background: var(--accent-soft); color: var(--accent); opacity: 1; }
 
 .edit { display: grid; gap: 10px; }
 .field { display: grid; gap: 4px; }
