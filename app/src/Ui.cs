@@ -821,6 +821,37 @@ namespace CompInfo
         }
     }
 
+    // A badge on its own (the pill of the web interface), sized to its text.
+    public class Pill : Control
+    {
+        BadgeKind kind = BadgeKind.Muted;
+
+        public Pill()
+        {
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw | ControlStyles.SupportsTransparentBackColor, true);
+            BackColor = Color.Transparent;
+            Font = new Font("Segoe UI", 9f);
+            Margin = new Padding(0, 0, 6, 0);
+        }
+
+        public void Set(string text, BadgeKind value)
+        {
+            kind = value;
+            Text = text;
+            int em = Font.Height;
+            Size s = TextRenderer.MeasureText(text ?? "", Font, Size.Empty, TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix);
+            Size = new Size(s.Width + em * 2 / 3 + 4, em + 6);
+            Invalidate();
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            Color fore, back;
+            Badges.Colors(kind, out fore, out back);
+            Shapes.Badge(e.Graphics, ClientRectangle, Text, Font, fore, back, true);
+        }
+    }
+
     // Flat button with rounded corners, like the buttons of the web interface.
     public class RoundButton : Button
     {

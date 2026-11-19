@@ -266,6 +266,9 @@ namespace CompInfo
             return !running;
         }
 
+        // Starts the synchronization from another section (the cloud status of «Сбор информации»).
+        public void Start() { Run(); }
+
         async void Run()
         {
             if (running) return;

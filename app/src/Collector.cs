@@ -16,6 +16,7 @@ namespace CompInfo
 
         public class Field
         {
+            public string Name;      // record field, or "computer" for manufacturer + model
             public string Label;
             public string Previous;
             public string Current;
@@ -154,6 +155,7 @@ namespace CompInfo
             foreach (string[] f in FieldNames)
             {
                 Field field = new Field();
+                field.Name = f[0];
                 field.Label = f[1];
                 field.Current = Show(current, f[0]);
                 field.Previous = Previous == null ? null : Show(Previous, f[0]);
