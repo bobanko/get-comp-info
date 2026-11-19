@@ -428,7 +428,7 @@ function draw(context, setting, history, draft, view, errorText) {
       'Корпуса и подсети для настройки LAN-адаптера и быстрого ping в консоли. Хранятся только в облаке; консоль скачивает их при синхронизации и дальше работает без интернета.',
     ),
     setting
-      ? h('p', { class: 'muted small' }, `Ревизия ${setting.revision}, изменено ${formatDate(setting.updatedAt)}, ${setting.updatedBy}`)
+      ? h('p', { class: 'muted small', title: setting.updatedBy }, `Ревизия ${setting.revision}, изменено ${formatDate(setting.updatedAt)}, ${setting.updatedByName ?? setting.updatedBy}`)
       : h('div', { class: 'notice' }, h('p', {}, 'Настройки сети ещё не заданы: заполните и сохраните.')),
     form,
     history.length > 0 &&
@@ -436,7 +436,7 @@ function draw(context, setting, history, draft, view, errorText) {
         'details',
         { class: 'panel muted small' },
         h('summary', {}, `История (${history.length})`),
-        h('ul', {}, history.map((entry) => h('li', {}, `#${entry.revision} — ${formatDate(entry.changedAt)}, ${entry.changedBy}`))),
+        h('ul', {}, history.map((entry) => h('li', { title: entry.changedBy }, `#${entry.revision} — ${formatDate(entry.changedAt)}, ${entry.changedByName ?? entry.changedBy}`))),
       ),
   );
   refresh();

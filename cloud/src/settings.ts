@@ -34,6 +34,8 @@ export interface SettingRecord<T> {
   revision: number;
   updatedAt: string;
   updatedBy: string;
+  // Nickname of updatedBy, the email when there is none.
+  updatedByName: string;
   value: T;
 }
 
@@ -138,20 +140,41 @@ interface SettingRow {
   revision: number;
   updated_at: string;
   updated_by: string;
+  updated_by_name: string | null;
 }
 
 export async function getSetting<T>(db: D1Database, key: string): Promise<SettingRecord<T> | null> {
-  const row = await db.prepare('SELECT * FROM settings WHERE key = ?').bind(key).first<SettingRow>();
+  const row = await db
+    .prepare('SELECT s.*, u.name AS updated_by_name FROM settings s LEFT JOIN users u ON u.email = s.updated_by WHERE s.key = ?')
+    .bind(key)
+    .first<SettingRow>();
   if (!row) return null;
-  return { key: row.key, revision: row.revision, updatedAt: row.updated_at, updatedBy: row.updated_by, value: JSON.parse(row.value) as T };
+  return {
+    key: row.key,
+    revision: row.revision,
+    updatedAt: row.updated_at,
+    updatedBy: row.updated_by,
+    updatedByName: row.updated_by_name || row.updated_by,
+    value: JSON.parse(row.value) as T,
+  };
 }
 
 export async function getSettingHistory(db: D1Database, key: string) {
   const { results } = await db
-    .prepare('SELECT revision, value, changed_at, changed_by FROM settings_history WHERE key = ? ORDER BY revision DESC LIMIT 50')
+    .prepare(
+      `SELECT h.revision, h.value, h.changed_at, h.changed_by, u.name AS changed_by_name
+         FROM settings_history h LEFT JOIN users u ON u.email = h.changed_by
+        WHERE h.key = ? ORDER BY h.revision DESC LIMIT 50`,
+    )
     .bind(key)
-    .all<{ revision: number; value: string; changed_at: string; changed_by: string }>();
-  return results.map((row) => ({ revision: row.revision, changedAt: row.changed_at, changedBy: row.changed_by, value: JSON.parse(row.value) }));
+    .all<{ revision: number; value: string; changed_at: string; changed_by: string; changed_by_name: string | null }>();
+  return results.map((row) => ({
+    revision: row.revision,
+    changedAt: row.changed_at,
+    changedBy: row.changed_by,
+    changedByName: row.changed_by_name || row.changed_by,
+    value: JSON.parse(row.value),
+  }));
 }
 
 // Saves a new revision; baseRevision must be the revision the editor started from (null when creating).
@@ -184,5 +207,5 @@ export async function putSetting<T>(
     if (String(error).includes('UNIQUE')) return { status: 'conflict', current: await getSetting<T>(db, key) };
     throw error;
   }
-  return { status: 'ok', record: { key, revision, updatedAt: now, updatedBy: user.email, value } };
+  return { status: 'ok', record: { key, revision, updatedAt: now, updatedBy: user.email, updatedByName: user.name || user.email, value } };
 }

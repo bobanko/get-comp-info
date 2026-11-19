@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  authorLabel,
+  authorTitle,
   changedFields,
   csvFileName,
+  deviceAuthor,
   devicesToCsv,
   diffRecords,
   duplicateValues,
@@ -256,5 +259,21 @@ describe('error texts', () => {
     expect(errorText('access_denied', { error: { code: 'access_denied', message: 'Rejected.' } }, 403)).toBe('Rejected.');
     expect(errorText('invalid_settings', { error: { code: 'invalid_settings', message: 'Location 1: bad.' } }, 400)).toBe('Location 1: bad.');
     expect(errorText('http_502', null, 502)).toBe('Облако ответило ошибкой 502.');
+  });
+});
+
+describe('change authors', () => {
+  it('shows the console key, otherwise the nickname', () => {
+    expect(authorLabel('bob', 'b@example.com', 'kostya')).toBe('ключ «kostya»');
+    expect(authorLabel('bob', 'b@example.com', null)).toBe('bob');
+    expect(authorLabel('', 'b@example.com', null)).toBe('b@example.com');
+    expect(authorTitle('bob', 'b@example.com', 'kostya')).toBe('Ключ пользователя bob (b@example.com)');
+    expect(authorTitle('bob', 'b@example.com', null)).toBe('b@example.com');
+    expect(deviceAuthor({ updatedBy: 'b@example.com', updatedByName: 'bob', updatedByKey: null })).toBe('bob');
+  });
+
+  it('finds devices by the key name', () => {
+    const devices = [device('A', {}, { updatedByKey: 'kostya' }), device('B', {})];
+    expect(filterDevices(devices, { query: 'kostya' }).map((d: { id: string }) => d.id)).toEqual(['A']);
   });
 });

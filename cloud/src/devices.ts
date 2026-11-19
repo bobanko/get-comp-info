@@ -1,6 +1,6 @@
 import { canonicalJson } from './crypto';
 import { fail, isPlainObject, nowIso } from './http';
-import type { User } from './types';
+import type { ApiKeyInfo, User } from './types';
 
 // The old manual "added to external database" mark is replaced by the computed cloud status.
 export const DEPRECATED_FIELDS = ['addedToExternalDatabase', 'addedToExternalDatabaseAt'];
@@ -19,6 +19,9 @@ export interface DeviceRow {
   updated_at: string;
   updated_by: string;
   deleted_at: string | null;
+  // Joined by DEVICE_SELECT: nickname of the author and the console key of the last change.
+  updated_by_name?: string | null;
+  updated_by_key?: string | null;
 }
 
 export interface Device {
@@ -28,6 +31,9 @@ export interface Device {
   createdAt: string;
   updatedAt: string;
   updatedBy: string;
+  // Nickname of updatedBy (the email when there is none) and the console key name, null for web changes.
+  updatedByName: string;
+  updatedByKey: string | null;
   data: Record<string, unknown>;
 }
 
@@ -36,6 +42,8 @@ export interface HistoryEntry {
   action: Action;
   changedAt: string;
   changedBy: string;
+  changedByName: string;
+  changedByKey: string | null;
   source: Source;
   data: Record<string, unknown>;
 }
@@ -53,6 +61,8 @@ export function toDevice(row: DeviceRow): Device {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     updatedBy: row.updated_by,
+    updatedByName: row.updated_by_name || row.updated_by,
+    updatedByKey: row.updated_by_key ?? null,
     data: JSON.parse(row.data) as Record<string, unknown>,
   };
 }
@@ -83,14 +93,21 @@ export function normalizeData(id: string, data: unknown): Record<string, unknown
   return result;
 }
 
+// The author's nickname comes from users, the key from the history row change_id points at.
+const DEVICE_SELECT = `SELECT d.*, u.name AS updated_by_name, k.label AS updated_by_key
+  FROM devices d
+  LEFT JOIN users u ON u.email = d.updated_by
+  LEFT JOIN device_history h ON h.id = d.change_id
+  LEFT JOIN api_keys k ON k.id = h.key_id`;
+
 export async function getDeviceRow(db: D1Database, id: string): Promise<DeviceRow | null> {
-  return db.prepare('SELECT * FROM devices WHERE id = ?').bind(id).first<DeviceRow>();
+  return db.prepare(`${DEVICE_SELECT} WHERE d.id = ?`).bind(id).first<DeviceRow>();
 }
 
 export async function listDevices(db: D1Database, includeDeleted: boolean): Promise<Device[]> {
   const sql = includeDeleted
-    ? 'SELECT * FROM devices ORDER BY id'
-    : 'SELECT * FROM devices WHERE deleted_at IS NULL ORDER BY id';
+    ? `${DEVICE_SELECT} ORDER BY d.id`
+    : `${DEVICE_SELECT} WHERE d.deleted_at IS NULL ORDER BY d.id`;
   const { results } = await db.prepare(sql).all<DeviceRow>();
   return results.map(toDevice);
 }
@@ -102,7 +119,7 @@ export async function listChanges(
   limit: number,
 ): Promise<{ cursor: number; hasMore: boolean; devices: Device[] }> {
   const { results } = await db
-    .prepare('SELECT * FROM devices WHERE change_id > ? ORDER BY change_id LIMIT ?')
+    .prepare(`${DEVICE_SELECT} WHERE d.change_id > ? ORDER BY d.change_id LIMIT ?`)
     .bind(since, limit + 1)
     .all<DeviceRow>();
   const hasMore = results.length > limit;
@@ -114,15 +131,30 @@ export async function listChanges(
 export async function getHistory(db: D1Database, id: string): Promise<HistoryEntry[]> {
   const { results } = await db
     .prepare(
-      'SELECT revision, action, data, changed_at, changed_by, source FROM device_history WHERE device_id = ? ORDER BY revision DESC',
+      `SELECT h.revision, h.action, h.data, h.changed_at, h.changed_by, h.source, u.name AS changed_by_name, k.label AS changed_by_key
+         FROM device_history h
+         LEFT JOIN users u ON u.email = h.changed_by
+         LEFT JOIN api_keys k ON k.id = h.key_id
+        WHERE h.device_id = ? ORDER BY h.revision DESC`,
     )
     .bind(id)
-    .all<{ revision: number; action: Action; data: string; changed_at: string; changed_by: string; source: Source }>();
+    .all<{
+      revision: number;
+      action: Action;
+      data: string;
+      changed_at: string;
+      changed_by: string;
+      changed_by_name: string | null;
+      changed_by_key: string | null;
+      source: Source;
+    }>();
   return results.map((row) => ({
     revision: row.revision,
     action: row.action,
     changedAt: row.changed_at,
     changedBy: row.changed_by,
+    changedByName: row.changed_by_name || row.changed_by,
+    changedByKey: row.changed_by_key,
     source: row.source,
     data: JSON.parse(row.data) as Record<string, unknown>,
   }));
@@ -142,6 +174,7 @@ async function writeRevision(
   action: Action,
   user: User,
   source: Source,
+  apiKey: ApiKeyInfo | null = null,
 ): Promise<Device | null> {
   const revision = (current?.revision ?? 0) + 1;
   const now = nowIso();
@@ -149,9 +182,9 @@ async function writeRevision(
   const changeId = '(SELECT id FROM device_history WHERE device_id = ?1 AND revision = ?2)';
   const history = db
     .prepare(
-      'INSERT INTO device_history (device_id, revision, action, data, changed_at, changed_by, source) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)',
+      'INSERT INTO device_history (device_id, revision, action, data, changed_at, changed_by, source, key_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)',
     )
-    .bind(id, revision, action, json, now, user.email, source);
+    .bind(id, revision, action, json, now, user.email, source, apiKey?.id ?? null);
   const device = current
     ? db
         .prepare(
@@ -189,7 +222,7 @@ export async function putDevice(
   id: string,
   baseRevision: number | null,
   incoming: Record<string, unknown>,
-  options: { restore: boolean; user: User; source: Source },
+  options: { restore: boolean; user: User; source: Source; apiKey?: ApiKeyInfo },
 ): Promise<WriteResult> {
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const row = await getDeviceRow(db, id);
@@ -205,7 +238,7 @@ export async function putDevice(
         action = 'update';
       }
     }
-    const device = await writeRevision(db, id, row, incoming, action, options.user, options.source);
+    const device = await writeRevision(db, id, row, incoming, action, options.user, options.source, options.apiKey ?? null);
     if (device) return { status: 'ok', device, changed: true };
   }
   return raceLost(db, id);

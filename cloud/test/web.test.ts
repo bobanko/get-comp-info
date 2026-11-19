@@ -105,7 +105,14 @@ describe('web devices', () => {
     expect(stale.body.current.revision).toBe(2);
 
     const history = await webRequest(editor, 'GET', `/devices/${id}/history`);
-    expect(history.body.history[0]).toMatchObject({ revision: 2, action: 'update', source: 'web', changedBy: editor });
+    expect(history.body.history[0]).toMatchObject({
+      revision: 2,
+      action: 'update',
+      source: 'web',
+      changedBy: editor,
+      changedByName: 'Test editor',
+      changedByKey: null,
+    });
   });
 
   it('protects computerId and validates patches', async () => {

@@ -1,7 +1,9 @@
 import { api } from '../api.js';
 import { downloadText, errorBox, h, readSetting, replace, toast, writeSetting } from '../dom.js';
 import {
+  authorTitle,
   csvFileName,
+  deviceAuthor,
   devicesToCsv,
   displayValue,
   DUPLICATE_FIELDS,
@@ -318,7 +320,7 @@ function cell(key, device, duplicates, now) {
     case 'comment':
       return h('td', { class: 'comment', title: displayValue(data.comment) }, displayValue(data.comment));
     case 'updatedAt':
-      return h('td', { class: 'nowrap' }, formatDate(device.updatedAt), h('div', { class: 'muted small' }, device.updatedBy));
+      return h('td', { class: 'nowrap' }, formatDate(device.updatedAt), h('div', { class: 'muted small', title: authorTitle(device.updatedByName, device.updatedBy, device.updatedByKey) }, deviceAuthor(device)));
     default:
       return h('td', {}, displayValue(data[key]));
   }

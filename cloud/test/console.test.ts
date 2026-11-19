@@ -51,6 +51,26 @@ describe('console upload', () => {
     expect(history.body.history[0]).toMatchObject({ revision: 1, action: 'create', source: 'console', changedBy: email });
   });
 
+  it('remembers which key made the change', async () => {
+    const email = await addUser('harvester');
+    const flash = await addKey(email, 'Флешка Кости');
+    const id = unique('dev');
+    const response = await consoleRequest(flash, 'PUT', `/devices/${id}`, { baseRevision: null, data: deviceData(id) });
+    expect(response.body.device).toMatchObject({ updatedBy: email, updatedByName: 'Test harvester', updatedByKey: 'Флешка Кости' });
+
+    const editor = await addUser('editor');
+    expect((await webRequest(editor, 'GET', `/devices/${id}`)).body).toMatchObject({ updatedByKey: 'Флешка Кости' });
+    const list = await webRequest(editor, 'GET', '/devices');
+    expect(list.body.devices.find((device: { id: string }) => device.id === id)).toMatchObject({ updatedByKey: 'Флешка Кости' });
+    const history = await webRequest(editor, 'GET', `/devices/${id}/history`);
+    expect(history.body.history[0]).toMatchObject({ changedBy: email, changedByName: 'Test harvester', changedByKey: 'Флешка Кости' });
+
+    // A web change after it is the user's own, without a key.
+    await webRequest(editor, 'PATCH', `/devices/${id}`, { baseRevision: 1, changes: { comment: 'x' } });
+    const edited = await webRequest(editor, 'GET', `/devices/${id}`);
+    expect(edited.body).toMatchObject({ updatedBy: editor, updatedByName: 'Test editor', updatedByKey: null });
+  });
+
   it('does not create a revision when only key order differs', async () => {
     const { key } = await harvesterKey();
     const id = unique('dev');

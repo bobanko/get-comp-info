@@ -44,7 +44,8 @@ device_history (
   data          TEXT NOT NULL,     -- JSON записи в этой ревизии
   changed_at    TEXT NOT NULL,
   changed_by    TEXT NOT NULL,
-  source        TEXT NOT NULL      -- console | web
+  source        TEXT NOT NULL,     -- console | web
+  key_id        TEXT               -- ключ консоли, которым сделано изменение (NULL для веба и старых записей)
 )
 
 users (
@@ -184,10 +185,16 @@ settings_history (                 -- каждая сохранённая вер
   "cursor": 1842,
   "hasMore": false,
   "devices": [
-    { "id": "…", "revision": 7, "deleted": false, "createdAt": "…", "updatedAt": "…", "updatedBy": "…", "data": { } }
+    { "id": "…", "revision": 7, "deleted": false, "createdAt": "…", "updatedAt": "…", "updatedBy": "…",
+      "updatedByName": "bob", "updatedByKey": "Флешка Кости", "data": { } }
   ]
 }
 ```
+
+`updatedBy` — email автора последнего изменения, `updatedByName` — его никнейм из `users.name` (email, если никнейма нет),
+`updatedByKey` — название ключа консоли, которым сделано изменение (`null` для веба и изменений до появления поля).
+В истории записи те же поля называются `changedBy`, `changedByName`, `changedByKey`. Веб-интерфейс показывает
+название ключа, если оно известно, иначе никнейм; email — во всплывающей подсказке.
 
 Если `hasMore` равно `true`, консоль запрашивает следующую страницу с `since=<cursor>`. Последний `cursor` сохраняется в `cloud-state.json`.
 

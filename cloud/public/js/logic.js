@@ -140,7 +140,7 @@ export function hostnameIssue(hostname) {
 }
 
 function searchText(device) {
-  const values = [device.id, device.updatedBy];
+  const values = [device.id, device.updatedBy, device.updatedByName, device.updatedByKey];
   for (const value of Object.values(device.data)) values.push(displayValue(value));
   return values.join('\n').toLowerCase();
 }
@@ -262,3 +262,18 @@ export function csvFileName(now = new Date()) {
 
 export const HISTORY_ACTIONS = { create: 'Создана', update: 'Изменена', delete: 'Удалена', restore: 'Восстановлена' };
 export const HISTORY_SOURCES = { console: 'консоль', web: 'веб' };
+
+// Who made a change: the console key name when it is known (one user may hand keys to colleagues),
+// otherwise the nickname. The email goes to the tooltip.
+export function authorLabel(name, email, key) {
+  return key ? `ключ «${key}»` : name || email || '—';
+}
+
+export function authorTitle(name, email, key) {
+  return key ? `Ключ пользователя ${name || email} (${email})` : email;
+}
+
+// The author of the last change of a device.
+export function deviceAuthor(device) {
+  return authorLabel(device.updatedByName, device.updatedBy, device.updatedByKey);
+}

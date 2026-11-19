@@ -1,7 +1,10 @@
 import { api } from '../api.js';
 import { errorBox, h, replace, toast } from '../dom.js';
 import {
+  authorLabel,
+  authorTitle,
   changedFields,
+  deviceAuthor,
   diffRecords,
   displayValue,
   EDITABLE_FIELDS,
@@ -61,7 +64,7 @@ function draw(context, device, history, view) {
       h('div', {}, h('h1', {}, title), h('p', { class: 'muted mono small' }, device.id)),
       actions,
     ),
-    device.deleted && h('div', { class: 'notice notice-error' }, `Запись удалена в облаке: ${device.updatedBy}, ${formatDate(device.updatedAt)}.`),
+    device.deleted && h('div', { class: 'notice notice-error' }, `Запись удалена в облаке: ${deviceAuthor(device)}, ${formatDate(device.updatedAt)}.`),
     h(
       'div',
       { class: 'card-grid' },
@@ -95,7 +98,7 @@ function dataList(device) {
       h('dt', {}, 'Ревизия в облаке'),
       h('dd', {}, String(device.revision)),
       h('dt', {}, 'Изменено в облаке'),
-      h('dd', {}, `${formatDate(device.updatedAt)}, ${device.updatedBy}`),
+      h('dd', { title: authorTitle(device.updatedByName, device.updatedBy, device.updatedByKey) }, `${formatDate(device.updatedAt)}, ${deviceAuthor(device)}`),
     ),
   ];
 }
@@ -165,7 +168,7 @@ function conflictNotice(device, current, onReload) {
   return h(
     'div',
     { class: 'notice notice-error' },
-    h('p', {}, `Пока вы редактировали, запись изменил(а) ${current.updatedBy} (${formatDate(current.updatedAt)}). Ваши правки не сохранены.`),
+    h('p', {}, `Пока вы редактировали, запись изменил(а) ${deviceAuthor(current)} (${formatDate(current.updatedAt)}). Ваши правки не сохранены.`),
     changes.length > 0 && h('ul', {}, changes.map((change) => h('li', {}, `${fieldLabel(change.name)}: ${displayValue(change.after) || '—'}`))),
     h('button', { class: 'button', type: 'button', onclick: onReload }, 'Открыть актуальную версию'),
   );
@@ -192,7 +195,14 @@ function historyPanel(history, view, redraw) {
             },
             h('span', { class: 'rev' }, `#${entry.revision}`),
             h('span', {}, HISTORY_ACTIONS[entry.action] ?? entry.action),
-            h('span', { class: 'muted small' }, `${formatDate(entry.changedAt)} · ${entry.changedBy} · ${HISTORY_SOURCES[entry.source] ?? entry.source}`),
+            h(
+              'span',
+              { class: 'muted small', title: authorTitle(entry.changedByName, entry.changedBy, entry.changedByKey) },
+              `${formatDate(entry.changedAt)} · `,
+              h('b', { class: 'author' }, authorLabel(entry.changedByName, entry.changedBy, entry.changedByKey)),
+              // A key already means the console.
+              entry.changedByKey ? '' : ` · ${HISTORY_SOURCES[entry.source] ?? entry.source}`,
+            ),
           ),
         ),
       ),

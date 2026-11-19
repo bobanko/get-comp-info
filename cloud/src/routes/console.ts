@@ -39,6 +39,7 @@ consoleApi.put('/devices/:id', async (c) => {
     restore: body.restore === true,
     user: c.get('user'),
     source: 'console',
+    apiKey: c.get('apiKey'),
   });
   return writeResponse(c, result);
 });
