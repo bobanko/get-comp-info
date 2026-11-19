@@ -1,5 +1,7 @@
 // Pure helpers for the web interface: no DOM access, covered by tests in test/web-logic.test.ts.
 
+import { looseKey, queryWords, textMatches } from './search-logic.js';
+
 export const ROLE_LABELS = {
   viewer: 'Просмотр',
   harvester: 'Сборщик',
@@ -181,25 +183,34 @@ export function hostnameIssue(hostname) {
   return HOSTNAME_POLICY.test(name) ? null : 'pattern';
 }
 
+// Text and loose key of a device, kept while the device object lives (the list is filtered on every key press).
+const searchCache = new WeakMap();
+
 function searchText(device) {
-  const values = [device.id, device.updatedBy, device.updatedByName, device.updatedByKey];
-  for (const value of Object.values(device.data)) values.push(displayValue(value));
-  return values.join('\n').toLowerCase();
+  let cached = searchCache.get(device);
+  if (!cached) {
+    const values = [device.id, device.updatedBy, device.updatedByName, device.updatedByKey];
+    for (const value of Object.values(device.data)) values.push(displayValue(value));
+    const text = values.join('\n').toLowerCase();
+    cached = { text, key: looseKey(text).key };
+    searchCache.set(device, cached);
+  }
+  return cached;
 }
 
-// Every word of the query must occur somewhere in the record.
+// Every word of the query must occur somewhere in the record, as typed or in another alphabet (search-logic.js).
 // duplicatesOf: a DUPLICATE_FIELDS name to keep only devices repeating that field (empty: all).
 // inventory: 'all' | 'yes' | 'no'.
 export function filterDevices(devices, { query = '', eset = 'all', inventory = 'all', duplicatesOf = '' } = {}) {
-  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const words = queryWords(query);
   const duplicates = duplicatesOf ? duplicateValues(devices, duplicatesOf) : null;
   return devices.filter((device) => {
     if (eset !== 'all' && esetState(device.data.esetInstalled) !== eset) return false;
     if (inventory !== 'all' && isInventoried(device) !== (inventory === 'yes')) return false;
     if (duplicates && !isDuplicate(device, duplicatesOf, duplicates)) return false;
     if (words.length === 0) return true;
-    const text = searchText(device);
-    return words.every((word) => text.includes(word));
+    const { text, key } = searchText(device);
+    return words.every((word) => textMatches(text, word, key));
   });
 }
 

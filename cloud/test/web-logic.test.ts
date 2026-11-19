@@ -324,3 +324,44 @@ describe('inventory mark', () => {
     expect(changedFields({ inventoried: true }, { inventoried: false })).toEqual({ inventoried: false });
   });
 });
+
+describe('search in any alphabet', () => {
+  it('finds Latin by Cyrillic and back', async () => {
+    const { textMatches } = await import('../public/js/search-logic.js');
+    expect(textMatches('IF-042-BOB', 'боб')).toBe(true);
+    expect(textMatches('Бобров', 'bob')).toBe(true);
+    expect(textMatches('vmyshko komp', 'мишко')).toBe(true);
+    expect(textMatches('Мишко', 'mishko')).toBe(true);
+    expect(textMatches('влад бункер', 'bunker')).toBe(true);
+    expect(textMatches('Дмитрий', 'dmitriy')).toBe(true);
+    expect(textMatches('Київ', 'kyiv')).toBe(true);
+    expect(textMatches('Kharkiv', 'харків')).toBe(true);
+    expect(textMatches('Tsentr', 'центр')).toBe(true);
+    expect(textMatches('лука миша', 'kompik')).toBe(false);
+  });
+
+  it('keeps digits exact, so addresses do not match by accident', async () => {
+    const { textMatches } = await import('../public/js/search-logic.js');
+    expect(textMatches('10.100.22.131', '10.100')).toBe(true);
+    expect(textMatches('10.10.22.131', '10.100')).toBe(false);
+  });
+
+  it('highlights the original text of a match', async () => {
+    const { matchRanges, splitMatches } = await import('../public/js/search-logic.js');
+    expect(matchRanges('IF-042-BOB', ['боб'])).toEqual([[7, 10]]);
+    expect(matchRanges('vmyshko komp', ['мишко'])).toEqual([[1, 7]]);
+    expect(matchRanges('Харків', ['kharkiv'])).toEqual([[0, 6]]);
+    expect(matchRanges('Bob bob', ['bob'])).toEqual([[0, 3], [4, 7]]);
+    expect(splitMatches('melnik s4 vaxa', ['мельник'])).toEqual([
+      { text: 'melnik', match: true },
+      { text: ' s4 vaxa', match: false },
+    ]);
+    expect(splitMatches('abc', [])).toEqual([{ text: 'abc', match: false }]);
+  });
+
+  it('filters the device list by a word in another alphabet', () => {
+    const list = [device('A', { hostname: 'IF-042-BOB' }), device('B', { comment: 'юристка учбовий' })];
+    expect(filterDevices(list, { query: 'боб' }).map((d: { id: string }) => d.id)).toEqual(['A']);
+    expect(filterDevices(list, { query: 'yurystka' }).map((d: { id: string }) => d.id)).toEqual(['B']);
+  });
+});

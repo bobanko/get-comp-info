@@ -21,6 +21,7 @@ import {
   isRecent,
   sortDevices,
 } from '../logic.js';
+import { queryWords, splitMatches } from '../search-logic.js';
 
 const COLUMNS = [
   { key: 'hostname', label: 'Имя компьютера', always: true },
@@ -384,6 +385,7 @@ function drawTable(host, count) {
   const duplicates = allDuplicates();
   const columns = visibleColumns();
   const now = new Date();
+  const words = queryWords(state.query);
 
   replace(count, `Показано ${rows.length} из ${state.devices.length}`);
 
@@ -430,7 +432,7 @@ function drawTable(host, count) {
         },
       },
       columns.map((column) => {
-        const td = cell(column.key, device, duplicates, now);
+        const td = cell(column.key, device, duplicates, now, words);
         // Phones lay the row out as a card by column (app.css).
         td.dataset.col = column.key;
         td.dataset.label = column.label;
@@ -446,7 +448,13 @@ function drawTable(host, count) {
   replace(host, h('table', { class: 'devices' }, h('thead', {}, header), h('tbody', {}, body)));
 }
 
-function cell(key, device, duplicates, now) {
+// Text with the parts found by the search wrapped in <mark>.
+function marked(text, words) {
+  if (words.length === 0) return text;
+  return splitMatches(text, words).map((part) => (part.match ? h('mark', {}, part.text) : part.text));
+}
+
+function cell(key, device, duplicates, now, words = []) {
   const data = device.data;
   const repeated = (field) => isDuplicate(device, field, duplicates[field]);
   switch (key) {
@@ -461,18 +469,18 @@ function cell(key, device, duplicates, now) {
       return h(
         'td',
         { class: classes, title: notes.join('\n') || undefined },
-        isBlank(data.hostname) ? h('span', { class: 'muted' }, device.id) : data.hostname,
+        isBlank(data.hostname) ? h('span', { class: 'muted' }, marked(device.id, words)) : marked(data.hostname, words),
         device.deleted && h('span', { class: 'badge badge-danger' }, 'удалено'),
       );
     }
     case 'ip': {
       const ip = String(data.ip ?? '').trim();
-      return h('td', { class: repeated('ip') ? 'mono dup' : 'mono', title: repeated('ip') ? 'Этот IP есть у нескольких устройств' : undefined }, ip);
+      return h('td', { class: repeated('ip') ? 'mono dup' : 'mono', title: repeated('ip') ? 'Этот IP есть у нескольких устройств' : undefined }, marked(ip, words));
     }
     case 'serial':
-      return h('td', { class: repeated('serial') ? 'mono dup' : 'mono', title: repeated('serial') ? 'Этот серийный номер есть у нескольких устройств' : undefined }, displayValue(data.serial));
+      return h('td', { class: repeated('serial') ? 'mono dup' : 'mono', title: repeated('serial') ? 'Этот серийный номер есть у нескольких устройств' : undefined }, marked(displayValue(data.serial), words));
     case 'model':
-      return h('td', {}, [data.manufacturer, data.model].filter((v) => !isBlank(v)).join(' '));
+      return h('td', {}, marked([data.manufacturer, data.model].filter((v) => !isBlank(v)).join(' '), words));
     case 'eset': {
       const status = esetState(data.esetInstalled);
       return h('td', {}, h('span', { class: `badge eset-${status}` }, ESET_LABELS[status]));
@@ -488,11 +496,11 @@ function cell(key, device, duplicates, now) {
     case 'collectedAt':
       return h('td', { class: isRecent(data.collectedAt, now) ? 'nowrap recent' : 'nowrap', title: isRecent(data.collectedAt, now) ? 'Собрано за последние 7 дней' : undefined }, formatDate(data.collectedAt));
     case 'comment':
-      return h('td', { class: 'comment', title: displayValue(data.comment) }, displayValue(data.comment));
+      return h('td', { class: 'comment', title: displayValue(data.comment) }, marked(displayValue(data.comment), words));
     case 'updatedAt':
       return h('td', { class: 'nowrap' }, formatDate(device.updatedAt), h('div', { class: 'muted small', title: authorTitle(device.updatedByName, device.updatedBy, device.updatedByKey) }, deviceAuthor(device)));
     default:
-      return h('td', {}, displayValue(data[key]));
+      return h('td', {}, marked(displayValue(data[key]), words));
   }
 }
 

@@ -302,6 +302,9 @@ tr.inactive td { color: var(--muted); }
 
 .empty { padding: 24px; text-align: center; color: var(--muted); margin: 0; }
 
+/* Search matches in the device list; the text keeps its own colour (repeats, naming policy). */
+mark { background: color-mix(in srgb, var(--brand-yellow) 38%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; margin: 0 -1px; }
+
 /* ---------- Badges and notices ---------- */
 
 .badge {
