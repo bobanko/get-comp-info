@@ -44,8 +44,13 @@ namespace CompInfo
 
             grid = Ui.Grid(Font);
             grid.Columns.Add("field", L.T("Поле"));
+            // Where each value comes from: read from this computer now, or the record in the database of this
+            // copy of the program (on the flash drive, or in the program folder when it runs from a disk).
             grid.Columns.Add("current", L.T("Сейчас на компьютере"));
-            grid.Columns.Add("saved", L.T("Сохранено в базе"));
+            grid.Columns.Add("saved", AppPaths.OnRemovableDrive ? L.T("В базе на флешке") : L.T("В базе программы"));
+            grid.Columns[1].Tag = Glyph.Computer;
+            grid.Columns[2].Tag = AppPaths.OnRemovableDrive ? Glyph.Usb : Glyph.Database;
+            Ui.HeaderGlyphs(grid);
             grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
             grid.Columns[0].FillWeight = 24;
             grid.Columns[1].FillWeight = 38;

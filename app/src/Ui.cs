@@ -332,6 +332,28 @@ namespace CompInfo
             return grid;
         }
 
+        // Column headers with an icon before the text: the glyph is kept in the column's Tag.
+        public static void HeaderGlyphs(DataGridView grid)
+        {
+            grid.CellPainting += delegate (object o, DataGridViewCellPaintingEventArgs e)
+            {
+                if (e.RowIndex != -1 || e.ColumnIndex < 0) return;
+                string glyph = grid.Columns[e.ColumnIndex].Tag as string;
+                if (string.IsNullOrEmpty(glyph)) return;
+                e.PaintBackground(e.ClipBounds, false);
+                Font font = e.CellStyle.Font ?? grid.Font;
+                int size = font.Height;
+                Rectangle cell = e.CellBounds;
+                int x = cell.X + size / 3;
+                Glyph.Draw(e.Graphics, glyph, new Rectangle(x, cell.Y + (cell.Height - size) / 2, size, size), e.CellStyle.ForeColor, size * 0.9f);
+                int textX = x + size + size / 3;
+                TextRenderer.DrawText(e.Graphics, grid.Columns[e.ColumnIndex].HeaderText, font,
+                    new Rectangle(textX, cell.Y, Math.Max(0, cell.Right - textX - 2), cell.Height), e.CellStyle.ForeColor,
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine);
+                e.Handled = true;
+            };
+        }
+
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, string lParam);
 
