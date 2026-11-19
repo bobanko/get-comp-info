@@ -5,7 +5,8 @@
 // 1. Cyrillic is transliterated by the official Ukrainian table (Cabinet of Ministers resolution No. 55 of
 //    27.01.2010, as on dmsu.gov.ua), with the Russian letters ы, э, ё, ъ added;
 // 2. spellings people mix up are folded into one: y/j/i → i, g/h → h, kh → h, ts → c, w → v,
-//    and doubled letters → one (digits stay as they are, so IP addresses do not change).
+//    and doubled letters → one (digits stay as they are, so IP addresses do not change);
+// 3. a query also tries the other usual spellings of ж, х, щ (j, x, sh) and back (wordKeys).
 // Every key character remembers the part of the original text it came from, to highlight the match there.
 
 const CYRILLIC = {
@@ -17,6 +18,18 @@ const CYRILLIC = {
   // Apostrophes are dropped, as in the official table.
   "'": '', '’': '', 'ʼ': '', '`': '',
 };
+
+// Letters people write in more than one way: a query tries each spelling ("мужичек" finds "mujichekk",
+// "vaxa" finds "ваха"). Only the query gets variants; the text has one key.
+const ALTERNATIVES = {
+  ж: ['zh', 'j'],
+  х: ['kh', 'x'],
+  щ: ['shch', 'sh'],
+  j: ['j', 'zh'],
+  x: ['x', 'kh'],
+};
+// A long query with many such letters keeps its first spellings only past this many variants.
+const MAX_VARIANTS = 32;
 
 // Applied in this order: longer spellings first.
 const FOLDS = [
@@ -70,6 +83,34 @@ function fold(items, from, to) {
   return result;
 }
 
+// Loose keys of one query word: one per spelling variant, without empty and repeated ones.
+const keysCache = new Map();
+
+export function wordKeys(word) {
+  const cacheKey = String(word ?? '');
+  if (!keysCache.has(cacheKey)) {
+    if (keysCache.size > 500) keysCache.clear();
+    keysCache.set(cacheKey, spellingKeys(cacheKey));
+  }
+  return keysCache.get(cacheKey);
+}
+
+function spellingKeys(word) {
+  let variants = [''];
+  for (const ch of String(word ?? '').toLowerCase()) {
+    const base = Object.prototype.hasOwnProperty.call(CYRILLIC, ch) ? CYRILLIC[ch] : ch;
+    const options = ALTERNATIVES[ch] ?? [base];
+    const next = [];
+    for (const variant of variants) {
+      for (const option of options) {
+        if (next.length < MAX_VARIANTS || option === options[0]) next.push(variant + option);
+      }
+    }
+    variants = next.length > MAX_VARIANTS ? next.slice(0, MAX_VARIANTS) : next;
+  }
+  return [...new Set(variants.map((variant) => looseKey(variant).key).filter(Boolean))];
+}
+
 // Words of a search query, in lower case.
 export function queryWords(query) {
   return String(query ?? '').toLowerCase().split(/\s+/).filter(Boolean);
@@ -78,8 +119,7 @@ export function queryWords(query) {
 // The word occurs in the text as typed or in another alphabet / spelling.
 export function textMatches(text, word, key = looseKey(text).key) {
   if (String(text ?? '').toLowerCase().includes(word)) return true;
-  const loose = looseKey(word).key;
-  return loose !== '' && key.includes(loose);
+  return wordKeys(word).some((loose) => key.includes(loose));
 }
 
 // Parts of the text to highlight for these words: sorted, merged [start, end) pairs.
@@ -91,10 +131,10 @@ export function matchRanges(text, words) {
   const ranges = [];
   for (const word of words) {
     for (let at = lower.indexOf(word); at >= 0 && word; at = lower.indexOf(word, at + 1)) ranges.push([at, at + word.length]);
-    const loose = looseKey(word).key;
-    if (!loose) continue;
-    for (let at = key.indexOf(loose); at >= 0; at = key.indexOf(loose, at + 1)) {
-      ranges.push([spans[at][0], spans[at + loose.length - 1][1]]);
+    for (const loose of wordKeys(word)) {
+      for (let at = key.indexOf(loose); at >= 0; at = key.indexOf(loose, at + 1)) {
+        ranges.push([spans[at][0], spans[at + loose.length - 1][1]]);
+      }
     }
   }
   ranges.sort((a, b) => a[0] - b[0] || a[1] - b[1]);

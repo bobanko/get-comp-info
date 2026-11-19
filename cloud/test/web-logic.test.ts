@@ -365,3 +365,19 @@ describe('search in any alphabet', () => {
     expect(filterDevices(list, { query: 'yurystka' }).map((d: { id: string }) => d.id)).toEqual(['B']);
   });
 });
+
+describe('other spellings of ж, х, щ', () => {
+  it('finds informal transliteration both ways', async () => {
+    const { textMatches, matchRanges, wordKeys } = await import('../public/js/search-logic.js');
+    expect(textMatches('juristka mujichekk sprava', 'мужичек')).toBe(true);
+    expect(textMatches('юристка мужичек', 'mujichek')).toBe(true);
+    expect(textMatches('melnik s4 vaxa comp', 'ваха')).toBe(true);
+    expect(textMatches('ваха', 'vaxa')).toBe(true);
+    expect(textMatches('Zhytomyr', 'житомир')).toBe(true);
+    expect(textMatches('borsch', 'борщ')).toBe(true);
+    expect(textMatches('лука миша', 'kompik')).toBe(false);
+    expect(matchRanges('juristka mujichekk', ['мужичек'])).toEqual([[9, 18]]);
+    // Many such letters do not explode the number of variants.
+    expect(wordKeys('жжжжжжжжжжжж').length).toBeLessThanOrEqual(32);
+  });
+});
