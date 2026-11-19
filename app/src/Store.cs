@@ -28,16 +28,6 @@ namespace CompInfo
         }
 
         public static string Data { get { return Path.Combine(Root, "data"); } }
-
-        // The program runs from a flash drive (not from a disk of this computer or a network folder).
-        public static bool OnRemovableDrive
-        {
-            get
-            {
-                try { return new DriveInfo(Path.GetPathRoot(Root)).DriveType == DriveType.Removable; }
-                catch (Exception) { return false; }   // a network path has no drive letter
-            }
-        }
         public static string Exports { get { return Path.Combine(Root, "exports"); } }
         public static string File(string name) { return Path.Combine(Root, name); }
     }

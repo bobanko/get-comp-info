@@ -44,12 +44,13 @@ namespace CompInfo
 
             grid = Ui.Grid(Font);
             grid.Columns.Add("field", L.T("Поле"));
-            // Where each value comes from: read from this computer now, or the record in the database of this
-            // copy of the program (on the flash drive, or in the program folder when it runs from a disk).
+            // Where each value comes from: read from this computer now, or the record of the shared (cloud) database.
+            // The record is the local copy next to the program; the tooltip says it reaches the cloud on synchronization.
             grid.Columns.Add("current", L.T("Сейчас на компьютере"));
-            grid.Columns.Add("saved", AppPaths.OnRemovableDrive ? L.T("В базе на флешке") : L.T("В базе программы"));
+            grid.Columns.Add("saved", L.T("В базе"));
             grid.Columns[1].Tag = Glyph.Computer;
-            grid.Columns[2].Tag = AppPaths.OnRemovableDrive ? Glyph.Usb : Glyph.Database;
+            grid.Columns[2].Tag = Glyph.Cloud;
+            grid.Columns[2].ToolTipText = L.T("Запись общей базы. Её копия лежит рядом с программой и попадает в облако при синхронизации.");
             Ui.HeaderGlyphs(grid);
             grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
             grid.Columns[0].FillWeight = 24;
