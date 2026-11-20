@@ -32,7 +32,8 @@ if ($Version -ne $codeVersion) {
     throw "Версия $Version не совпадает с версией в console-ui.ps1 ($codeVersion). Запустите tools/update-version.BAT и закоммитьте изменение."
 }
 
-$files = @(Invoke-Git @('ls-files') | Where-Object { $_ -notmatch '/' -and (Test-ProgramFileName $_) })
+# The program files tracked in Git: the root and the script folder console/ (Test-ProgramFileName decides).
+$files = @(Invoke-Git @('ls-files') | Where-Object { Test-ProgramFileName $_ })
 
 # The window program (built by tools\build.BAT, not stored in Git). Updaters older than 2026.11.06.1 refuse
 # an archive with it; the cloud gives them the newest release without it first. See PROGRAM_UPDATE.md.

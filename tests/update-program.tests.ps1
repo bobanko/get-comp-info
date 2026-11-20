@@ -129,6 +129,9 @@ try {
     Assert-True (-not (Test-NewerProgramVersion 'garbage' '2026.10.24.1')) 'Invalid versions are never newer'
     Assert-True ((Test-ProgramFileName 'a.ps1') -and (Test-ProgramFileName 'RUN.BAT') -and (Test-ProgramFileName 'cloud-config.json') -and (Test-ProgramFileName 'comp-info.exe')) 'Program files'
     Assert-True (-not (Test-ProgramFileName 'notes.txt') -and -not (Test-ProgramFileName 'cloud-key.txt') -and -not (Test-ProgramFileName 'sub\a.ps1') -and -not (Test-ProgramFileName 'other.exe')) 'Not program files'
+    # the scripts of the console version may live in console\ (only scripts, one level deep)
+    Assert-True ((Test-ProgramFileName 'console/a.ps1') -and (Test-ProgramFileName 'Console\b.ps1')) 'Scripts in the script folder'
+    Assert-True (-not (Test-ProgramFileName 'console/run.bat') -and -not (Test-ProgramFileName 'console/x/a.ps1') -and -not (Test-ProgramFileName 'console/../a.ps1') -and -not (Test-ProgramFileName 'console/comp-info.exe')) 'Not in the script folder'
 
     # ---------- A normal update ----------
     Set-Release '2026.11.01.1' $newFiles
@@ -220,6 +223,36 @@ try {
     finally { $handle.Dispose() }
     Assert-True ((Read-Text "$copy\comp-info.exe") -eq 'new exe') 'A running comp-info.exe must be replaced'
     Assert-True ((Read-Text "$copy\comp-info.exe.old") -eq 'old exe') 'The running comp-info.exe must be moved aside'
+
+    # ---------- The scripts move into console\, the launchers stay in the root ----------
+    $movedFiles = @{ 'console/a.ps1' = 'console a'; 'run.BAT' = 'new bat'; 'cloud-config.json' = "{ `"apiUrl`": `"$script:api`" }" }
+    Set-Release '2026.11.04.3' $movedFiles
+    $copy = New-ProgramCopy 'moved'
+    Set-Choices @(0)
+    Assert-True ((Invoke-ProgramUpdate -Root $copy -CurrentVersion '2026.10.24.1') -eq 'updated') 'The release with the script folder must install'
+    Assert-True ((Read-Text "$copy\console\a.ps1") -eq 'console a' -and -not (Test-Path "$copy\a.ps1") -and -not (Test-Path "$copy\old.ps1")) 'Scripts must move into console\'
+    Assert-True ((Read-Text "$copy\run.BAT") -eq 'new bat' -and (Test-Path "$copy\sub\inner.ps1")) 'Launchers stay in the root, other folders are untouched'
+    $backup = @(Get-ChildItem "$copy\.update" -Directory -Filter 'backup-*')
+    Assert-True ((Read-Text "$($backup[0].FullName)\a.ps1") -eq 'old a') 'The backup keeps the old places'
+    # and back again: a release without the folder removes its scripts, the backup keeps console\
+    Set-Release '2026.11.04.4' $newFiles
+    Set-Choices @(0)
+    Start-Sleep -Milliseconds 1100
+    Assert-True ((Invoke-ProgramUpdate -Root $copy -CurrentVersion '2026.11.04.3') -eq 'updated') 'The flat release must install over the script folder'
+    Assert-True ((Read-Text "$copy\a.ps1") -eq 'new a' -and -not (Test-Path "$copy\console\a.ps1")) 'Scripts must move back to the root'
+    $backup = @(Get-ChildItem "$copy\.update" -Directory -Filter 'backup-*' | Sort-Object LastWriteTime -Descending)
+    Assert-True ((Read-Text "$($backup[0].FullName)\console\a.ps1") -eq 'console a') 'The backup keeps the script folder'
+    # a failed install puts the script folder back as it was
+    Set-Release '2026.11.04.5' $movedFiles
+    $before = Get-Snapshot $copy
+    $zip = Join-Path $testRoot 'moved-rollback.zip'
+    Copy-Item $script:packagePath $zip
+    $handle = [IO.File]::Open("$copy\run.BAT", 'Open', 'Read', [IO.FileShare]::Read)
+    try {
+        Assert-Throws { Install-ProgramRelease -Root $copy -ZipPath $zip -ExpectedVersion '2026.11.04.5' -CurrentVersion '2026.11.04.4' -Attempts 2 } '*прежняя версия восстановлена*' 'A failed move must report the restore'
+    }
+    finally { $handle.Dispose() }
+    Assert-True ((Get-Snapshot $copy) -eq $before) 'A failed move must restore every file and remove the added ones'
 
     # ---------- Development copies are not updated ----------
     $copy = New-ProgramCopy 'dev'

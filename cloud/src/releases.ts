@@ -12,8 +12,11 @@ export const MAX_PACKAGE_BYTES = 1024 * 1024;
 export const GITHUB_ISSUER = 'https://token.actions.githubusercontent.com';
 export const RELEASE_AUDIENCE = 'comp-info-release';
 const VERSION_PATTERN = /^\d{4}\.\d{2}\.\d{2}\.\d{1,4}$/;
-// Only files from the program root: scripts, launchers, the window program and the cloud settings.
+// Files from the program root: scripts, launchers, the window program and the cloud settings;
+// and the scripts of the console version in the one folder console/ (console/menu.ps1).
+// Must match ProgramUpdate.IsProgramFile (app/src/Cloud.cs) and Test-ProgramFileName (cloud-client.ps1).
 const PROGRAM_FILE = /^[^\\/:*?"<>|\u0000-\u001f]+\.(ps1|bat|cmd)$/i;
+const SCRIPT_FILE = /^console\/[^\\/:*?"<>|\u0000-\u001f]+\.ps1$/i;
 
 export interface ManifestFile {
   path: string;
@@ -40,7 +43,7 @@ interface ReleaseRow {
 }
 
 export function isProgramFile(path: string): boolean {
-  return path === 'cloud-config.json' || path.toLowerCase() === 'comp-info.exe' || PROGRAM_FILE.test(path);
+  return path === 'cloud-config.json' || path.toLowerCase() === 'comp-info.exe' || PROGRAM_FILE.test(path) || SCRIPT_FILE.test(path);
 }
 
 export function isSuspectorFile(path: string): boolean {
@@ -119,6 +122,9 @@ export async function getCurrentRelease(db: D1Database) {
 
 // The first version whose updater accepts comp-info.exe in the archive; older ones reject such a release.
 export const FIRST_EXE_UPDATER = '2026.11.06.1';
+// The first version whose updater accepts the scripts of the console version in console/; every release after
+// 2026.11.19.1 is built with that support, older updaters reject such a release.
+export const FIRST_FOLDER_UPDATER = '2026.11.19.2';
 
 function compareVersions(a: string, b: string): number {
   const x = a.split('.').map(Number);
@@ -130,9 +136,16 @@ function compareVersions(a: string, b: string): number {
   return 0;
 }
 
+function files(row: ReleaseRow): ManifestFile[] {
+  return (JSON.parse(row.manifest) as Manifest).files ?? [];
+}
+
 function hasWindowsApp(row: ReleaseRow): boolean {
-  const manifest = JSON.parse(row.manifest) as Manifest;
-  return (manifest.files ?? []).some((file) => file.path.toLowerCase() === 'comp-info.exe');
+  return files(row).some((file) => file.path.toLowerCase() === 'comp-info.exe');
+}
+
+function hasScriptFolder(row: ReleaseRow): boolean {
+  return files(row).some((file) => SCRIPT_FILE.test(file.path));
 }
 
 // Version of the program that sent the request ("comp-info/2026.11.06.1" in User-Agent), or null.
@@ -141,15 +154,22 @@ export function clientVersion(userAgent: string | undefined): string | null {
   return match ? match[1] : null;
 }
 
-// The release a console should install. An updater older than FIRST_EXE_UPDATER gets the newest release
-// (not newer than the current one) without comp-info.exe: it updates to that first and to the current one next.
+// Whether an updater of this version can install the release (null: an unknown, old one).
+function installable(version: string | null, row: ReleaseRow): boolean {
+  const atLeast = (first: string) => version !== null && compareVersions(version, first) >= 0;
+  return (atLeast(FIRST_EXE_UPDATER) || !hasWindowsApp(row)) && (atLeast(FIRST_FOLDER_UPDATER) || !hasScriptFolder(row));
+}
+
+// The release a console should install. An updater too old for the current release (comp-info.exe in the archive:
+// before FIRST_EXE_UPDATER; scripts in console/: before FIRST_FOLDER_UPDATER) gets the newest release it can install,
+// not newer than the current one: it updates to that first and to the current one next.
 export async function getReleaseFor(db: D1Database, version: string | null) {
   const current = await db.prepare(`SELECT ${RELEASE_COLUMNS} FROM program_releases WHERE is_current = 1`).first<ReleaseRow>();
   if (!current) return null;
-  if ((version && compareVersions(version, FIRST_EXE_UPDATER) >= 0) || !hasWindowsApp(current)) return toRelease(current);
+  if (installable(version, current)) return toRelease(current);
   const { results } = await db.prepare(`SELECT ${RELEASE_COLUMNS} FROM program_releases`).all<ReleaseRow>();
   const fallback = results
-    .filter((row) => compareVersions(row.version, current.version) <= 0 && !hasWindowsApp(row))
+    .filter((row) => compareVersions(row.version, current.version) <= 0 && installable(version, row))
     .sort((a, b) => compareVersions(b.version, a.version))[0];
   return toRelease(fallback ?? current);
 }

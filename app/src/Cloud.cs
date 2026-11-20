@@ -569,19 +569,46 @@ namespace CompInfo
     {
         public const string ExeName = "comp-info.exe";
 
-        // Files that make up the program; must match isProgramFile in cloud/src/releases.ts.
+        // The scripts of the console version may live in this one folder of the program (console\*.ps1);
+        // the launchers (BAT), the window program and the cloud settings stay in the root.
+        public const string ScriptFolder = "console";
+
+        // Files that make up the program, by their path from the root ("console/menu.ps1" or "console\menu.ps1");
+        // must match isProgramFile in cloud/src/releases.ts and Test-ProgramFileName in cloud-client.ps1.
         public static bool IsProgramFile(string name)
         {
+            name = (name ?? "").Replace('\\', '/');
+            if (name.StartsWith(ScriptFolder + "/", StringComparison.OrdinalIgnoreCase))
+                return Regex.IsMatch(name.Substring(ScriptFolder.Length + 1), "^[^\\\\/:*?\"<>|\\x00-\\x1f]+\\.ps1$", RegexOptions.IgnoreCase);
             return name == "cloud-config.json" || string.Equals(name, ExeName, StringComparison.OrdinalIgnoreCase) ||
                 Regex.IsMatch(name, "^[^\\\\/:*?\"<>|\\x00-\\x1f]+\\.(ps1|bat|cmd)$", RegexOptions.IgnoreCase);
         }
 
+        // The path of a program file from the root, with "/" as in manifest.json.
+        public static string Relative(string root, string path)
+        {
+            return Path.GetFullPath(path).Substring(Path.GetFullPath(root).TrimEnd('\\').Length + 1).Replace('\\', '/');
+        }
+
+        // The program files of a copy: in the root and in the script folder; full paths.
         public static List<string> ProgramFiles(string root)
         {
             List<string> result = new List<string>();
             foreach (string path in Directory.GetFiles(root))
                 if (IsProgramFile(Path.GetFileName(path))) result.Add(path);
+            string scripts = Path.Combine(root, ScriptFolder);
+            if (Directory.Exists(scripts))
+                foreach (string path in Directory.GetFiles(scripts))
+                    if (IsProgramFile(ScriptFolder + "/" + Path.GetFileName(path))) result.Add(path);
             return result;
+        }
+
+        static bool SameName(string a, string b) { return string.Equals(a.Replace('\\', '/'), b.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase); }
+
+        static bool Contains(List<string> names, string name)
+        {
+            foreach (string n in names) if (SameName(n, name)) return true;
+            return false;
         }
 
         public static Version Parse(string text)
@@ -655,12 +682,18 @@ namespace CompInfo
                 foreach (string entry in Directory.GetFiles(extract, "*", SearchOption.AllDirectories))
                 {
                     string relative = entry.Substring(extract.Length + 1);
-                    if (relative != "manifest.json" && !names.Contains(relative)) throw new InvalidDataException(L.T("Лишний файл в архиве: ") + relative);
+                    if (relative != "manifest.json" && !Contains(names, relative)) throw new InvalidDataException(L.T("Лишний файл в архиве: ") + relative);
                 }
 
+                // The backup keeps the paths from the root (console\…), so it can be put back as it was.
                 string backup = Path.Combine(updateRoot, "backup-" + currentVersion + "-" + DateTime.Now.ToString("yyyyMMdd-HHmmss"));
                 Directory.CreateDirectory(backup);
-                foreach (string existing in ProgramFiles(root)) File.Copy(existing, Path.Combine(backup, Path.GetFileName(existing)));
+                foreach (string existing in ProgramFiles(root))
+                {
+                    string copy = Path.Combine(backup, Relative(root, existing));
+                    Directory.CreateDirectory(Path.GetDirectoryName(copy));
+                    File.Copy(existing, copy);
+                }
 
                 Result result = new Result();
                 result.Backup = backup;
@@ -671,16 +704,18 @@ namespace CompInfo
                         JsonObject file = (JsonObject)f;
                         string name = file.Text("path");
                         string target = Path.Combine(root, name);
+                        Directory.CreateDirectory(Path.GetDirectoryName(target));
                         string temporary = Path.Combine(root, Guid.NewGuid().ToString("N") + ".tmp");
                         File.Copy(Path.Combine(extract, name), temporary);
                         Place(temporary, target);
                         if (Sha256(target) != file.Text("sha256").ToLowerInvariant()) throw new IOException(L.T("Файл ") + name + L.T(" записан с ошибкой."));
                     }
-                    // The window program itself is never removed, even by a release without it.
+                    // The window program itself is never removed, even by a release without it. A script that moved
+                    // between the root and the script folder is removed from its old place.
                     foreach (string old in ProgramFiles(root))
                     {
-                        string name = Path.GetFileName(old);
-                        if (names.Contains(name) || string.Equals(name, ExeName, StringComparison.OrdinalIgnoreCase)) continue;
+                        string name = Relative(root, old);
+                        if (Contains(names, name) || string.Equals(name, ExeName, StringComparison.OrdinalIgnoreCase)) continue;
                         File.Delete(old);
                         result.Removed.Add(name);
                     }
@@ -708,17 +743,19 @@ namespace CompInfo
         static void RestoreBackup(string root, string backup, List<string> newNames)
         {
             List<string> backupNames = new List<string>();
-            foreach (string f in Directory.GetFiles(backup)) backupNames.Add(Path.GetFileName(f));
+            foreach (string f in Directory.GetFiles(backup, "*", SearchOption.AllDirectories)) backupNames.Add(Relative(backup, f));
             foreach (string name in newNames)
             {
                 string path = Path.Combine(root, name);
-                if (!backupNames.Contains(name) && File.Exists(path)) File.Delete(path);
+                if (!Contains(backupNames, name) && File.Exists(path)) File.Delete(path);
             }
-            foreach (string file in Directory.GetFiles(backup))
+            foreach (string name in backupNames)
             {
-                string target = Path.Combine(root, Path.GetFileName(file));
+                string file = Path.Combine(backup, name);
+                string target = Path.Combine(root, name);
                 // A file the update never managed to replace is already the old one.
                 if (File.Exists(target) && Sha256(target) == Sha256(file)) continue;
+                Directory.CreateDirectory(Path.GetDirectoryName(target));
                 string temporary = Path.Combine(root, Guid.NewGuid().ToString("N") + ".tmp");
                 File.Copy(file, temporary);
                 Place(temporary, target);

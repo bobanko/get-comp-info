@@ -684,9 +684,11 @@ namespace CompInfo
 
         static void ProgramFiles()
         {
-            foreach (string ok in new[] { "cloud-config.json", "comp-info.exe", "COMP-INFO.EXE", "a.ps1", "menu.BAT", "x.cmd" })
+            foreach (string ok in new[] { "cloud-config.json", "comp-info.exe", "COMP-INFO.EXE", "a.ps1", "menu.BAT", "x.cmd", "console/a.ps1", "Console\\b.ps1" })
                 Check(ProgramUpdate.IsProgramFile(ok), "program file " + ok);
-            foreach (string no in new[] { "data.json", "other.exe", "sub/a.ps1", "..\\a.ps1", "cloud-key.txt", "Cloud-Config.json" })
+            // only scripts in the script folder, one level deep
+            foreach (string no in new[] { "data.json", "other.exe", "sub/a.ps1", "..\\a.ps1", "cloud-key.txt", "Cloud-Config.json",
+                "console/run.bat", "console/x/a.ps1", "console/../a.ps1", "console/comp-info.exe" })
                 Check(!ProgramUpdate.IsProgramFile(no), "not a program file " + no);
             Check(ProgramUpdate.IsNewer("2026.11.05.1", "2026.11.04.12") && !ProgramUpdate.IsNewer("2026.11.04.1", "2026.11.04.1") && !ProgramUpdate.IsNewer("x", "1.0"), "versions");
         }
@@ -699,6 +701,7 @@ namespace CompInfo
             foreach (KeyValuePair<string, string> f in files)
             {
                 string path = Path.Combine(content, f.Key);
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
                 File.WriteAllText(path, f.Value, new UTF8Encoding(false));
                 JsonObject entry = new JsonObject();
                 entry["path"] = f.Key; entry["sha256"] = ProgramUpdate.Sha256(path); entry["size"] = new FileInfo(path).Length;
@@ -739,6 +742,19 @@ namespace CompInfo
                 Check(File.Exists(Path.Combine(root, "comp-info.exe")), "the window program is kept by a release without it");
                 Check(File.Exists(Path.Combine(root, "data", "r.json")), "data untouched");
                 Check(File.ReadAllText(Path.Combine(r.Backup, "keep.ps1")) == "v1", "backup of the previous version");
+
+                // The scripts move to console\, the launchers stay: the root copies go away, the backup keeps the old places.
+                Dictionary<string, string> moved = new Dictionary<string, string> { { "console/keep.ps1", "v3" }, { "new.BAT", "@echo v3" }, { "cloud-config.json", "{}" } };
+                r = ProgramUpdate.Install(root, MakeRelease(dir, "3.0", moved, null), "3.0", "2.0");
+                Check(File.ReadAllText(Path.Combine(root, "console", "keep.ps1")) == "v3" && !File.Exists(Path.Combine(root, "keep.ps1")) && r.Removed.Contains("keep.ps1"),
+                    "a script moved into the script folder: " + string.Join(", ", r.Removed.ToArray()));
+                Check(File.ReadAllText(Path.Combine(root, "new.BAT")) == "@echo v3" && File.ReadAllText(Path.Combine(r.Backup, "keep.ps1")) == "v2", "launcher replaced, backup of the old place");
+                // and back: a later release in the old layout removes console\ scripts it does not have
+                Dictionary<string, string> back = new Dictionary<string, string> { { "keep.ps1", "v4" }, { "cloud-config.json", "{}" } };
+                r = ProgramUpdate.Install(root, MakeRelease(dir, "4.0", back, null), "4.0", "3.0");
+                Check(File.ReadAllText(Path.Combine(root, "keep.ps1")) == "v4" && !File.Exists(Path.Combine(root, "console", "keep.ps1")) && r.Removed.Contains("console/keep.ps1"),
+                    "a script moved back to the root");
+                Check(File.ReadAllText(Path.Combine(r.Backup, "console", "keep.ps1")) == "v3", "the backup keeps the script folder");
             }
             finally { Directory.Delete(dir, true); }
         }

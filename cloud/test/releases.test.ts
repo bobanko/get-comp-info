@@ -84,6 +84,10 @@ describe('publishing releases', () => {
     await expectError(await buildRelease('1.0', { 'a.ps1': 'x' }), 'invalid_version');
     await expectError(await buildRelease(version, { 'a.ps1': 'x' }, { extra: [{ name: 'evil.ps1', data: 'x' }] }), 'invalid_package');
     await expectError(await buildRelease(version, { 'sub/a.ps1': 'x' }), 'invalid_manifest');
+    // only scripts may live in console/, and only one level deep
+    await expectError(await buildRelease(version, { 'console/run.bat': 'x' }), 'invalid_manifest');
+    await expectError(await buildRelease(version, { 'console/sub/a.ps1': 'x' }), 'invalid_manifest');
+    await expectError(await buildRelease(version, { 'console/../a.ps1': 'x' }), 'invalid_manifest');
     await expectError(await buildRelease(version, { '..\\a.ps1': 'x' }), 'invalid_manifest');
     await expectError(await buildRelease(version, { 'notes.txt': 'x' }), 'invalid_manifest');
     const tampered = await buildRelease(version, { 'a.ps1': 'x' }, {
@@ -91,6 +95,12 @@ describe('publishing releases', () => {
     });
     await expectError(tampered, 'invalid_package');
     await expectError(new Uint8Array(1024 * 1024 + 1), 'too_large', 413);
+  });
+
+  it('accepts the scripts of the console version in the console folder', async () => {
+    const version = nextVersion();
+    const bytes = await buildRelease(version, { 'comp-info-menu.BAT': 'x', 'console/comp-info-menu.ps1': 'y' });
+    expect((await publish(bytes, null, 'http://localhost:8787/api/release')).status).toBe(201);
   });
 
   it('allows publishing without GitHub only for local development', async () => {
@@ -166,6 +176,27 @@ describe('downloading releases', () => {
     expect(await latestFor(null)).toBe(withoutExe);
     expect(await latestFor('comp-info/2026.11.06.1')).toBe(withExe);
     expect(await latestFor('comp-info/2026.12.01.3')).toBe(withExe);
+  });
+
+  it('gives updaters that reject the console folder the newest release without it', async () => {
+    const { key } = await harvesterKey();
+    const flat = nextVersion();
+    const withExe = nextVersion();
+    const withFolder = nextVersion();
+    await publishVersion(flat);
+    await publishVersion(withExe, { 'a.ps1': 'x', 'comp-info.exe': 'MZ' });
+    await publishVersion(withFolder, { 'run.BAT': 'x', 'console/a.ps1': 'x', 'comp-info.exe': 'MZ' });
+    async function latestFor(userAgent: string | null) {
+      const headers: Record<string, string> = { Authorization: `Bearer ${key}` };
+      if (userAgent) headers['User-Agent'] = userAgent;
+      const response = await exports.default.fetch(new Request('https://comp-info.test/api/client/program/latest', { headers }));
+      return ((await response.json()) as { version: string }).version;
+    }
+    // each old updater steps up to the newest release it can install, the next check brings the current one
+    expect(await latestFor('comp-info/2026.11.04.1')).toBe(flat);
+    expect(await latestFor(null)).toBe(flat);
+    expect(await latestFor('comp-info/2026.11.19.1')).toBe(withExe);
+    expect(await latestFor('comp-info/2026.11.19.2')).toBe(withFolder);
   });
 
   it('lets admins list releases and roll back', async () => {

@@ -615,16 +615,43 @@ function Update-NetworkProfilesCache {
 
 # ---------- Program update ----------
 
-# Files that make up the program: scripts and launchers in the root, the window program comp-info.exe and the cloud settings.
-# Must match isProgramFile in cloud/src/releases.ts.
+# Files that make up the program, by their path from the root: scripts and launchers in the root, the scripts of the
+# console version in the one folder console\ (console/menu.ps1), the window program comp-info.exe and the cloud settings.
+# Must match isProgramFile in cloud/src/releases.ts and ProgramUpdate.IsProgramFile in app/src/Cloud.cs.
+$script:programScriptFolder = 'console'
+
 function Test-ProgramFileName {
     param([string]$Name)
+    $Name = $Name -replace '\\', '/'
+    if ($Name.StartsWith("$script:programScriptFolder/", [StringComparison]::OrdinalIgnoreCase)) {
+        return $Name.Substring($script:programScriptFolder.Length + 1) -match '^[^\\/:*?"<>|\x00-\x1f]+\.ps1$'
+    }
     return $Name -ceq 'cloud-config.json' -or $Name -eq 'comp-info.exe' -or $Name -match '^[^\\/:*?"<>|\x00-\x1f]+\.(ps1|bat|cmd)$'
 }
 
+# The path of a program file from the root, with / as in manifest.json.
+function Get-ProgramRelativePath {
+    param([string]$Root, [string]$Path)
+    $rootFull = [IO.Path]::GetFullPath($Root).TrimEnd('\')
+    return [IO.Path]::GetFullPath($Path).Substring($rootFull.Length + 1) -replace '\\', '/'
+}
+
+# The program files of a copy: in the root and in the script folder.
 function Get-ProgramFiles {
     param([string]$Root)
-    return @(Get-ChildItem -LiteralPath $Root -File | Where-Object { Test-ProgramFileName $_.Name })
+    $files = @(Get-ChildItem -LiteralPath $Root -File | Where-Object { Test-ProgramFileName $_.Name })
+    $scripts = Join-Path $Root $script:programScriptFolder
+    if (Test-Path -LiteralPath $scripts -PathType Container) {
+        $files += @(Get-ChildItem -LiteralPath $scripts -File | Where-Object { Test-ProgramFileName "$script:programScriptFolder/$($_.Name)" })
+    }
+    return $files
+}
+
+function Test-ProgramNameIn {
+    param([string[]]$Names, [string]$Name)
+    $Name = $Name -replace '\\', '/'
+    foreach ($n in $Names) { if (($n -replace '\\', '/') -eq $Name) { return $true } }
+    return $false
 }
 
 function Get-FileSha256 {
@@ -658,17 +685,19 @@ function Get-CloudProgramRelease {
 # Puts the backed-up program files back and removes files the failed update added.
 function Restore-ProgramBackup {
     param([string]$Root, [string]$Backup, [string[]]$NewNames)
-    $backupFiles = @(Get-ChildItem -LiteralPath $Backup -File)
-    $backupNames = @($backupFiles | ForEach-Object { $_.Name })
+    $backupFiles = @(Get-ChildItem -LiteralPath $Backup -File -Recurse)
+    $backupNames = @($backupFiles | ForEach-Object { Get-ProgramRelativePath $Backup $_.FullName })
     foreach ($name in $NewNames) {
         $path = Join-Path $Root $name
-        if ($backupNames -notcontains $name -and (Test-Path -LiteralPath $path)) { Remove-Item -LiteralPath $path -Force }
+        if (-not (Test-ProgramNameIn $backupNames $name) -and (Test-Path -LiteralPath $path)) { Remove-Item -LiteralPath $path -Force }
     }
-    foreach ($file in $backupFiles) {
-        $target = Join-Path $Root $file.Name
+    foreach ($name in $backupNames) {
+        $file = Join-Path $Backup $name
+        $target = Join-Path $Root $name
         # A file the update never managed to replace is already the old one.
-        if ((Test-Path -LiteralPath $target) -and (Get-FileSha256 $target) -eq (Get-FileSha256 $file.FullName)) { continue }
-        Copy-Item -LiteralPath $file.FullName -Destination $target -Force
+        if ((Test-Path -LiteralPath $target) -and (Get-FileSha256 $target) -eq (Get-FileSha256 $file)) { continue }
+        New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force | Out-Null
+        Copy-Item -LiteralPath $file -Destination $target -Force
     }
 }
 
@@ -711,16 +740,22 @@ function Install-ProgramRelease {
         }
         foreach ($entry in Get-ChildItem -LiteralPath $extract -Recurse -File) {
             $relative = $entry.FullName.Substring($extract.Length + 1)
-            if ($relative -ne 'manifest.json' -and $names -notcontains $relative) { throw "Лишний файл в архиве: $relative" }
+            if ($relative -ne 'manifest.json' -and -not (Test-ProgramNameIn $names $relative)) { throw "Лишний файл в архиве: $relative" }
         }
 
+        # The backup keeps the paths from the root (console\…), so it can be put back as it was.
         $backup = Join-Path $updateRoot ("backup-$CurrentVersion-" + (Get-Date -Format 'yyyyMMdd-HHmmss'))
         New-Item -ItemType Directory -Path $backup -Force | Out-Null
-        foreach ($existing in Get-ProgramFiles $Root) { Copy-Item -LiteralPath $existing.FullName -Destination $backup }
+        foreach ($existing in Get-ProgramFiles $Root) {
+            $copy = Join-Path $backup (Get-ProgramRelativePath $Root $existing.FullName)
+            New-Item -ItemType Directory -Path (Split-Path -Parent $copy) -Force | Out-Null
+            Copy-Item -LiteralPath $existing.FullName -Destination $copy
+        }
 
         try {
             foreach ($file in $files) {
                 $target = Join-Path $Root $file.path
+                New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force | Out-Null
                 $temporary = Join-Path $Root ([guid]::NewGuid().ToString('N') + '.tmp')
                 Copy-Item -LiteralPath (Join-Path $extract $file.path) -Destination $temporary
                 if ($file.path -eq 'comp-info.exe' -and (Test-Path -LiteralPath $target)) {
@@ -735,9 +770,11 @@ function Install-ProgramRelease {
             }
             $removed = @(foreach ($old in Get-ProgramFiles $Root) {
                 # comp-info.exe stays even when a release does not contain it (it may be running).
-                if ($names -notcontains $old.Name -and $old.Name -ne 'comp-info.exe') {
+                # A script that moved between the root and the script folder is removed from its old place.
+                $relative = Get-ProgramRelativePath $Root $old.FullName
+                if (-not (Test-ProgramNameIn $names $relative) -and $relative -ne 'comp-info.exe') {
                     Remove-Item -LiteralPath $old.FullName -Force
-                    $old.Name
+                    $relative
                 }
             })
         }

@@ -132,8 +132,11 @@ while (-not $shouldExit) {
             }
             Invoke-MenuScript -ScriptName $item.Script
             if ($script:restartMenu) {
-                # Run the freshly installed menu in this window, then close this old one.
-                & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "comp-info-menu.ps1")
+                # Run the freshly installed menu in this window, then close this old one. A new version may keep
+                # its scripts in the console\ folder of the program (WPF_MIGRATION.md, console layout).
+                $newMenu = Join-Path $PSScriptRoot "comp-info-menu.ps1"
+                if (-not (Test-Path -LiteralPath $newMenu)) { $newMenu = Join-Path (Join-Path $PSScriptRoot "console") "comp-info-menu.ps1" }
+                & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $newMenu
                 exit $LASTEXITCODE
             }
         }
