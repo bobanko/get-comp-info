@@ -1,0 +1,96 @@
+<!-- «Поиск по документам» on WPF (SearchPage.cs on WinForms). No texts here: they come from the code (L.T). -->
+<UserControl x:Class="CompInfo.Wpf.SearchView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:CompInfo.Wpf">
+    <UserControl.Resources>
+        <!-- a found file: Windows icon, type, where (chips) and matches, name, fragment; open, folder -->
+        <DataTemplate x:Key="HitTemplate">
+            <Grid MinHeight="36">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="34" />
+                    <ColumnDefinition Width="Auto" SharedSizeGroup="Type" />
+                    <ColumnDefinition Width="200" />
+                    <ColumnDefinition Width="2*" />
+                    <ColumnDefinition Width="3*" />
+                    <ColumnDefinition Width="68" />
+                </Grid.ColumnDefinitions>
+                <Image Source="{Binding Icon}" Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="{Binding Path}" />
+                <TextBlock x:Name="Type" Grid.Column="1" Text="{Binding Type}" FontSize="12" FontWeight="SemiBold" MinWidth="44"
+                           VerticalAlignment="Center" Margin="2,0,10,0" Foreground="{DynamicResource Muted}" />
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0" ToolTip="{Binding Tip}">
+                    <ContentPresenter Content="{Binding Chips}" />
+                    <TextBlock Text="{Binding Count}" VerticalAlignment="Center" Margin="2,0,0,0" />
+                </StackPanel>
+                <TextBlock Grid.Column="3" Text="{Binding Name}" ToolTip="{Binding Path}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center" Margin="0,0,10,0" />
+                <TextBlock Grid.Column="4" Text="{Binding Fragment}" ToolTip="{Binding Tip}" Foreground="{DynamicResource Muted}"
+                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <StackPanel Grid.Column="5" Orientation="Horizontal" Margin="0,0,4,0">
+                    <Button Style="{StaticResource RowIconButton}" Content="&#xE8A7;" Foreground="{DynamicResource Accent}"
+                            ToolTip="{Binding OpenTip}" AutomationProperties.Name="{Binding OpenTip}" Click="Open_Click" />
+                    <Button Style="{StaticResource RowIconButton}" Content="&#xE838;" Foreground="{DynamicResource Folder}"
+                            ToolTip="{Binding FolderTip}" AutomationProperties.Name="{Binding FolderTip}" Click="Folder_Click" />
+                </StackPanel>
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Type}" Value="WORD">
+                    <Setter TargetName="Type" Property="Foreground" Value="{DynamicResource Accent}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Type}" Value="EXCEL">
+                    <Setter TargetName="Type" Property="Foreground" Value="{DynamicResource Good}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Type}" Value="PPT">
+                    <Setter TargetName="Type" Property="Foreground" Value="{DynamicResource Warn}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <DockPanel>
+        <!-- the phrase, «Найти», «Остановить» -->
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,10">
+            <TextBox x:Name="Phrase" Width="420" KeyDown="Phrase_KeyDown" TextChanged="Phrase_TextChanged" />
+            <Button x:Name="FindButton" Style="{StaticResource AccentButton}" Margin="8,0,0,0" Click="Find_Click" />
+            <Button x:Name="StopButton" Margin="8,0,0,0" Visibility="Collapsed" Click="Stop_Click" />
+        </StackPanel>
+        <!-- where: all disks or a folder; in the text of documents; in the Recycle Bin -->
+        <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+            <TextBlock x:Name="WhereLabel" VerticalAlignment="Center" Margin="0,0,10,0" Foreground="{DynamicResource Muted}" />
+            <ComboBox x:Name="Where" Width="240" MaxDropDownHeight="300" />
+            <Button x:Name="PickButton" Margin="8,0,0,0" Click="Pick_Click" />
+            <CheckBox x:Name="Contents" IsChecked="True" VerticalAlignment="Center" Margin="16,0,0,0" />
+            <CheckBox x:Name="Recycle" IsChecked="True" VerticalAlignment="Center" Margin="16,0,0,0" />
+        </WrapPanel>
+        <ProgressBar x:Name="Progress" DockPanel.Dock="Top" Style="{StaticResource ThinProgress}" Margin="0,0,0,8" Visibility="Hidden" />
+        <local:StatusLine x:Name="Status" DockPanel.Dock="Top" Margin="0,0,0,10" />
+
+        <Border Style="{StaticResource TableFrame}">
+            <Grid Grid.IsSharedSizeScope="True">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition />
+                </Grid.RowDefinitions>
+                <Border Style="{StaticResource TableHeader}">
+                    <Grid Height="34">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="34" />
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="Type" />
+                            <ColumnDefinition Width="200" />
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="3*" />
+                            <ColumnDefinition Width="68" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="TypeHeader" Grid.Column="1" VerticalAlignment="Center" Margin="2,0,10,0" MinWidth="44" />
+                        <TextBlock x:Name="WhereHeader" Grid.Column="2" VerticalAlignment="Center" />
+                        <TextBlock x:Name="FileHeader" Grid.Column="3" VerticalAlignment="Center" />
+                        <TextBlock x:Name="FragmentHeader" Grid.Column="4" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+                <ListBox x:Name="Hits" Grid.Row="1" Style="{StaticResource BareListBox}" ItemContainerStyle="{StaticResource TableRow}"
+                         ItemTemplate="{StaticResource HitTemplate}" VirtualizingPanel.IsVirtualizing="True"
+                         MouseDoubleClick="Hits_MouseDoubleClick" KeyDown="Hits_KeyDown" />
+            </Grid>
+        </Border>
+    </DockPanel>
+</UserControl>

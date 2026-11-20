@@ -34,6 +34,8 @@
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.IO.Compression.FileSystem" />
     <Reference Include="System.DirectoryServices.AccountManagement" />
+    <!-- only for the folder dialog of Windows (WPF on .NET Framework has none); part of .NET Framework -->
+    <Reference Include="System.Windows.Forms" />
   </ItemGroup>
 
   <!-- the core, shared with the WinForms programs and the tests (C# 5): CORE of tools\build.BAT -->
