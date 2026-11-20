@@ -18,6 +18,12 @@ namespace CompInfo.Wpf
         void DevicesChanged();
     }
 
+    // A section that takes the form filled in the copy without administrator rights (name, domain), before it opens.
+    public interface Resumable
+    {
+        void Resume(JsonObject form);
+    }
+
     // A section that another one can start (the synchronization, from «Синхронизировать» of the collection).
     public interface SyncStarter
     {

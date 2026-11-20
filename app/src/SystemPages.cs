@@ -50,49 +50,20 @@ namespace CompInfo
         }
     }
 
-    // Domain account remembered in comp-info.ini when the user asks for it. The password is only masked (base64):
-    // a flash drive goes from computer to computer, so Windows encryption tied to one user or PC cannot be used.
+    // The remembered domain account (DomainAccount of ComputerForms.cs) in the fields of the form.
     public static class DomainCredentials
     {
         public static void Load(TextBox user, TextBox password, CheckBox remember)
         {
-            string savedUser = Settings.Get("domainUser", "");
-            string saved = Settings.Get("domainPassword", "");
-            remember.Checked = savedUser.Length > 0;
+            string savedUser, saved;
+            bool keep;
+            DomainAccount.Load(out savedUser, out saved, out keep);
+            remember.Checked = keep;
             if (user.Text.Length == 0) user.Text = savedUser;
-            password.Text = "";
-            if (saved.StartsWith("b64:"))
-            {
-                try { password.Text = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(saved.Substring(4))); } catch (Exception) { }
-            }
+            password.Text = saved;
         }
 
-        public static void Save(string user, string password, bool remember)
-        {
-            Settings.Set("domainUser", remember ? user : "");
-            Settings.Set("domainPassword", remember && !string.IsNullOrEmpty(password) ? "b64:" + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(password)) : "");
-        }
-    }
-
-    // The record of this computer in the local database, saved right after a change of name, domain or address.
-    public static class RecordUpdate
-    {
-        // A line for the status of the page: saved, or why it was not. Runs on a worker thread.
-        public static string Save(Collection.Expected expected, out bool saved)
-        {
-            saved = false;
-            try
-            {
-                string skipped;
-                JsonObject record = Collection.SaveAfterChange(AppPaths.Data, expected, out skipped);
-                if (record == null) return L.T("Запись в локальной базе не обновлена: ") + skipped + ".";
-                saved = true;
-                string ip = record.Text("ip");
-                return L.T("Запись в локальной базе обновлена: ") + record.Text("hostname") + (string.IsNullOrEmpty(ip) ? "" : ", " + ip) +
-                    L.T(". Синхронизируйте базу, когда будет интернет.");
-            }
-            catch (Exception e) { return L.T("Запись в локальной базе не обновлена: ") + e.Message; }
-        }
+        public static void Save(string user, string password, bool remember) { DomainAccount.Save(user, password, remember); }
     }
 
     // «Настройка сети»: static address by the office profiles or DHCP (setup-lan-adapter.ps1).

@@ -105,11 +105,52 @@ namespace CompInfo.Wpf
             Loaded += delegate
             {
                 Section start = Find(startPage ?? "") ?? sections[0];
+                var resumable = start.View as Resumable;
+                if (Handoff != null && resumable != null) resumable.Resume(Handoff);
+                Handoff = null;
                 Open(start);
                 // The record of this computer is read and saved right after the start, whatever section opens first.
                 var collect = Find("collect").View as CollectView;
                 if (collect != null && start.Key != "collect") collect.StartInBackground();
             };
+        }
+
+        // Form handed over by the copy without administrator rights (--handoff), for the start section.
+        public JsonObject Handoff;
+
+        // Starts the program again with administrator rights on the given section; this copy closes.
+        // form: the filled form of the section, handed to the new copy through a pipe open only to Administrators
+        // (AdminHandoff of ComputerForms.cs), so the change goes on there without filling the form again.
+        public async void RestartAsAdministrator(string page, JsonObject form)
+        {
+            string pipeName = null;
+            System.IO.Pipes.NamedPipeServerStream pipe = null;
+            if (form != null)
+            {
+                try { pipe = AdminHandoff.Create(out pipeName); }
+                catch (Exception) { pipe = null; pipeName = null; }
+            }
+            var info = new ProcessStartInfo(Process.GetCurrentProcess().MainModule.FileName, "--page " + page + (pipeName != null ? " --handoff " + pipeName : ""))
+            { UseShellExecute = true, Verb = "runas", WorkingDirectory = AppPaths.Root };
+            try { Process.Start(info); }
+            catch (System.ComponentModel.Win32Exception ex)
+            {
+                if (pipe != null) pipe.Dispose();
+                // 1223: the user said no in the UAC window
+                if (ex.NativeErrorCode != 1223) Dialog.Show(this, L.T("Не удалось запустить программу с правами администратора: ") + ex.Message);
+                return;
+            }
+            if (pipe != null)
+            {
+                Hide();
+                bool sent = false;
+                try { sent = await AdminHandoff.Send(pipe, form, 60000); }
+                catch (Exception) { sent = false; }
+                finally { pipe.Dispose(); }
+                if (!sent) Dialog.Show(null, L.T("Окно администратора не получило заполненную форму. Заполните её там ещё раз."));
+            }
+            Replaced = false;
+            Close();
         }
 
         // «Синхронизировать» of the collection: the synchronization opens (and starts once it is moved to WPF).
@@ -122,7 +163,7 @@ namespace CompInfo.Wpf
         }
 
         // The sections in the order of comp-info.exe: the domain is the main operation; network and name are steps
-        // of their own when needed. Not moved yet: a page that opens the section in comp-info.exe.
+        // of their own when needed.
         static List<Section> Sections(ToolboxWindow window)
         {
             ComputerPolicy policy = ComputerPolicy.Load();
@@ -132,10 +173,12 @@ namespace CompInfo.Wpf
                     Create = () => new CollectView { SyncRequested = window.OpenSync },
                     Description = L.T("Сведения об этом компьютере сохраняются в базу рядом с программой сами: при запуске и при любом изменении, в том числе комментария. В облако запись попадает при синхронизации.") },
                 new Section { Key = "domain", Title = L.T("Домен"), Icon = Glyph.Domain, NeedsAdmin = true,
+                    Create = () => new ComputerView(true) { RestartAsAdministrator = window.RestartAsAdministrator },
                     Description = L.T("Ввод в домен gu.gvardia.mvs со свободным IP-адресом из базы и вывод в рабочую группу WORKGROUP с возвратом сети на DHCP. Префикс имени меняется вместе с доменом. После изменения нужна перезагрузка.") },
-                new Section { Key = "lan", Title = L.T("Настройка сети"), Icon = Glyph.Network, NeedsAdmin = true,
+                new Section { Key = "lan", Title = L.T("Настройка сети"), Icon = Glyph.Network, NeedsAdmin = true, Create = () => new LanView(),
                     Description = L.T("IP-адрес, маска, шлюз и DNS проводного адаптера по профилям корпусов из облака, или автоматическая настройка (DHCP).") },
                 new Section { Key = "name", Title = L.T("Имя компьютера"), Icon = Glyph.Tag, NeedsAdmin = true,
+                    Create = () => new ComputerView(false) { RestartAsAdministrator = window.RestartAsAdministrator },
                     Description = L.T("Переименование по правилам: ") + policy.InternetPrefix + "-" + policy.UnitCode + L.T("-… для интернета, ") +
                         policy.DomainPrefix + "-" + policy.UnitCode + L.T("-… для доменной сети. После изменения нужна перезагрузка.") },
                 new Section { Key = "ping", Title = L.T("Быстрый ping"), Icon = Glyph.Ping, Create = () => new PingView(),
@@ -158,8 +201,6 @@ namespace CompInfo.Wpf
                 new Section { Key = "about", Title = L.T("О программе"), Icon = Glyph.Info, Bottom = true, Create = () => new ToolboxAbout(window),
                     Description = L.T("Версия, назначение программы и связь с разработчиком.") },
             };
-            foreach (Section s in list)
-                if (s.Create == null) { Section pending = s; s.Create = () => new PendingView(pending); }
             return list;
         }
 
@@ -342,43 +383,6 @@ namespace CompInfo.Wpf
             result.Freeze();
             return result;
         }
-    }
-
-    // A section not moved to WPF yet: what it is and a button that opens it in comp-info.exe next to this program.
-    public class PendingView : Grid, ISection
-    {
-        public PendingView(Section s)
-        {
-            var box = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, MaxWidth = 460 };
-            var icon = Glyph.Block(s.Icon, 44, "Border");
-            icon.HorizontalAlignment = HorizontalAlignment.Center;
-            box.Children.Add(icon);
-            box.Children.Add(new TextBlock { Text = L.T("Этот раздел ещё переносится на WPF."), FontWeight = FontWeights.SemiBold, FontSize = 15,
-                TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 14, 0, 4) });
-            var note = new TextBlock { Text = CompInfo.Wpf.Brand.Keep(L.T("Пока им можно пользоваться в comp-info.exe — он лежит рядом и работает с теми же данными.")),
-                TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap };
-            note.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
-            box.Children.Add(note);
-            var open = new Button { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 16, 0, 0) };
-            Glyph.Label(open, Glyph.Open, L.T("Открыть в comp-info.exe"));
-            open.SetResourceReference(StyleProperty, "AccentButton");
-            open.Click += delegate
-            {
-                try
-                {
-                    string exe = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "comp-info.exe");
-                    Process.Start(new ProcessStartInfo(exe, "--page " + s.Key) { WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory, UseShellExecute = false });
-                }
-                catch (Exception error) { Dialog.Show(Window.GetWindow(this), L.T("Не удалось открыть comp-info.exe: ") + error.Message); }
-            };
-            box.Children.Add(open);
-            Children.Add(box);
-        }
-
-        public void Opened() { }
-        public bool Shortcut(KeyEventArgs e) { return false; }
-        public bool CanLeave() { return true; }
-        public void DevicesChanged() { }
     }
 
     // «О программе» of the toolbox: the picture (another one in Russian), language and theme under it,

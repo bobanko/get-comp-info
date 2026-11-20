@@ -31,7 +31,10 @@ namespace CompInfo.Wpf
             string shot = StandaloneStart.Option(args, "--screenshot", 1);
             if (shot != null) { CollectView.AutoSave = false; Screenshot(shot, StandaloneStart.Option(args, "--screenshot", 2), StandaloneStart.Option(args, "--screenshot", 3)); return; }
 
-            Open(new ToolboxWindow(StandaloneStart.Option(args, "--page", 1)));
+            // Started with administrator rights to finish a change filled in the copy without them.
+            string handoffPipe = StandaloneStart.Option(args, "--handoff", 1);
+            JsonObject handoff = handoffPipe != null ? AdminHandoff.Receive(handoffPipe) : null;
+            Open(new ToolboxWindow(StandaloneStart.Option(args, "--page", 1)) { Handoff = handoff });
         }
 
         static void Open(ToolboxWindow w)

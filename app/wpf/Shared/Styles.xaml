@@ -618,6 +618,39 @@
             </Setter>
         </Style>
 
+        <!-- A choice of several (WinUI 3 RadioButton): a ring, blue with a white dot when chosen. -->
+        <Style TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{DynamicResource Text}" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusFrame}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <StackPanel Orientation="Horizontal" Background="Transparent">
+                            <Grid Width="20" Height="20" VerticalAlignment="Center">
+                                <Ellipse x:Name="Ring" StrokeThickness="1" Stroke="{DynamicResource FieldBottom}" Fill="{DynamicResource FieldBack}" />
+                                <Ellipse x:Name="Dot" Width="8" Height="8" Fill="{DynamicResource OnAccent}" Visibility="Collapsed" />
+                            </Grid>
+                            <ContentPresenter Margin="8,0,0,0" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Ring" Property="Fill" Value="{DynamicResource FieldHover}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Ring" Property="Fill" Value="{DynamicResource Accent}" />
+                                <Setter TargetName="Ring" Property="Stroke" Value="{DynamicResource Accent}" />
+                                <Setter TargetName="Dot" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- A table: a rounded frame on the surface colour, the header on the header colour (as the web tables);
              rows are items of a ListBox with the TableRow style. -->
         <Style x:Key="TableFrame" TargetType="Border">
