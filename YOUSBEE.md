@@ -7,7 +7,7 @@
 
 ## Сборка
 
-`tools\build.BAT yousbee` (или без аргументов — вместе с остальными) собирает `youSBee.exe` в корень из `app\wpf\youSBee`
+`tools\build.BAT yousbee` (или без аргументов — вместе с остальными) собирает `bin\youSBee.exe` из `app\wpf\youSBee`
 (WPF, нужен .NET SDK на компьютере сборки, WINDOWS_APP.md). Версия своя — `app/youSBee.version`, поднимает `tools\update-version.BAT yousbee`.
 Окно, «О программе» и запуск общие с SUSpector — `app\wpf\Shared\Standalone.cs`; логика списка — `app\src\UsbList.cs`;
 настройки — `youSBee.ini` (`app\src\IniSettings.cs`)
@@ -36,6 +36,6 @@ youSBee.exe --theme light --language uk --screenshot yousbee.png 1500
 ## Распространение
 
 Как HashPot: страница https://chagear.top/yousbee/ и ссылка https://chagear.top/download/youSBee.exe. Сборка сайта
-(`chagear-site`, `npm run deploy`) копирует собранный `youSBee.exe` и берёт версию из `app/youSBee.version`.
+(`chagear-site`, `npm run deploy`) копирует собранный `bin\youSBee.exe` и берёт версию из `app/youSBee.version`.
 Новая версия: `update-version.BAT yousbee`, `build.BAT yousbee`, коммит, затем заново опубликовать сайт.
 Кнопки «Обновление» в программе нет.

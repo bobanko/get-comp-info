@@ -2,8 +2,7 @@
 
   <!-- The toolbox (comp-info.exe) on WPF (WINDOWS_APP.md, WPF_MIGRATION.md). Runs on .NET Framework 4.8 of Windows without
        anything else; building needs the .NET SDK (tools\build.BAT finds it). No third-party packages.
-       While the move goes on, tools\build.BAT copies the result next to the WinForms comp-info.exe as comp-info-wpf.exe;
-       the sections not moved yet open comp-info.exe. -->
+       tools\build.BAT copies the result to bin\comp-info.exe. -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net481</TargetFramework>

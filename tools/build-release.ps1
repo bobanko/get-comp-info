@@ -39,8 +39,8 @@ $files = @(Invoke-Git @('ls-files') | Where-Object { Test-ProgramFileName $_ })
 # an archive with it; the cloud gives them the newest release without it first. See PROGRAM_UPDATE.md.
 $includeWindowsApp = $true
 if ($includeWindowsApp) {
-    $exe = Join-Path $root 'comp-info.exe'
-    if (-not (Test-Path -LiteralPath $exe)) { throw 'Нет comp-info.exe: сначала выполните tools\build.BAT.' }
+    $exe = Join-Path $root 'bin\comp-info.exe'
+    if (-not (Test-Path -LiteralPath $exe)) { throw 'Нет bin\comp-info.exe: сначала выполните tools\build.BAT.' }
     $built = (Get-Item -LiteralPath $exe).VersionInfo.FileVersion
     if ($built -ne $Version) { throw "comp-info.exe собран для версии $built, а выпускается $Version. Выполните tools\build.BAT." }
     $files += 'comp-info.exe'
@@ -57,7 +57,7 @@ New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 $output = Join-Path $OutputDirectory "comp-info-$Version.zip"
 if (Test-Path -LiteralPath $output) { Remove-Item -LiteralPath $output }
 
-$package = New-ReleasePackage -SourceRoot $root -Files $files -Version $Version -Commit $commit -Notes $notes -OutputPath $output
+$package = New-ReleasePackage -SourceRoot $root -Files $files -Sources @{ 'comp-info.exe' = $exe } -Version $Version -Commit $commit -Notes $notes -OutputPath $output
 Write-Host "Версия ${Version}: $($package.Files.Count) файлов, $($package.Size) байт" -ForegroundColor Green
 Write-Host $package.Path -ForegroundColor Cyan
 Write-Output $package

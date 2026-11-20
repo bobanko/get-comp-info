@@ -20,7 +20,7 @@ tools\build.BAT suspector        rem or: toolbox, suspector, yousbee
 ```
 
 Building needs the .NET SDK (found in PATH, Program Files or `%LOCALAPPDATA%\Microsoft\dotnet`); the checks in
-`app\tests` are built with `csc.exe` of .NET Framework 4.x, which is part of Windows. Each program is one exe file.
+`app\tests` are built with `csc.exe` of .NET Framework 4.x, which is part of Windows. Each program is one exe file in `bin\` (not in Git).
 The PowerShell tests are in `tests\*.tests.ps1`; the cloud part (`cloud\`, a Cloudflare Worker) has its own
 `npm test`.
 

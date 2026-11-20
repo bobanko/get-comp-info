@@ -562,7 +562,7 @@ namespace CompInfo
 
         static void StandaloneSuspector()
         {
-            string path = Path.GetFullPath(Path.Combine(here, @"..\SUSpector.exe"));
+            string path = Path.GetFullPath(Path.Combine(here, @"..\bin\SUSpector.exe"));
             Check(File.Exists(path), "SUSpector.exe was built");
             if (!File.Exists(path)) return;
             System.Diagnostics.FileVersionInfo version = System.Diagnostics.FileVersionInfo.GetVersionInfo(path);

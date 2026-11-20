@@ -27,8 +27,8 @@ $codeVersion = ([IO.File]::ReadAllText((Join-Path $root 'app\SUSpector.version')
 if (-not $Version) { $Version = $codeVersion }
 if ($Version -ne $codeVersion) { throw "Version $Version does not match app\SUSpector.version ($codeVersion)." }
 
-$exe = Join-Path $root 'SUSpector.exe'
-if (-not (Test-Path -LiteralPath $exe)) { throw 'SUSpector.exe is missing. Run tools\build.BAT first.' }
+$exe = Join-Path $root 'bin\SUSpector.exe'
+if (-not (Test-Path -LiteralPath $exe)) { throw 'bin\SUSpector.exe is missing. Run tools\build.BAT first.' }
 $built = (Get-Item -LiteralPath $exe).VersionInfo.FileVersion
 if ($built -ne $Version) { throw "SUSpector.exe is version $built, expected $Version." }
 
@@ -55,7 +55,7 @@ $output = Join-Path $OutputDirectory "SUSpector-$Version.zip"
 if (Test-Path -LiteralPath $output) { Remove-Item -LiteralPath $output }
 
 $validator = { param($name) [string]::Equals($name, 'SUSpector.exe', [StringComparison]::OrdinalIgnoreCase) }
-$package = New-ReleasePackage -SourceRoot $root -Files @('SUSpector.exe') -Version $Version -Commit $commit -Notes $notes -FileValidator $validator -OutputPath $output
+$package = New-ReleasePackage -SourceRoot (Join-Path $root 'bin') -Files @('SUSpector.exe') -Version $Version -Commit $commit -Notes $notes -FileValidator $validator -OutputPath $output
 Write-Host "SUSpector ${Version}: $($package.Size) bytes" -ForegroundColor Green
 Write-Host $package.Path -ForegroundColor Cyan
 Write-Output $package

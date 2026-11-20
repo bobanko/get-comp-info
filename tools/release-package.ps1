@@ -16,13 +16,16 @@ function New-ReleasePackage {
         [Parameter(Mandatory)][string]$Commit,
         [string[]]$Notes = @(),
         [scriptblock]$FileValidator,
+        # Files that are built elsewhere: path in the archive -> file on disk (comp-info.exe -> bin\comp-info.exe).
+        [hashtable]$Sources = @{},
         [Parameter(Mandatory)][string]$OutputPath
     )
     if ($null -eq $FileValidator) { $FileValidator = { param($name) Test-ProgramFileName $name } }
     Add-Type -AssemblyName System.IO.Compression
     $entries = @(foreach ($name in ($Files | Sort-Object -Unique)) {
         if (-not (& $FileValidator $name)) { throw "Файл не может входить в версию программы: $name" }
-        $bytes = [IO.File]::ReadAllBytes((Join-Path $SourceRoot $name))
+        $source = if ($Sources.ContainsKey($name)) { $Sources[$name] } else { Join-Path $SourceRoot $name }
+        $bytes = [IO.File]::ReadAllBytes($source)
         [pscustomobject]@{ Path = $name; Bytes = $bytes; Sha256 = (Get-BytesSha256 $bytes) }
     })
     if ($entries.Count -eq 0) { throw 'Нет файлов для версии программы.' }

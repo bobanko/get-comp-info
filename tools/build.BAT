@@ -1,11 +1,13 @@
 @echo off
 rem Builds the programs (WPF on .NET Framework 4.8, WINDOWS_APP.md) with the .NET SDK, then the checks of app\tests
-rem with the C# compiler that is part of Windows. Each program has its own version:
+rem with the C# compiler that is part of Windows. The programs go to bin\ (not in Git), each with its own version:
 rem   comp-info.exe - the toolbox; version in console-ui.ps1, shared with the console version (scripts and BAT)
 rem   SUSpector.exe - standalone security check for users; version in app\SUSpector.version
 rem   youSBee.exe   - standalone USB serial numbers; version in app\youSBee.version
 rem Usage: tools\build.BAT [toolbox] [suspector] [yousbee]   - no arguments builds all three. The checks always run.
 rem The programs need nothing on the computers they run on; the computer that builds them needs the .NET SDK.
+rem bin\ is a copy of the program of its own, like a flash drive: comp-info.exe there keeps its data, key and settings in bin\
+rem (COMPINFO_ROOT points it at another copy).
 setlocal
 cd /d "%~dp0.."
 set "CSC=%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
@@ -15,6 +17,7 @@ if not exist "%CSC%" (
   exit /b 1
 )
 if not exist obj mkdir obj
+if not exist bin mkdir bin
 
 :arguments
 if "%~1"=="" goto chosen
@@ -66,22 +69,23 @@ rem ---------- Subroutines ----------
 rem A running exe cannot be overwritten, but Windows lets it be renamed: it keeps running from obj\.
 :free
 del /q obj\%1.previous.exe >nul 2>&1
-if exist %1.exe move /y %1.exe obj\%1.previous.exe >nul 2>&1
-if exist %1.exe (
-  echo %1.exe is busy. Close the program and run the build again.
+if exist bin\%1.exe move /y bin\%1.exe obj\%1.previous.exe >nul 2>&1
+if exist bin\%1.exe (
+  echo bin\%1.exe is busy. Close the program and run the build again.
   exit /b 1
 )
 exit /b 0
 
-rem One program: app\wpf\<name>\<name>.csproj, built to obj\wpf\<name>-out and copied to the root as <name>.exe.
-rem The <name>-wpf.exe of the time of the move to WPF is deleted.
+rem One program: app\wpf\<name>\<name>.csproj, built to obj\wpf\<name>-out and copied to bin\<name>.exe.
+rem <name>.exe and <name>-wpf.exe that earlier builds left in the root are deleted (kept if running).
 :wpf
 call :free %1 || exit /b 1
 "%DOTNET%" build app\wpf\%1\%1.csproj -c Release -o obj\wpf\%1-out -nologo -v q -clp:NoSummary
 if errorlevel 1 exit /b 1
-copy /y obj\wpf\%1-out\%1.exe %1.exe >nul || exit /b 1
+copy /y obj\wpf\%1-out\%1.exe bin\%1.exe >nul || exit /b 1
+if exist %1.exe del /q %1.exe >nul 2>&1
 if exist %1-wpf.exe del /q %1-wpf.exe >nul 2>&1
-echo Built %1.exe %2
+echo Built bin\%1.exe %2
 exit /b 0
 
 rem Finds dotnet.exe of the .NET SDK: in PATH, installed for all users, or per user (dotnet-install.ps1).

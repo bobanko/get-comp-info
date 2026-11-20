@@ -56,7 +56,7 @@
 
 SignPath выдаёт идентификатор организации, slug проекта и политики подписи; API-токен кладётся в секрет репозитория
 `SIGNPATH_API_TOKEN`. В [release.yml](.github/workflows/release.yml) подпись встаёт между сборкой и упаковкой:
-`tools/build-release.ps1` и `tools/build-suspector-release.ps1` берут exe из корня, поэтому подписанные файлы
+`tools/build-release.ps1` и `tools/build-suspector-release.ps1` берут exe из in\, поэтому подписанные файлы
 кладутся туда же до упаковки.
 
 ```yaml

@@ -2,7 +2,7 @@
 
   <!-- youSBee on WPF (YOUSBEE.md, WPF_MIGRATION.md). Runs on .NET Framework 4.8 of Windows without anything else;
        building needs the .NET SDK (tools\build.BAT finds it). No third-party packages.
-       While the move goes on, tools\build.BAT copies the result next to the WinForms youSBee.exe as youSBee-wpf.exe. -->
+       tools\build.BAT copies the result to bin\youSBee.exe. -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net481</TargetFramework>

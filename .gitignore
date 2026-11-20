@@ -10,11 +10,9 @@
 /dist/
 /diagnostics/
 /network-profiles.json
-/comp-info.exe
-/SUSpector.exe
+/bin/
 /obj/
 /app-settings.json
 /comp-info.ini
 SUSpector.ini
 youSBee.ini
-/youSBee.exe
