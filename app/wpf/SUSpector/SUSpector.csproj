@@ -33,6 +33,8 @@
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.IO.Compression.FileSystem" />
     <Reference Include="System.DirectoryServices.AccountManagement" />
+    <!-- only for the folder dialog of the document search (WPF on .NET Framework has none); part of .NET Framework -->
+    <Reference Include="System.Windows.Forms" />
   </ItemGroup>
 
   <!-- the core, shared with the WinForms programs and the tests (C# 5): SUSPECTOR_CORE of tools\build.BAT -->
@@ -47,19 +49,23 @@
     <Compile Include="..\..\src\SystemChanges.cs" Link="Core\SystemChanges.cs" />
     <Compile Include="..\..\src\Security.cs" Link="Core\Security.cs" />
     <Compile Include="..\..\src\SecurityFiles.cs" Link="Core\SecurityFiles.cs" />
+    <Compile Include="..\..\src\LooseSearch.cs" Link="Core\LooseSearch.cs" />
+    <Compile Include="..\..\src\DocumentSearch.cs" Link="Core\DocumentSearch.cs" />
     <Compile Include="..\..\src\SuspectorUpdate.cs" Link="Core\SuspectorUpdate.cs" />
     <Compile Include="..\..\src\IniSettings.cs" Link="Core\IniSettings.cs" />
     <Compile Include="..\..\src\Lang.cs" Link="Core\Lang.cs" />
     <Compile Include="..\..\src\Strings.cs" Link="Core\Strings.cs" />
   </ItemGroup>
 
-  <!-- the shared look of the WPF programs and the security page (also for the WPF toolbox later) -->
+  <!-- the shared look of the WPF programs, the security page and the document search (also in the toolbox) -->
   <ItemGroup>
     <Compile Include="..\Shared\*.cs" Link="Shared\%(Filename)%(Extension)" />
     <Page Include="..\Shared\*.xaml" Link="Shared\%(Filename)%(Extension)" />
     <Compile Include="..\Pages\Files.cs" Link="Pages\Files.cs" />
     <Compile Include="..\Pages\SecurityView.xaml.cs" Link="Pages\SecurityView.xaml.cs" />
     <Page Include="..\Pages\SecurityView.xaml" Link="Pages\SecurityView.xaml" />
+    <Compile Include="..\Pages\SearchView.xaml.cs" Link="Pages\SearchView.xaml.cs" />
+    <Page Include="..\Pages\SearchView.xaml" Link="Pages\SearchView.xaml" />
   </ItemGroup>
 
   <!-- the picture of «О программе»; the trigger words of the document check, under the name Security.cs reads -->

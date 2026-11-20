@@ -27,13 +27,15 @@ namespace CompInfo.Wpf
 
     public class SuspectorWindow : StandaloneWindow
     {
-        public SuspectorWindow() : this(new SecurityView(), new Button()) { }
+        SearchWindow search;
 
-        // «Обновление» and «О программе» at the bottom right: the page has its own toolbar at the top.
-        SuspectorWindow(SecurityView page, Button update)
+        public SuspectorWindow() : this(new SecurityView(), new Button(), new Button()) { }
+
+        // «Поиск по документам», «Обновление» and «О программе» at the bottom right: the page has its own toolbar at the top.
+        SuspectorWindow(SecurityView page, Button find, Button update)
             : base("[SUS]pector", "Suspector",
                 L.T("Проверка и подготовка компьютера перед внешней проверкой. Результаты остаются на этом компьютере."),
-                page, true, update)
+                page, true, find, update)
         {
             Width = 1040; Height = 660;
             MinWidth = 780; MinHeight = 520;
@@ -46,8 +48,30 @@ namespace CompInfo.Wpf
                 var dialog = new UpdateWindow { Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner };
                 dialog.ShowDialog();
             };
-            KeyDown += (s, e) => { if (e.Key == Key.F5) { e.Handled = true; page.RunAgain(); } };
+            Glyph.Label(find, Glyph.Search, L.T("Поиск по документам"));
+            find.Click += delegate { OpenSearch(); };
+            KeyDown += (s, e) =>
+            {
+                if (e.Key == Key.F5) { e.Handled = true; page.RunAgain(); }
+                else if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control) { e.Handled = true; OpenSearch(); }
+            };
             Loaded += delegate { if (StandaloneStart.Demo) page.Demo(); else page.Opened(); };
+        }
+
+        // One search window: it is closed together with this one (also when the language changes and the window is built again).
+        void OpenSearch()
+        {
+            if (search == null)
+            {
+                search = new SearchWindow { Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner };
+                search.Closed += delegate { search = null; };
+                search.Show();
+            }
+            else
+            {
+                if (search.WindowState == WindowState.Minimized) search.WindowState = WindowState.Normal;
+                search.Activate();
+            }
         }
 
         static AboutWindow AboutDialog()
@@ -62,6 +86,8 @@ namespace CompInfo.Wpf
             L.T("Проверяет имя и домен компьютера, антивирус, VPN, нежелательное ПО, OneDrive, локальных администраторов, пароли Windows и документы с признаками ДСК."),
             L.T("Подготовка"),
             L.T("Пользователь сам запускает исправляющие действия: можно отключить синхронизацию OneDrive без удаления локальных файлов и безвозвратно удалить найденные документы."),
+            L.T("Поиск по документам"),
+            L.T("Находит потерянный рабочий файл по фразе в имени или в тексте документов Word, Excel, PowerPoint, LibreOffice, RTF и текстовых файлов на локальных дисках и в корзине."),
             L.T("Конфиденциальность"),
             L.T("Проверка выполняется локально. Результаты и найденные файлы никуда не отправляются."),
             L.T("Установка не нужна"),
@@ -69,7 +95,7 @@ namespace CompInfo.Wpf
             L.T("Обновление"),
             L.T("Кнопка «Обновление» сверяет версию с сайтом разработчика и при согласии заменяет SUSpector.exe новой версией. Без интернета программа работает как обычно."),
             L.T("Клавиши"),
-            L.T("F5 — запустить проверку заново. Enter или двойной щелчок по найденному документу — открыть его."),
+            L.T("F5 — запустить проверку заново, Ctrl+F — поиск по документам. Enter или двойной щелчок по найденному документу — открыть его."),
         }; } }
     }
 }

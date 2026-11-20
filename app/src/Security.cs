@@ -139,7 +139,7 @@ namespace CompInfo
             string expected = L.T("Ожидаемый формат: AA-XXX-... или AAA-XXX-...; не больше 15 символов, латиница, цифры и дефис.");
             return ComputerNaming.MatchesPolicy(name)
                 ? New(SecurityLevel.Good, L.T("Имя соответствует политике: ") + name, expected)
-                : New(SecurityLevel.Bad, L.T("Имя не соответствует политике: ") + name, expected + "\n" + L.T("Исправить: CHAGEAR Тулбокс, раздел «Имя компьютера»."));
+                : New(SecurityLevel.Bad, L.T("Имя не соответствует политике: ") + name, expected + "\n" + L.T("Чтобы исправить, обратитесь к системному администратору."));
         }
 
         public static List<SecurityCheck> Plan()
@@ -225,8 +225,8 @@ namespace CompInfo
             bool correct = member && string.Equals(actual.TrimEnd('.'), (expected ?? "").TrimEnd('.'), StringComparison.OrdinalIgnoreCase);
             if (correct)
                 return New(SecurityLevel.Good, L.T("Компьютер в домене ") + actual, L.T("Ожидаемый домен: ") + expected);
-            // The name and the domain are fixed by the toolbox (comp-info.exe), not by SUSpector itself.
-            string fix = "\n" + L.T("Исправить: CHAGEAR Тулбокс, раздел «Домен».");
+            // The name and the domain are fixed by the administrator (with the toolbox), not by SUSpector itself.
+            string fix = "\n" + L.T("Чтобы исправить, обратитесь к системному администратору.");
             if (!member)
                 return New(SecurityLevel.Bad, L.T("Компьютер в рабочей группе: ") + actual, L.T("Требуется домен: ") + expected + fix);
             return New(SecurityLevel.Bad, L.T("Компьютер в другом домене: ") + actual, L.T("Требуется домен: ") + expected + fix);
