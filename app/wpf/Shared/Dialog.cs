@@ -21,16 +21,32 @@ namespace CompInfo.Wpf
         public static bool Ask(Window owner, string message, string yes, string no = null,
             Severity severity = Severity.Warning, string heading = null) =>
             new DialogWindow(owner, heading, message, severity, yes, no ?? L.T("Отмена")).ShowDialog() == true;
+
+        // A choice of several answers (the first one is the main button, the last one answers Esc):
+        // the index of the answer, -1 when the window is closed.
+        public static int Choose(Window owner, string heading, string message, Severity severity, params string[] answers)
+        {
+            var w = new DialogWindow(owner, heading, message, severity, answers);
+            w.ShowDialog();
+            return w.Choice;
+        }
     }
 
     class DialogWindow : Window
     {
+        public int Choice = -1;
+
         public DialogWindow(Window owner, string heading, string message, Severity severity, string yes, string no)
+            : this(owner, heading, message, severity, no == null ? new[] { yes } : new[] { yes, no }) { }
+
+        public DialogWindow(Window owner, string heading, string message, Severity severity, string[] answers)
         {
+            string yes = answers[0];
             if (owner != null && owner.IsVisible) { Owner = owner; WindowStartupLocation = WindowStartupLocation.CenterOwner; }
             else WindowStartupLocation = WindowStartupLocation.CenterScreen;
             Title = owner != null && owner.Title.Length > 0 ? owner.Title : Dialog.AppTitle;
-            Width = 480;
+            // three answers need more room for their buttons
+            Width = answers.Length > 2 ? 640 : 480;
             SizeToContent = SizeToContent.Height;
             ResizeMode = ResizeMode.NoResize;
             ShowInTaskbar = owner == null;
@@ -51,14 +67,16 @@ namespace CompInfo.Wpf
             var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
             var main = new Button { Content = yes, IsDefault = true, MinWidth = 110 };
             main.SetResourceReference(StyleProperty, "AccentButton");
-            main.Click += delegate { DialogResult = true; };
-            if (no != null)
+            main.Click += delegate { Choice = 0; DialogResult = true; };
+            // the other answers before the main one, in their order; the last one answers Esc
+            for (int i = 1; i < answers.Length; i++)
             {
-                var other = new Button { Content = no, IsCancel = true, MinWidth = 110, Margin = new Thickness(0, 0, 8, 0) };
-                other.Click += delegate { DialogResult = false; };   // IsCancel alone answers only Esc
+                int index = i;
+                var other = new Button { Content = answers[i], IsCancel = i == answers.Length - 1, MinWidth = 110, Margin = new Thickness(0, 0, 8, 0) };
+                other.Click += delegate { Choice = index; DialogResult = false; };   // IsCancel alone answers only Esc
                 buttons.Children.Add(other);
             }
-            else main.IsCancel = true;   // one button: Esc closes too
+            if (answers.Length == 1) main.IsCancel = true;   // one button: Esc closes too
             buttons.Children.Add(main);
             footer.Child = buttons;
             root.Children.Add(footer);

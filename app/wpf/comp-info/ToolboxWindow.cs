@@ -145,6 +145,7 @@ namespace CompInfo.Wpf
                 new Section { Key = "database", Title = L.T("База устройств"), Icon = Glyph.Database, Create = () => new DatabaseView(),
                     Description = L.T("Записи, сохранённые в этой копии программы. Двойной щелчок или Enter открывает карточку компьютера.") },
                 new Section { Key = "sync", Title = L.T("Синхронизация с облаком"), NavTitle = L.T("Синхронизация"), Icon = Glyph.Sync, NeedsInternet = true,
+                    Create = () => new SyncView { UpdateRequested = () => window.Open(window.Find("update")) },
                     Description = L.T("Отправляет новые и изменённые записи в облако и загружает базу из облака. Нужен интернет и личный ключ доступа.") },
                 new Section { Key = "update", Title = L.T("Обновление программы"), NavTitle = L.T("Обновление"), Icon = Glyph.Update, NeedsInternet = true, Create = () => new UpdateView(),
                     Description = L.T("Проверяет новую версию в облаке и устанавливает её в эту копию программы. Данные (папка data) не меняются.") },

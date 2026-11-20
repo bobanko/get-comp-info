@@ -28,6 +28,7 @@ namespace CompInfo
             if (args.Length == 2 && args[0] == "--check-data") return CheckData(args[1]);
             if (args.Length == 1 && args[0] == "--security-smoke") return SecuritySmoke();
             if (args.Length == 1 && args[0] == "--recycle-smoke") return RecycleSmoke();
+            if (args.Length == 2 && args[0] == "--fake-cloud") return FakeCloudSession(args[1]);
             string fixtures = args.Length > 0 ? args[0] : Path.Combine(here, @"..\app\tests");
             Run("JSON hashes match PowerShell", delegate { HashesMatchPowerShell(fixtures); });
             Run("JSON round trip", JsonRoundTrip);
@@ -740,6 +741,35 @@ namespace CompInfo
                 Check(File.ReadAllText(Path.Combine(r.Backup, "keep.ps1")) == "v1", "backup of the previous version");
             }
             finally { Directory.Delete(dir, true); }
+        }
+
+        // obj\tests.exe --fake-cloud <folder>: a copy of the program data against the fake cloud, for trying the windows of
+        // the synchronization by hand (COMPINFO_ROOT=<folder>): a record changed on both sides (a conflict), a record deleted
+        // in the cloud but changed here, a new record in the cloud. Runs until a file named stop appears in the folder.
+        static int FakeCloudSession(string root)
+        {
+            using (FakeCloud cloud = new FakeCloud())
+            {
+                string data = Path.Combine(root, "data");
+                Directory.CreateDirectory(data);
+                Files.WriteJson(Path.Combine(root, "cloud-config.json"), Json.ParseObject("{\"apiUrl\":\"" + cloud.ApiUrl + "\"}"));
+                CloudClient.SaveKey(root, FakeCloud.Key);
+                Files.WriteJson(Path.Combine(data, "A.json"), Rec("A", "IF-042-PC1", "кабинет 12"));
+                Files.WriteJson(Path.Combine(data, "B.json"), Rec("B", "IF-042-PC2", ""));
+                new CloudSync(root, new CloudClient(cloud.ApiUrl, FakeCloud.Key), new ScriptedQuestions()).Run();
+                // changed on both sides
+                cloud.Put("A", Rec("A", "IF-042-PC1", "кабинет 14, Петров"), false);
+                Files.WriteJson(Path.Combine(data, "A.json"), Rec("A", "FR-042-PC1", "кабинет 12"));
+                // deleted in the cloud, changed here
+                cloud.Put("B", null, true);
+                Files.WriteJson(Path.Combine(data, "B.json"), Rec("B", "IF-042-PC2", "новый комментарий"));
+                // new in the cloud
+                cloud.Put("C", Rec("C", "IF-042-PC3", "из облака"), false);
+                Console.WriteLine("ready " + cloud.ApiUrl);
+                // until a file named stop appears in the folder (or 15 minutes)
+                for (int i = 0; i < 15 * 60 * 4 && !File.Exists(Path.Combine(root, "stop")); i++) System.Threading.Thread.Sleep(250);
+            }
+            return 0;
         }
 
         static JsonObject Rec(string id, string host, string comment)

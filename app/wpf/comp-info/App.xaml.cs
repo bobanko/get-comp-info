@@ -74,10 +74,36 @@ namespace CompInfo.Wpf
                     // as comp-info.exe: the database also gives the card of its first record
                     var database = w.Find(page) == null ? null : w.Find(page).View as DatabaseView;
                     if (database != null) database.SaveCardImage(System.IO.Path.ChangeExtension(file, null) + "-card.png");
+                    // the synchronization also gives its windows: a conflict, the key, a record deleted in the cloud
+                    if (page == "sync") SaveSyncWindows(w, System.IO.Path.ChangeExtension(file, null));
                 }
                 finally { Environment.Exit(0); }
             };
             timer.Start();
+        }
+
+        static void SaveSyncWindows(Window owner, string stem)
+        {
+            JsonObject local = Json.ParseObject("{\"computerId\":\"A1\",\"hostname\":\"FR-042-PC\",\"comment\":\"кабинет 12\",\"ip\":\"10.1.1.5\",\"collectedAt\":\"2026-11-04T10:00:00+02:00\"}");
+            JsonObject cloud = Json.ParseObject("{\"computerId\":\"A1\",\"hostname\":\"FR-042-PC\",\"comment\":\"кабинет 14, Петров\",\"ip\":\"10.1.1.5\",\"collectedAt\":\"2026-11-02T09:00:00+02:00\",\"model\":\"82YU\"}");
+            SaveWindow(new ConflictWindow("FR-042-PC — A1.json | " + L.T("в облаке изменил(а)") + " admin@example, 2026-11-04 12:00", local, cloud), stem + "-conflict.png");
+            SaveWindow(new KeyWindow("https://example/api/client", false, L.T("Ключ из cloud-key.txt не подошёл: ") + "revoked"), stem + "-key.png");
+            SaveWindow(new DialogWindow(owner, L.T("Запись удалена в облаке"), "PC — A1.json\n\n" + L.T("Запись удалена в облаке: ") + "admin, 2026-11-04 12:00.",
+                Severity.Warning, new[] { L.T("Восстановить в облаке"), L.T("Удалить локальную запись"), L.T("Отложить") }), stem + "-ask.png");
+        }
+
+        // A window off the screen, saved as PNG.
+        static void SaveWindow(Window w, string file)
+        {
+            w.Owner = null;
+            w.WindowStartupLocation = WindowStartupLocation.Manual;
+            w.Left = -20000; w.Top = -20000;
+            w.ShowActivated = false;
+            w.ShowInTaskbar = false;
+            w.Show();
+            w.UpdateLayout();
+            StandaloneStart.Save(w, file);
+            w.Close();
         }
 
         static void Crash(Exception error)
