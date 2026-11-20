@@ -624,7 +624,7 @@ function Test-ProgramFileName {
     param([string]$Name)
     $Name = $Name -replace '\\', '/'
     if ($Name.StartsWith("$script:programScriptFolder/", [StringComparison]::OrdinalIgnoreCase)) {
-        return $Name.Substring($script:programScriptFolder.Length + 1) -match '^[^\\/:*?"<>|\x00-\x1f]+\.ps1$'
+        return $Name.Substring($script:programScriptFolder.Length + 1) -match '^[^\\/:*?"<>|\x00-\x1f]+\.(ps1|bat|cmd)$'
     }
     return $Name -ceq 'cloud-config.json' -or $Name -eq 'comp-info.exe' -or $Name -match '^[^\\/:*?"<>|\x00-\x1f]+\.(ps1|bat|cmd)$'
 }

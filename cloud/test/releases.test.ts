@@ -84,8 +84,9 @@ describe('publishing releases', () => {
     await expectError(await buildRelease('1.0', { 'a.ps1': 'x' }), 'invalid_version');
     await expectError(await buildRelease(version, { 'a.ps1': 'x' }, { extra: [{ name: 'evil.ps1', data: 'x' }] }), 'invalid_package');
     await expectError(await buildRelease(version, { 'sub/a.ps1': 'x' }), 'invalid_manifest');
-    // only scripts may live in console/, and only one level deep
-    await expectError(await buildRelease(version, { 'console/run.bat': 'x' }), 'invalid_manifest');
+    // only scripts and launchers may live in console/, and only one level deep
+    await expectError(await buildRelease(version, { 'console/comp-info.exe': 'x' }), 'invalid_manifest');
+    await expectError(await buildRelease(version, { 'console/notes.txt': 'x' }), 'invalid_manifest');
     await expectError(await buildRelease(version, { 'console/sub/a.ps1': 'x' }), 'invalid_manifest');
     await expectError(await buildRelease(version, { 'console/../a.ps1': 'x' }), 'invalid_manifest');
     await expectError(await buildRelease(version, { '..\\a.ps1': 'x' }), 'invalid_manifest');

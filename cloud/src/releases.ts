@@ -16,7 +16,7 @@ const VERSION_PATTERN = /^\d{4}\.\d{2}\.\d{2}\.\d{1,4}$/;
 // and the scripts of the console version in the one folder console/ (console/menu.ps1).
 // Must match ProgramUpdate.IsProgramFile (app/src/Cloud.cs) and Test-ProgramFileName (cloud-client.ps1).
 const PROGRAM_FILE = /^[^\\/:*?"<>|\u0000-\u001f]+\.(ps1|bat|cmd)$/i;
-const SCRIPT_FILE = /^console\/[^\\/:*?"<>|\u0000-\u001f]+\.ps1$/i;
+const SCRIPT_FILE = /^console\/[^\\/:*?"<>|\u0000-\u001f]+\.(ps1|bat|cmd)$/i;
 
 export interface ManifestFile {
   path: string;

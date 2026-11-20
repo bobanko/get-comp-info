@@ -569,8 +569,8 @@ namespace CompInfo
     {
         public const string ExeName = "comp-info.exe";
 
-        // The scripts of the console version may live in this one folder of the program (console\*.ps1);
-        // the launchers (BAT), the window program and the cloud settings stay in the root.
+        // The console version (its scripts and the menu launcher) may live in this one folder of the program
+        // (console\*.ps1, *.bat, *.cmd); the window program and the cloud settings stay in the root.
         public const string ScriptFolder = "console";
 
         // Files that make up the program, by their path from the root ("console/menu.ps1" or "console\menu.ps1");
@@ -579,7 +579,7 @@ namespace CompInfo
         {
             name = (name ?? "").Replace('\\', '/');
             if (name.StartsWith(ScriptFolder + "/", StringComparison.OrdinalIgnoreCase))
-                return Regex.IsMatch(name.Substring(ScriptFolder.Length + 1), "^[^\\\\/:*?\"<>|\\x00-\\x1f]+\\.ps1$", RegexOptions.IgnoreCase);
+                return Regex.IsMatch(name.Substring(ScriptFolder.Length + 1), "^[^\\\\/:*?\"<>|\\x00-\\x1f]+\\.(ps1|bat|cmd)$", RegexOptions.IgnoreCase);
             return name == "cloud-config.json" || string.Equals(name, ExeName, StringComparison.OrdinalIgnoreCase) ||
                 Regex.IsMatch(name, "^[^\\\\/:*?\"<>|\\x00-\\x1f]+\\.(ps1|bat|cmd)$", RegexOptions.IgnoreCase);
         }
