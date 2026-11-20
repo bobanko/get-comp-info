@@ -183,7 +183,7 @@ namespace CompInfo.Wpf
                         policy.DomainPrefix + "-" + policy.UnitCode + L.T("-… для доменной сети. После изменения нужна перезагрузка.") },
                 new Section { Key = "ping", Title = L.T("Быстрый ping"), Icon = Glyph.Ping, Create = () => new PingView(),
                     Description = L.T("Свой IP, шлюз, DNS, затем домен (в сети корпуса) или интернет. Один запрос на узел, до 2 секунд, остановка при первом сбое.") },
-                new Section { Key = "search", Title = L.T("Поиск по документам"), NavTitle = L.T("Поиск"), Icon = Glyph.Search, Create = () => new SearchView(),
+                new Section { Key = "search", Title = L.T("Поиск по документам"), NavTitle = L.T("Поиск документов"), Icon = Glyph.Search, Create = () => new SearchView(),
                     Description = L.T("Ищет фразу в именах файлов и в тексте документов Word, Excel, PowerPoint, LibreOffice, RTF и текстовых файлов на локальных дисках и в корзине. PDF — только по имени.") },
                 new Section { Key = "database", Title = L.T("База устройств"), Icon = Glyph.Database, Create = () => new DatabaseView(),
                     Description = L.T("Записи, сохранённые в этой копии программы. Двойной щелчок или Enter открывает карточку компьютера.") },
