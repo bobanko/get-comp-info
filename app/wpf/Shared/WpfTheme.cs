@@ -41,6 +41,16 @@ namespace CompInfo.Wpf
             // flash drives are orange, like the youSBee icon; «SBee» is honey yellow, as on chagear.top
             { "Flash",       "#E87E04", "#FFAA3C" },
             { "Honey",       "#B47A00", "#F5B82E" },
+            // the toolbox: the letters of «CHAGEAR ТУЛБОКС» (the console header), the coloured word of its name
+            { "Rainbow0",    "#D92D20", "#FF6B6B" },
+            { "Rainbow1",    "#B88700", "#FFD43B" },
+            { "Rainbow2",    "#15803D", "#51CF66" },
+            { "Rainbow3",    "#0E8FA3", "#3BC9DB" },
+            { "Rainbow4",    "#2563EB", "#6C9BFF" },
+            { "Rainbow5",    "#B425C4", "#E599F7" },
+            { "Toolbox",     "#3D6FB6", "#79A6E8" },
+            // the shield of a copy already running with administrator rights
+            { "AdminReady",  "#0B6E36", "#57C47F" },
             // violet of SUSpector (its name and the security section); folders yellow-orange, as in Explorer
             { "Suspector",   "#6D3FD0", "#A585FF" },
             { "Folder",      "#DE9200", "#FFC43D" },

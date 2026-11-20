@@ -888,6 +888,11 @@ namespace CompInfo
             "». Следующие узлы не проверялись.", "». Наступні вузли не перевірялися.", "». The next hosts were not checked.",
             "Все узлы ответили.", "Усі вузли відповіли.", "All hosts replied.",
             "Ошибка", "Помилка", "Error",
+            // the WPF toolbox while its sections move over (WPF_MIGRATION.md)
+            "Этот раздел ещё переносится на WPF.", "Цей розділ ще переноситься на WPF.", "This section is still being moved to WPF.",
+            "Пока им можно пользоваться в comp-info.exe — он лежит рядом и работает с теми же данными.", "Поки що ним можна користуватися в comp-info.exe — він лежить поруч і працює з тими самими даними.", "Until then, use it in comp-info.exe: it is next to this program and works with the same data.",
+            "Открыть в comp-info.exe", "Відкрити в comp-info.exe", "Open in comp-info.exe",
+            "Не удалось открыть comp-info.exe: ", "Не вдалося відкрити comp-info.exe: ", "Could not open comp-info.exe: ",
         };
     }
 }

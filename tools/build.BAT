@@ -59,6 +59,7 @@ call :free comp-info || exit /b 1
   %REFS% %WINFORMS% %CORE% %UI%
 if errorlevel 1 exit /b 1
 echo Built comp-info.exe %VER%
+call :wpf comp-info %VER% || exit /b 1
 
 :suspector
 if not defined BUILD_SUSPECTOR goto yousbee

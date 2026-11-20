@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
@@ -8,42 +9,29 @@ using System.Windows.Threading;
 
 namespace CompInfo.Wpf
 {
-    // «О программе» of a standalone program, laid out as in the WinForms programs (About in Ui.cs): the picture with
-    // the language and theme switches under it; name, version, sections, contacts on the right; «Закрыть».
-    // The theme changes at once (all windows repaint); a new language needs the windows built again:
-    // the dialog closes with LanguageChanged, the caller builds the main window again and opens this once more.
-    public class AboutWindow : Window
+    // «О программе», laid out as in the WinForms programs (About in Ui.cs): the picture with the language and theme
+    // switches under it; name, version, sections, contacts on the right. The theme changes at once (all windows
+    // repaint); a new language needs the windows built again, so a language choice calls languageChanged.
+    // Used by AboutWindow (the standalone programs) and by the «О программе» section of the toolbox.
+    public class AboutContent : Grid
     {
         public const string Site = "chagear.top";
-
-        public bool LanguageChanged { get; private set; }
 
         readonly string email;
         readonly TextBlock copied = new TextBlock();
         DispatcherTimer copiedTimer;
 
+        // The right column, for links of the caller after the contacts.
+        public readonly StackPanel Text = new StackPanel();
+
         // name marks its coloured part in square brackets («you[SBee]»), highlightKey is its colour (a WpfTheme key);
-        // sections = heading, text, heading, text…; save keeps a choice in the ini (key, value).
-        public AboutWindow(ImageSource picture, string name, string highlightKey, string email, string subtitle,
-            string[] sections, Action<string, string> save)
+        // intro may be null; sections = heading, text, heading, text…; save keeps a choice in the settings (key, value).
+        public AboutContent(ImageSource picture, string name, string highlightKey, string email, string subtitle, string intro,
+            string[] sections, Action<string, string> save, Action languageChanged, double textWidth)
         {
             this.email = email;
-            Title = L.T("О программе");
-            SizeToContent = SizeToContent.WidthAndHeight;
-            ResizeMode = ResizeMode.NoResize;
-            ShowInTaskbar = false;
-            UseLayoutRounding = true;
-            FontFamily = new FontFamily("Segoe UI");
-            FontSize = 13.333;
-            SetResourceReference(BackgroundProperty, "WindowBack");
-            SetResourceReference(ForegroundProperty, "Text");
-
-            var root = new Grid { Margin = new Thickness(20, 18, 20, 20) };
-            root.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(460) });
-            root.RowDefinitions.Add(new RowDefinition());
-            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            Content = root;
+            ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(textWidth) });
 
             // the picture, and language and theme right under it: rarely changed, so they live here
             var left = new StackPanel { Width = 132, Margin = new Thickness(0, 0, 20, 0) };
@@ -54,8 +42,7 @@ namespace CompInfo.Wpf
                 {
                     L.Choice = codes[i];
                     save("language", codes[i]);
-                    LanguageChanged = true;
-                    Close();
+                    languageChanged();
                 }));
             string[] themes = { "light", "system", "dark" };
             left.Children.Add(Switch(new[] { Glyph.Sun, Glyph.Theme, Glyph.Moon }, true,
@@ -65,28 +52,27 @@ namespace CompInfo.Wpf
                     WpfTheme.Apply(themes[i]);
                     save("theme", themes[i]);
                 }));
-            root.Children.Add(left);
+            Children.Add(left);
 
-            var text = new StackPanel();
-            Grid.SetColumn(text, 1);
-            root.Children.Add(text);
-            var title = Brand.Title(name, highlightKey, 21);
-            text.Children.Add(title);
-            text.Children.Add(Paragraph(subtitle, 0));
+            Grid.SetColumn(Text, 1);
+            Children.Add(Text);
+            Text.Children.Add(Brand.Title(name, highlightKey, 21));
+            Text.Children.Add(Paragraph(subtitle, 0));
             var version = Paragraph(L.T("Версия ") + AppVersion.Text +
                 (PowerShell.IsAdministrator() ? L.T(" · запущена с правами администратора") : ""), 12);
             version.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
-            text.Children.Add(version);
+            Text.Children.Add(version);
+            if (!string.IsNullOrEmpty(intro)) Text.Children.Add(Paragraph(intro, 12));
             for (int i = 0; i + 1 < sections.Length; i += 2)
             {
                 var heading = Paragraph(sections[i], 0);
                 heading.FontWeight = FontWeights.SemiBold;
-                text.Children.Add(heading);
-                text.Children.Add(Paragraph(sections[i + 1], 12));
+                Text.Children.Add(heading);
+                Text.Children.Add(Paragraph(sections[i + 1], 12));
             }
             var contact = Paragraph(L.T("Связь с разработчиком"), 0);
             contact.FontWeight = FontWeights.SemiBold;
-            text.Children.Add(contact);
+            Text.Children.Add(contact);
 
             // Service computers have no mail client: a click copies the address instead of opening mailto.
             var mailRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(-11, 2, 0, 0) };
@@ -100,24 +86,26 @@ namespace CompInfo.Wpf
             copied.Text = L.T("← нажмите, чтобы скопировать");
             mailRow.Children.Add(mail);
             mailRow.Children.Add(copied);
-            text.Children.Add(mailRow);
+            Text.Children.Add(mailRow);
+            AddLink(Glyph.Open, Site, null, delegate { OpenSite(Site); });
+        }
 
-            var site = new Button { Margin = new Thickness(-11, 0, 0, 0) };
-            Glyph.Label(site, Glyph.Open, Site);
-            site.SetResourceReference(StyleProperty, "Link");
-            site.Click += delegate { OpenSite(Site); };
-            text.Children.Add(site);
-
-            var close = new Button { Content = L.T("Закрыть"), MinWidth = 110, IsDefault = true, IsCancel = true,
-                HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 16, 0, 0) };
-            close.SetResourceReference(StyleProperty, "AccentButton");
-            close.Click += delegate { Close(); };   // IsCancel alone answers only Esc
-            Grid.SetRow(close, 1);
-            Grid.SetColumn(close, 1);
-            root.Children.Add(close);
-
-            WpfTheme.DarkTitle(this);
-            Loaded += delegate { close.Focus(); };
+        // A link row under the contacts: an icon, the link, an optional muted note after it.
+        public void AddLink(string glyph, string text, string note, Action click)
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(-11, 0, 0, 0) };
+            var link = new Button();
+            Glyph.Label(link, glyph, text);
+            link.SetResourceReference(StyleProperty, "Link");
+            link.Click += delegate { click(); };
+            row.Children.Add(link);
+            if (note != null)
+            {
+                var muted = new TextBlock { Text = note, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 0, 0) };
+                muted.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
+                row.Children.Add(muted);
+            }
+            Text.Children.Add(row);
         }
 
         static TextBlock Paragraph(string s, double bottom)
@@ -136,7 +124,7 @@ namespace CompInfo.Wpf
                 var item = new RadioButton { Content = labels[i], GroupName = group, ToolTip = tips[i], IsChecked = i == chosen };
                 item.SetResourceReference(StyleProperty, "Segment");
                 System.Windows.Automation.AutomationProperties.SetName(item, tips[i]);
-                if (icons) { item.SetResourceReference(FontFamilyProperty, "IconFont"); item.FontSize = 15; }
+                if (icons) { item.SetResourceReference(Control.FontFamilyProperty, "IconFont"); item.FontSize = 15; }
                 else item.FontSize = 12;
                 item.Checked += delegate { changed(index); };
                 grid.Children.Add(item);
@@ -164,6 +152,44 @@ namespace CompInfo.Wpf
         {
             try { Process.Start(new ProcessStartInfo("https://" + site) { UseShellExecute = true }); }
             catch (Exception) { ClipText.Set("https://" + site); }
+        }
+    }
+
+    // «О программе» of a standalone program: the content and «Закрыть». After a language choice it closes with
+    // LanguageChanged; the caller builds the main window again and opens this once more.
+    public class AboutWindow : Window
+    {
+        public bool LanguageChanged { get; private set; }
+
+        public AboutWindow(ImageSource picture, string name, string highlightKey, string email, string subtitle,
+            string[] sections, Action<string, string> save)
+        {
+            Title = L.T("О программе");
+            SizeToContent = SizeToContent.WidthAndHeight;
+            ResizeMode = ResizeMode.NoResize;
+            ShowInTaskbar = false;
+            UseLayoutRounding = true;
+            FontFamily = new FontFamily("Segoe UI");
+            FontSize = 13.333;
+            SetResourceReference(BackgroundProperty, "WindowBack");
+            SetResourceReference(ForegroundProperty, "Text");
+
+            var root = new Grid { Margin = new Thickness(20, 18, 20, 20) };
+            root.RowDefinitions.Add(new RowDefinition());
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            Content = root;
+            root.Children.Add(new AboutContent(picture, name, highlightKey, email, subtitle, null, sections, save,
+                delegate { LanguageChanged = true; Close(); }, 460));
+
+            var close = new Button { Content = L.T("Закрыть"), MinWidth = 110, IsDefault = true, IsCancel = true,
+                HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 16, 0, 0) };
+            close.SetResourceReference(StyleProperty, "AccentButton");
+            close.Click += delegate { Close(); };   // IsCancel alone answers only Esc
+            Grid.SetRow(close, 1);
+            root.Children.Add(close);
+
+            WpfTheme.DarkTitle(this);
+            Loaded += delegate { close.Focus(); };
         }
     }
 

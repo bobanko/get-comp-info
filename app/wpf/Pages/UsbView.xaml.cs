@@ -15,7 +15,7 @@ namespace CompInfo.Wpf
     // «USB-накопители»: serial numbers of connected flash drives (UsbPage.cs on WinForms).
     // Drives removed since the last «Обновить» stay in the list, grey with a crossed icon, so several drives
     // can be plugged in one after another and their serial numbers compared. A newly connected drive lights up.
-    public partial class UsbView : UserControl
+    public partial class UsbView : UserControl, ISection
     {
         readonly UsbList list = new UsbList();
         readonly ObservableCollection<UsbRow> rows = new ObservableCollection<UsbRow>();
@@ -53,6 +53,14 @@ namespace CompInfo.Wpf
         }
 
         public void Opened() { Reload(false); Table.Focus(); }
+
+        public bool Shortcut(KeyEventArgs e)
+        {
+            if (e.Key == Key.F5 && Keyboard.Modifiers == ModifierKeys.None) { RefreshList(); return true; }
+            return false;
+        }
+
+        public bool CanLeave() { return true; }
 
         // «Обновить»: the list of drives connected now; the removed ones go away.
         public void RefreshList() { Reload(true); }

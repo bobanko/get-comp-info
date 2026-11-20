@@ -15,7 +15,7 @@ namespace CompInfo.Wpf
     // «Кибербезопасность»: the local checks of the computer (SecurityPage.cs on WinForms). The checks run one after
     // another in the background; a chosen check shows its details, the ДСК check its found files with open, folder
     // and delete. Nothing is sent anywhere.
-    public partial class SecurityView : UserControl
+    public partial class SecurityView : UserControl, ISection
     {
         // Where the file table is: "bottom" (under the checks) or "right" (next to them).
         // The program that hosts the page loads it and saves a change through LayoutSaved.
@@ -58,6 +58,14 @@ namespace CompInfo.Wpf
             if (running) Dialog.Show(Window.GetWindow(this), L.T("Дождитесь окончания проверки."), Severity.Info, L.T("Проверка выполняется"));
             return !running;
         }
+
+        public bool Shortcut(KeyEventArgs e)
+        {
+            if (e.Key == Key.F5 && Keyboard.Modifiers == ModifierKeys.None) { Run(); return true; }
+            return false;
+        }
+
+        public void DevicesChanged() { }
 
         // F5 of the window.
         public void RunAgain() { Run(); }

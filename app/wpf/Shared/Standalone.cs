@@ -312,7 +312,7 @@ namespace CompInfo.Wpf
         }
 
         // The client area of the window in its real pixels (the title bar is drawn by Windows and is not in the picture).
-        static void Save(Window w, string file)
+        public static void Save(Window w, string file)
         {
             var content = (FrameworkElement)VisualTreeHelper.GetChild(w, 0);
             DpiScale dpi = VisualTreeHelper.GetDpi(w);

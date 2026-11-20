@@ -1,0 +1,79 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The toolbox (comp-info.exe) on WPF (WINDOWS_APP.md, WPF_MIGRATION.md). Runs on .NET Framework 4.8 of Windows without
+       anything else; building needs the .NET SDK (tools\build.BAT finds it). No third-party packages.
+       While the move goes on, tools\build.BAT copies the result next to the WinForms comp-info.exe as comp-info-wpf.exe;
+       the sections not moved yet open comp-info.exe. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net481</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>comp-info</AssemblyName>
+    <RootNamespace>CompInfo.Wpf</RootNamespace>
+    <ApplicationIcon>..\..\app.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Title, product, company, version and the target framework (4.8, as the WinForms programs: no 4.0 compatibility
+         mode) come from obj\Version.cs, written by tools\build.BAT from console-ui.ps1. -->
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+    <!-- no comp-info.exe.config next to the exe: one file that works from a flash drive -->
+    <GenerateSupportedRuntime>false</GenerateSupportedRuntime>
+    <DebugType>none</DebugType>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Management" />
+    <Reference Include="System.Web.Extensions" />
+    <!-- not used itself, but the XAML compiler loads it for System.Web.Extensions (JavaScriptSerializer of Json.cs) -->
+    <Reference Include="System.Web" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
+    <Reference Include="System.DirectoryServices.AccountManagement" />
+  </ItemGroup>
+
+  <!-- the core, shared with the WinForms programs and the tests (C# 5): CORE of tools\build.BAT -->
+  <ItemGroup>
+    <Compile Include="..\..\..\obj\Version.cs" Link="Core\Version.cs" />
+    <Compile Include="..\..\src\Json.cs" Link="Core\Json.cs" />
+    <Compile Include="..\..\src\Store.cs" Link="Core\Store.cs" />
+    <Compile Include="..\..\src\LooseSearch.cs" Link="Core\LooseSearch.cs" />
+    <Compile Include="..\..\src\Identity.cs" Link="Core\Identity.cs" />
+    <Compile Include="..\..\src\Machine.cs" Link="Core\Machine.cs" />
+    <Compile Include="..\..\src\Network.cs" Link="Core\Network.cs" />
+    <Compile Include="..\..\src\Export.cs" Link="Core\Export.cs" />
+    <Compile Include="..\..\src\Collector.cs" Link="Core\Collector.cs" />
+    <Compile Include="..\..\src\Cloud.cs" Link="Core\Cloud.cs" />
+    <Compile Include="..\..\src\Shell.cs" Link="Core\Shell.cs" />
+    <Compile Include="..\..\src\SystemChanges.cs" Link="Core\SystemChanges.cs" />
+    <Compile Include="..\..\src\Security.cs" Link="Core\Security.cs" />
+    <Compile Include="..\..\src\DocumentSearch.cs" Link="Core\DocumentSearch.cs" />
+    <Compile Include="..\..\src\UsbList.cs" Link="Core\UsbList.cs" />
+    <Compile Include="..\..\src\SecurityFiles.cs" Link="Core\SecurityFiles.cs" />
+    <!-- not used by the toolbox itself, but by the shared frame of the standalone programs (Shared\Standalone.cs) -->
+    <Compile Include="..\..\src\IniSettings.cs" Link="Core\IniSettings.cs" />
+    <Compile Include="..\..\src\Lang.cs" Link="Core\Lang.cs" />
+    <Compile Include="..\..\src\Strings.cs" Link="Core\Strings.cs" />
+  </ItemGroup>
+
+  <!-- the shared look of the WPF programs and every section page -->
+  <ItemGroup>
+    <Compile Include="..\Shared\*.cs" Link="Shared\%(Filename)%(Extension)" />
+    <Page Include="..\Shared\*.xaml" Link="Shared\%(Filename)%(Extension)" />
+    <Compile Include="..\Pages\*.cs" Link="Pages\%(Filename)%(Extension)" />
+    <Page Include="..\Pages\*.xaml" Link="Pages\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <!-- the gear of the brand, the pictures of «О программе»; the trigger words of the document check -->
+  <ItemGroup>
+    <Resource Include="..\..\brand.png" Link="brand.png" />
+    <Resource Include="..\..\face.png" Link="face.png" />
+    <Resource Include="..\..\face-ru.png" Link="face-ru.png" />
+    <EmbeddedResource Include="..\..\trigger-words.txt" LogicalName="CompInfo.trigger-words.txt" />
+  </ItemGroup>
+
+</Project>
