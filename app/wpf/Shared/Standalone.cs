@@ -23,6 +23,15 @@ namespace CompInfo.Wpf
         // A disk or another device was connected or removed (WM_DEVICECHANGE).
         public event Action DevicesChanged;
 
+        readonly StackPanel row;
+
+        // A button after «О программе», at the very edge of the window (the pin of youSBee: user's choice, 20.11.2026).
+        protected void AddAtEdge(Button b)
+        {
+            b.Margin = new Thickness(8, 0, 0, 0);
+            row.Children.Add(b);
+        }
+
         public StandaloneWindow(string name, string highlightKey, string description, FrameworkElement page, params Button[] buttons)
         {
             Title = Brand.Plain(name) + " " + AppVersion.Text;
@@ -46,7 +55,7 @@ namespace CompInfo.Wpf
             names.Children.Add(line);
             header.Children.Add(names);
 
-            var row = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(12, 2, 0, 0) };
+            row = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(12, 2, 0, 0) };
             foreach (Button b in buttons) { b.Margin = new Thickness(0, 0, 8, 0); row.Children.Add(b); }
             var about = new Button();
             Glyph.Label(about, Glyph.Info, L.T("О программе"));

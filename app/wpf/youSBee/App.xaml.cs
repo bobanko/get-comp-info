@@ -23,10 +23,12 @@ namespace CompInfo.Wpf
     {
         public YouSBeeWindow() : this(new UsbView { ShowToolbar = false }, new Button(), new Button()) { }
 
-        // The pin, «Обновить» and «О программе» sit in the top right corner, so the page's own row with «Обновить» is hidden.
+        // «Обновить», «О программе» and the pin sit in the top right corner, so the page's own row with «Обновить» is hidden.
+        // The pin is the last one, at the very edge of the window.
         YouSBeeWindow(UsbView page, Button pin, Button refresh)
-            : base("you[SBee]", "Honey", L.T("Серийные номера флешек."), page, pin, refresh)
+            : base("you[SBee]", "Honey", L.T("Серийные номера флешек."), page, refresh)
         {
+            AddAtEdge(pin);
             // A small utility: the table has only a few short columns.
             // Room for about five drives: rarely more than three are connected at once.
             Width = 660; Height = 380;
