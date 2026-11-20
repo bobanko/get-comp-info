@@ -35,7 +35,7 @@ if not defined BUILD_TOOLBOX if not defined BUILD_SUSPECTOR if not defined BUILD
 )
 
 rem The toolbox version is the one of the console version (console-ui.ps1), so both report the same release.
-for /f "tokens=2 delims='" %%i in ('findstr /b /c:"$script:toolboxVersion = " console-ui.ps1') do set "VER=%%i"
+for /f "tokens=2 delims='" %%i in ('findstr /b /c:"$script:toolboxVersion = " console\console-ui.ps1') do set "VER=%%i"
 if "%VER%"=="" (
   echo Could not read the version from console-ui.ps1.
   exit /b 1

@@ -5,7 +5,7 @@ param(
     # Для тестов: ответ на вопрос про эмодзи ('Y' или 'N') без ожидания клавиши.
     [ValidateSet('', 'Y', 'N')]
     [string]$EmojiAnswer = '',
-    # По умолчанию diagnostics рядом со скриптом.
+    # По умолчанию diagnostics в папке программы.
     [string]$OutputDirectory,
     # Для тестов: не ждать нажатия клавиши в конце.
     [switch]$NoPause
@@ -13,7 +13,7 @@ param(
 
 $ErrorActionPreference = 'Continue'
 # Windows PowerShell 5.1 leaves $PSScriptRoot empty in parameter defaults of advanced scripts.
-if (-not $OutputDirectory) { $OutputDirectory = Join-Path $PSScriptRoot 'diagnostics' }
+if (-not $OutputDirectory) { $OutputDirectory = Join-Path (Split-Path -Parent $PSScriptRoot) 'diagnostics' }
 . (Join-Path $PSScriptRoot 'console-ui.ps1')
 
 $report = [ordered]@{}

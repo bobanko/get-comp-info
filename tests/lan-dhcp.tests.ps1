@@ -1,7 +1,7 @@
 ﻿$ErrorActionPreference = 'Stop'
 $project = Split-Path -Parent $PSScriptRoot
 $parseErrors = $null
-$ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $project 'setup-lan-adapter.ps1'), [ref]$null, [ref]$parseErrors)
+$ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $project 'console\setup-lan-adapter.ps1'), [ref]$null, [ref]$parseErrors)
 if ($parseErrors.Count) { throw ($parseErrors | Out-String) }
 foreach ($name in @('Invoke-NetworkConfiguration', 'Invoke-SelectedNetworkConfiguration')) {
     $definition = $ast.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name }, $true)

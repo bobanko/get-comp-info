@@ -98,9 +98,9 @@ function Assert-InventoryReadyForRename {
     $system = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
     $uuid = (Get-CimInstance Win32_ComputerSystemProduct -ErrorAction Stop).UUID
     $serial = (Get-CimInstance Win32_BIOS -ErrorAction Stop).SerialNumber
-    $identity = Get-InventoryIdentity -Uuid $uuid -Serial $serial -InstallationId (Get-WindowsInstallationId) -DataPath (Join-Path $PSScriptRoot 'data')
+    $identity = Get-InventoryIdentity -Uuid $uuid -Serial $serial -InstallationId (Get-WindowsInstallationId) -DataPath (Join-Path (Split-Path -Parent $PSScriptRoot) 'data')
     if (-not $identity.Path) {
-        $legacy = @(Find-UnboundLegacyInventory -DataPath (Join-Path $PSScriptRoot 'data') -Hostname $system.Name)
+        $legacy = @(Find-UnboundLegacyInventory -DataPath (Join-Path (Split-Path -Parent $PSScriptRoot) 'data') -Hostname $system.Name)
         if ($legacy.Count) { throw 'Есть старая запись без устойчивого ID. Сначала выполните «Собрать информацию о компьютере» и подтвердите её привязку, затем изменяйте имя.' }
     }
 }

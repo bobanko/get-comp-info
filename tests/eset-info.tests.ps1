@@ -1,6 +1,6 @@
 ﻿$ErrorActionPreference = 'Stop'
 $project = Split-Path -Parent $PSScriptRoot
-. (Join-Path $project 'eset-info.ps1')
+. (Join-Path $project 'console\eset-info.ps1')
 function Assert-True($Value, $Message) { if (-not $Value) { throw $Message } }
 
 function Get-CimInstance {
@@ -44,7 +44,7 @@ try {
     '{"hostname":"yes","esetInstalled":true}' | Set-Content (Join-Path $temp 'yes.json') -Encoding UTF8
     '{"hostname":"no","esetInstalled":false}' | Set-Content (Join-Path $temp 'no.json') -Encoding UTF8
     $csvPath = Join-Path $temp 'inventory.csv'
-    & (Join-Path $project 'export-comp-info.ps1') -DataPath $temp -OutputPath $csvPath
+    & (Join-Path $project 'console\export-comp-info.ps1') -DataPath $temp -OutputPath $csvPath
     $rows = @(Import-Csv $csvPath -Delimiter ';')
     Assert-True (($rows | Where-Object hostname -eq 'old').esetInstalled -eq '') 'Legacy CSV must be empty'
     Assert-True (($rows | Where-Object hostname -eq 'yes').esetInstalled -eq 'True') 'True CSV lost'

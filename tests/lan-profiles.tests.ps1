@@ -1,6 +1,6 @@
 ﻿$ErrorActionPreference = 'Stop'
 $project = Split-Path -Parent $PSScriptRoot
-. (Join-Path $project 'lan-profiles.ps1')
+. (Join-Path $project 'console\lan-profiles.ps1')
 
 function Assert-True([bool]$Value, [string]$Message) {
     if (-not $Value) { throw $Message }
@@ -56,7 +56,7 @@ try {
 
     # No addresses in the program itself.
     foreach ($name in 'lan-profiles.ps1', 'setup-lan-adapter.ps1', 'quick-ping.ps1', 'scan-ips.ps1') {
-        $text = [IO.File]::ReadAllText((Join-Path $project $name))
+        $text = [IO.File]::ReadAllText((Join-Path $project "console\$name"))
         Assert-True ($text -notmatch '\b10\.\d{1,3}\.\d{1,3}\.\d{1,3}\b') "$name must not contain internal IPv4 addresses"
     }
     [Console]::Out.WriteLine('LAN profile checks passed.')

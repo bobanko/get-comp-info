@@ -8,7 +8,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-. (Join-Path $root 'console-ui.ps1')
+. (Join-Path $root 'console\console-ui.ps1')
 . (Join-Path $PSScriptRoot 'release-package.ps1')
 
 function Invoke-Git {

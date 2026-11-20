@@ -47,7 +47,7 @@ function Read-NetworkProfiles {
     }
 }
 
-$networkProfiles = Read-NetworkProfiles (Join-Path $PSScriptRoot 'network-profiles.json')
+$networkProfiles = Read-NetworkProfiles (Join-Path (Split-Path -Parent $PSScriptRoot) 'network-profiles.json')
 $locations = $networkProfiles.Locations
 $subnetOptions = $networkProfiles.SubnetOptions
 $networkFirstOctet = $networkProfiles.FirstOctet

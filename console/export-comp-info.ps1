@@ -1,6 +1,6 @@
 ﻿param(
-    [string]$DataPath = (Join-Path $PSScriptRoot "data"),
-    [string]$OutputPath = (Join-Path $PSScriptRoot ("exports\devices_{0}.csv" -f (Get-Date -Format "yyyy-MM-dd_HH-mm-ss-fff"))),
+    [string]$DataPath = (Join-Path (Split-Path -Parent $PSScriptRoot) "data"),
+    [string]$OutputPath = (Join-Path (Split-Path -Parent $PSScriptRoot) ("exports\devices_{0}.csv" -f (Get-Date -Format "yyyy-MM-dd_HH-mm-ss-fff"))),
     [char]$Delimiter = ';'
 )
 
@@ -21,7 +21,7 @@ try {
         throw "В папке нет JSON-файлов: $DataPath"
     }
 
-    $cloudState = Get-CloudStateForDisplay $PSScriptRoot
+    $cloudState = Get-CloudStateForDisplay (Split-Path -Parent $PSScriptRoot)
 
     # Read everything before writing: an invalid record must not produce a partial export.
     $records = @(foreach ($file in $files) {

@@ -72,9 +72,9 @@ $model = $cs.Model.Trim()
 
 $smbiosUuid = Get-NormalizedSmbiosUuid $smbiosUuid
 $installationId = Get-WindowsInstallationId
-$identity = Get-InventoryIdentity -Uuid $smbiosUuid -Serial $serial -InstallationId $installationId -DataPath (Join-Path $PSScriptRoot 'data')
+$identity = Get-InventoryIdentity -Uuid $smbiosUuid -Serial $serial -InstallationId $installationId -DataPath (Join-Path (Split-Path -Parent $PSScriptRoot) 'data')
 if (-not $identity.Path) {
-    $legacy = @(Find-UnboundLegacyInventory -DataPath (Join-Path $PSScriptRoot 'data') -Hostname $hostname)
+    $legacy = @(Find-UnboundLegacyInventory -DataPath (Join-Path (Split-Path -Parent $PSScriptRoot) 'data') -Hostname $hostname)
     if ($legacy.Count -gt 1) { throw 'Несколько старых записей с таким именем. Сначала устраните дубликаты.' }
     if ($legacy.Count -eq 1) {
         Write-Host 'Найдена старая запись без UUID и серийного номера:' -ForegroundColor Yellow
@@ -279,7 +279,7 @@ function Show-ComputerComparison($previousComputer, $controls = $text.Overwrite)
 # Подготовка файла
 # ============================================================
 
-$dataPath = Join-Path $PSScriptRoot "data"
+$dataPath = Join-Path (Split-Path -Parent $PSScriptRoot) "data"
 
 if (-not (Test-Path $dataPath)) {
     New-Item -ItemType Directory -Path $dataPath | Out-Null

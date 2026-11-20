@@ -5,7 +5,7 @@
 . (Join-Path $PSScriptRoot 'cloud-client.ps1')
 
 try {
-    switch (Invoke-ProgramUpdate -Root $PSScriptRoot) {
+    switch (Invoke-ProgramUpdate -Root (Split-Path -Parent $PSScriptRoot)) {
         # The menu restarts itself on 43 to load the new version.
         'updated' { exit 43 }
         # Cancelled with Esc: return to the menu right away.

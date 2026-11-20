@@ -1,6 +1,6 @@
 ﻿$ErrorActionPreference = 'Stop'
 $project = Split-Path -Parent $PSScriptRoot
-. (Join-Path $project 'computer-identity.ps1')
+. (Join-Path $project 'console\computer-identity.ps1')
 function Assert-True($Value, $Message) { if (-not $Value) { throw $Message } }
 $root = Join-Path $PSScriptRoot ('identity-test-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $root | Out-Null

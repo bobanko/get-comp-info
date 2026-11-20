@@ -1,8 +1,8 @@
 ﻿$ErrorActionPreference = 'Stop'
 $project = Split-Path -Parent $PSScriptRoot
-. (Join-Path $project 'console-ui.ps1')
-. (Join-Path $project 'sync-merge.ps1')
-. (Join-Path $project 'cloud-client.ps1')
+. (Join-Path $project 'console\console-ui.ps1')
+. (Join-Path $project 'console\sync-merge.ps1')
+. (Join-Path $project 'console\cloud-client.ps1')
 . (Join-Path $project 'tools\release-package.ps1')
 Add-Type -AssemblyName System.IO.Compression
 

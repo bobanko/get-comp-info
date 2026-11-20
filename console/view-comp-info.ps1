@@ -5,7 +5,7 @@
 . (Join-Path $PSScriptRoot "sync-merge.ps1")
 . (Join-Path $PSScriptRoot "cloud-client.ps1")
 
-$dataPath = Join-Path $PSScriptRoot "data"
+$dataPath = Join-Path (Split-Path -Parent $PSScriptRoot) "data"
 $script:sortMode = "Hostname"
 $script:sortDescending = $false
 $script:searchTerm = ""
@@ -172,7 +172,7 @@ function Get-InventoryRecords {
         return [pscustomobject]@{ Records = @(); Warnings = @("Folder data was not found: $dataPath") }
     }
 
-    $script:cloudState = Get-CloudStateForDisplay $PSScriptRoot
+    $script:cloudState = Get-CloudStateForDisplay (Split-Path -Parent $PSScriptRoot)
     foreach ($file in Get-ChildItem -LiteralPath $dataPath -Filter "*.json" -File) {
         try {
             $computer = Get-Content -Raw -LiteralPath $file.FullName | ConvertFrom-Json -ErrorAction Stop

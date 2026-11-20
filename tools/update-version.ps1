@@ -21,7 +21,7 @@ function Get-NextVersion {
 }
 
 if ($Program -eq 'toolbox') {
-    $versionFile = Join-Path $root 'console-ui.ps1'
+    $versionFile = Join-Path $root 'console\console-ui.ps1'
     $content = [IO.File]::ReadAllText($versionFile)
     $pattern = '(?m)^\$script:toolboxVersion = ''(?<version>\d{4}\.\d{2}\.\d{2}\.\d+)''\r?$'
     $matchesFound = [regex]::Matches($content, $pattern)

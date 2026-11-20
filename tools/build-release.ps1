@@ -9,9 +9,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-. (Join-Path $root 'console-ui.ps1')
-. (Join-Path $root 'sync-merge.ps1')
-. (Join-Path $root 'cloud-client.ps1')
+. (Join-Path $root 'console\console-ui.ps1')
+. (Join-Path $root 'console\sync-merge.ps1')
+. (Join-Path $root 'console\cloud-client.ps1')
 . (Join-Path $PSScriptRoot 'release-package.ps1')
 
 function Invoke-Git {

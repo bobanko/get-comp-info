@@ -1,6 +1,6 @@
 ﻿$ErrorActionPreference = 'Stop'
 $project = Split-Path -Parent $PSScriptRoot
-. (Join-Path $project 'computer-management.ps1')
+. (Join-Path $project 'console\computer-management.ps1')
 function Assert-True($Value, $Message) { if (-not $Value) { throw $Message } }
 $script:admin = $false
 $script:launches = 0
@@ -53,7 +53,7 @@ Assert-True $failed 'UAC cancellation reported a successful handoff'
 
 # Exercise the actual menu dispatch without opening consoles or changing the machine.
 $errors = $null
-$ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $project 'comp-info-menu.ps1'), [ref]$null, [ref]$errors)
+$ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $project 'console\comp-info-menu.ps1'), [ref]$null, [ref]$errors)
 if ($errors.Count) { throw ($errors | Out-String) }
 $definition = $ast.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Invoke-MenuScript' }, $true)
 . ([scriptblock]::Create($definition.Extent.Text.Replace('$PSScriptRoot', '$project').Replace('[void][Console]::ReadKey($true)', '$script:pauseCalls++')))

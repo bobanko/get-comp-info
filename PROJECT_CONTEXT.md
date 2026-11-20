@@ -60,7 +60,9 @@ Computer Inventory Collector — portable-утилита для сбора ин�
 ```text
 COMP-INFO\
 ├── comp-info-menu.BAT       точка входа, главное меню
-├── *.ps1, *.BAT             сценарии
+├── *.BAT                    ярлыки запуска сценариев
+├── comp-info.exe            оконная версия
+├── console\                 сценарии PowerShell консольной версии (*.ps1)
 ├── cloud-config.json        адрес API (не секрет, хранится в Git)
 ├── cloud-key.txt            личный ключ доступа (необязательно, исключён из Git)
 ├── cloud-state.json         состояние синхронизации этой копии (исключён из Git)

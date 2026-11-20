@@ -5,7 +5,7 @@
 . (Join-Path $PSScriptRoot 'cloud-client.ps1')
 
 try {
-    $counts = Invoke-CloudSync -Root $PSScriptRoot
+    $counts = Invoke-CloudSync -Root (Split-Path -Parent $PSScriptRoot)
     if ($null -eq $counts) {
         # Cancelled with Esc while entering the key: return to the menu right away.
         exit 42

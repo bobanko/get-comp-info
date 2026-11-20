@@ -1,8 +1,8 @@
 ﻿$ErrorActionPreference = 'Stop'
 $project = Split-Path -Parent $PSScriptRoot
-. (Join-Path $project 'console-ui.ps1')
-. (Join-Path $project 'sync-merge.ps1')
-. (Join-Path $project 'cloud-client.ps1')
+. (Join-Path $project 'console\console-ui.ps1')
+. (Join-Path $project 'console\sync-merge.ps1')
+. (Join-Path $project 'console\cloud-client.ps1')
 
 function Assert-True([bool]$Value, [string]$Message) {
     if (-not $Value) { throw $Message }
@@ -345,12 +345,14 @@ try {
     $script:offline = $false
 
     # ---------- Export shows the cloud status ----------
+    $pcScripts = Join-Path $pc 'console'
+    New-Item -ItemType Directory -Path $pcScripts -Force | Out-Null
     foreach ($name in @('export-comp-info.ps1', 'eset-info.ps1', 'sync-merge.ps1', 'cloud-client.ps1', 'console-ui.ps1')) {
-        Copy-Item -LiteralPath (Join-Path $project $name) -Destination $pc
+        Copy-Item -LiteralPath (Join-Path $project "console\$name") -Destination $pcScripts
     }
     Write-Record $pc 'OLD-4.json' '{"computerId":"OLD-4","hostname":"PC-4","addedToExternalDatabase":true}'
     $csvPath = Join-Path $testRoot 'export.csv'
-    $output = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $pc 'export-comp-info.ps1') -OutputPath $csvPath 2>&1
+    $output = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $pcScripts 'export-comp-info.ps1') -OutputPath $csvPath 2>&1
     Assert-True ($LASTEXITCODE -eq 0) ($output | Out-String)
     $rows = @(Import-Csv -LiteralPath $csvPath -Delimiter ';' -Encoding UTF8)
     Assert-True (($rows | Where-Object computerId -eq 'NEW-3').cloudStatus -eq 'В облаке') 'Export must show synced records'

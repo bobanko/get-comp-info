@@ -12,7 +12,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-. (Join-Path $root 'console-ui.ps1')
+. (Join-Path $root 'console\console-ui.ps1')
 
 # Runs git in the repository; throws on a non-zero exit code. Output goes to the pipeline.
 function Invoke-Git {
@@ -33,7 +33,7 @@ function Invoke-PowerShellFile {
     return $code
 }
 
-$versionFile = Join-Path $root 'console-ui.ps1'
+$versionFile = Join-Path $root 'console\console-ui.ps1'
 $bumped = $false
 
 try {
@@ -100,7 +100,7 @@ try {
     }
 
     # 5. Commit, tag, push in one atomic push: either both arrive or neither.
-    Invoke-Git @('add', '--', 'console-ui.ps1') | Out-Null
+    Invoke-Git @('add', '--', 'console/console-ui.ps1') | Out-Null
     Invoke-Git @('commit', '--quiet', '-m', "chore: version $version") | Out-Null
     $bumped = $false
     Invoke-Git @('tag', '-a', $tag, '-m', "Version $version") | Out-Null
@@ -145,7 +145,7 @@ try {
 catch {
     if ($bumped) {
         # The version was raised but not committed: put console-ui.ps1 back.
-        & git -C $root checkout -- console-ui.ps1 2>$null
+        & git -C $root checkout -- console/console-ui.ps1 2>$null
     }
     Write-Host ''
     Write-Host "Выпуск не выполнен: $($_.Exception.Message)" -ForegroundColor Red

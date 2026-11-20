@@ -1,6 +1,6 @@
 ﻿$ErrorActionPreference = 'Stop'
 $project = Split-Path -Parent $PSScriptRoot
-. (Join-Path $project 'computer-management-ui.ps1')
+. (Join-Path $project 'console\computer-management-ui.ps1')
 function Assert-True($Value, $Message) { if (-not $Value) { throw $Message } }
 function Assert-Throws([scriptblock]$Action, [string]$Message) {
     $failed = $false
