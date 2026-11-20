@@ -151,6 +151,63 @@ namespace CompInfo
             return Regex.Replace(id, "[<>:\"/\\\\|?*\\x00-\\x1f]", "_") + ".json";
         }
 
+        // Several files of one record (the same id: a copied data\ next to a record the program had just saved,
+        // 21.11.2026). One file stays — the file named after the id when it is among them — with the newest collection,
+        // the earliest createdAt and the comment and web marks of the newest version that has them. The others are moved
+        // to data\.duplicates\<time>\ (not read as records). Returns the kept path.
+        public static string MergeDuplicates(string id, IList<string> paths)
+        {
+            List<string> order = new List<string>(paths);
+            List<JsonObject> records = new List<JsonObject>();
+            foreach (string p in order) records.Add(Files.ReadRecord(p));
+            // newest first: by the collection, then by the file time
+            List<int> index = new List<int>();
+            for (int i = 0; i < order.Count; i++) index.Add(i);
+            index.Sort((a, b) =>
+            {
+                int c = Fmt.Moment(records[b].Text("collectedAt")).CompareTo(Fmt.Moment(records[a].Text("collectedAt")));
+                return c != 0 ? c : File.GetLastWriteTimeUtc(order[b]).CompareTo(File.GetLastWriteTimeUtc(order[a]));
+            });
+            JsonObject result = records[index[0]];
+            DateTime first = DateTime.MaxValue;
+            string created = null;
+            foreach (JsonObject r in records)
+            {
+                DateTime d = Fmt.Moment(r.Text("createdAt"));
+                if (d != DateTime.MinValue && d < first) { first = d; created = r.Text("createdAt"); }
+            }
+            if (created != null) result["createdAt"] = created;
+            List<string> kept = new List<string> { "comment" };
+            kept.AddRange(WebFields);
+            foreach (string name in kept)
+                if (string.IsNullOrEmpty(result.Text(name)))
+                    foreach (int i in index)
+                        if (!string.IsNullOrEmpty(records[i].Text(name))) { result[name] = records[i][name]; break; }
+
+            string keep = order[index[0]];
+            foreach (string p in order)
+                if (string.Equals(System.IO.Path.GetFileName(p), SafeFileName(id), StringComparison.OrdinalIgnoreCase)) keep = p;
+            string backup = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(keep), ".duplicates", DateTime.Now.ToString("yyyyMMdd-HHmmss"));
+            Directory.CreateDirectory(backup);
+            foreach (string p in order) File.Copy(p, System.IO.Path.Combine(backup, System.IO.Path.GetFileName(p)), true);
+            Files.WriteJson(keep, result);
+            foreach (string p in order) if (p != keep) File.Delete(p);
+            return keep;
+        }
+
+        // The card of a record in the web interface: the site of the cloud API of cloud-config.json.
+        public static string CardUrl(string root, string id)
+        {
+            string site = "https://comp-info.chagear.top";
+            try
+            {
+                Uri api = new Uri(CloudConfig.ReadApiUrl(root));
+                site = api.GetLeftPart(UriPartial.Authority);
+            }
+            catch (Exception) { }
+            return site + "/#/devices/" + Uri.EscapeDataString(id);
+        }
+
         public static List<RecordFile> ReadAll(string dataPath, CloudState state, List<string> warnings)
         {
             List<RecordFile> result = new List<RecordFile>();
@@ -296,6 +353,15 @@ namespace CompInfo
             DateTime d;
             if (DateTime.TryParse(value ?? "", out d)) return d.ToString("yyyy-MM-dd HH:mm");
             return "";
+        }
+
+        // A date of a record or of the cloud in UTC, to compare which is newer; MinValue when there is none.
+        public static DateTime Moment(string value)
+        {
+            DateTimeOffset d;
+            if (DateTimeOffset.TryParse(value ?? "", System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal, out d)) return d.UtcDateTime;
+            return DateTime.MinValue;
         }
 
         public static string ExePath

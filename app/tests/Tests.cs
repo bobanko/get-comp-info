@@ -160,9 +160,27 @@ namespace CompInfo
                 WriteRecord(dir, "dup.json", "{\"computerId\":\"DUP\",\"windowsMachineGuid\":\"" + win + "\"}");
                 bool refused = false;
                 string why = "";
-                try { Identity.Find(uuid, "SER1", win, dir); } catch (InvalidDataException e) { refused = true; why = e.Message; }
+                List<string> ids = null;
+                try { Identity.Find(uuid, "SER1", win, dir); } catch (DuplicateRecordsException e) { refused = true; why = e.Message; ids = e.Ids; }
                 Check(refused, "two records of one computer must stop the collection");
                 Check(why.Contains("OLD-HOST (pc1)") && why.Contains("DUP (?)") && why.Contains("веб-интерфейсе"), "duplicates are named: " + why);
+                Check(ids != null && ids.Count == 2 && ids.Contains("OLD-HOST") && ids.Contains("DUP"), "the ids for the web links");
+                Check(Records.CardUrl(dir, "C/1 x") == "https://comp-info.chagear.top/#/devices/C%2F1%20x", "web card link: " + Records.CardUrl(dir, "C/1 x"));
+                File.Delete(Path.Combine(dir, "dup.json"));
+
+                // One record in two files (a copied data\ next to a record just saved): merged into the file of the id.
+                WriteRecord(dir, uuid + ".json", "{\"computerId\":\"OLD-HOST\",\"hostname\":\"pc1-new\",\"smbiosUuid\":\"" + uuid +
+                    "\",\"collectedAt\":\"2026-11-20T23:10:00+02:00\",\"createdAt\":\"2026-11-20T23:10:00+02:00\",\"comment\":\"\"}");
+                WriteRecord(dir, "OLD-HOST.json", "{\"computerId\":\"OLD-HOST\",\"computerIdSource\":\"hostname\",\"hostname\":\"pc1\",\"smbiosUuid\":\"" + uuid +
+                    "\",\"collectedAt\":\"2026-11-17T11:45:00+02:00\",\"createdAt\":\"2026-11-01T09:00:00+02:00\",\"comment\":\"старый\",\"inventoried\":true}");
+                Identity.Result merged = Identity.Find(uuid, "SER1", win, dir);
+                JsonObject kept = Files.ReadRecord(merged.Path);
+                Check(merged.Merged == 2 && merged.Id == "OLD-HOST" && merged.Path.EndsWith("OLD-HOST.json") && !File.Exists(Path.Combine(dir, uuid + ".json")),
+                    "one record in two files kept in the file of its id: " + merged.Path);
+                Check(kept.Text("hostname") == "pc1-new" && kept.Text("createdAt") == "2026-11-01T09:00:00+02:00" && kept.Text("comment") == "старый" &&
+                    kept["inventoried"] is bool, "the newest collection with the earliest creation, the comment and the web marks: " + Json.Compact(kept));
+                string[] backups = Directory.GetDirectories(Path.Combine(dir, ".duplicates"));
+                Check(backups.Length == 1 && Directory.GetFiles(backups[0]).Length == 2, "both old files are kept in data\\.duplicates");
 
                 string legacyDir = TempDir();
                 WriteRecord(legacyDir, "PC-7.json", "{\"hostname\":\"PC-7\",\"serial\":\"Default string\"}");
@@ -857,6 +875,7 @@ namespace CompInfo
                     JsonObject saved = Files.ReadRecord(Path.Combine(data, "A.json"));
                     Check(ui.Conflicts == 1 && c.PushedUpdated == 1, "conflict resolved and sent");
                     Check(saved.Text("hostname") == "pc-a2" && saved.Text("comment") == "из облака", "merged record: " + Json.Compact(saved));
+                    Check(!ui.LastCloudNewer, "the local change after the cloud one is offered first");
                     Check(Json.Canonical(cloud.Devices["A"].Data) == Json.Canonical(saved), "cloud has the merged record");
 
                     // New record in the cloud, the other one deleted there.
@@ -893,12 +912,35 @@ namespace CompInfo
                     ui.DeletedAnswer = 0;
                     c = new CloudSync(root, client, ui).Run();
                     Check(ui.Deletions == 1 && !cloud.Devices["A"].Deleted && cloud.Devices["A"].Data.Text("hostname") == "pc-a3", "restored in the cloud");
+                    Check(!ui.LastDeletionNewer && ui.LastDetails.Contains("Локальное изменение новее"), "a local change after the deletion: restore offered first: " + ui.LastDetails);
 
-                    // Two files with one id are skipped until the user keeps one.
-                    Files.WriteJson(Path.Combine(data, "dup.json"), Rec("A", "copy", ""));
-                    puts = cloud.Puts;
+                    // Deleted in the cloud after the last change here: deleting the local copy is offered first.
+                    cloud.Put("A", null, true);
+                    Files.WriteJson(Path.Combine(data, "A.json"), Rec("A", "pc-a4", ""));
+                    File.SetLastWriteTimeUtc(Path.Combine(data, "A.json"), new DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc));
+                    ui.DeletedAnswer = 1;
                     c = new CloudSync(root, client, ui).Run();
-                    Check(cloud.Puts == puts && c.Errors.Exists(delegate (string e) { return e.StartsWith("Несколько файлов с идентификатором A"); }), "duplicates are reported, not sent");
+                    Check(ui.LastDeletionNewer && ui.LastDetails.Contains("Удаление в облаке новее") && c.Deleted == 1 && !File.Exists(Path.Combine(data, "A.json")),
+                        "the newer deletion offered first: " + ui.LastDetails);
+                    cloud.Put("A", Rec("A", "pc-a5", ""), false);
+                    c = new CloudSync(root, client, ui).Run();
+
+                    // Of two collections the later one is newer, whenever it reached the cloud.
+                    JsonObject early = Rec("A", "x", ""), late = Rec("A", "x", "");
+                    early["collectedAt"] = "2026-11-17T11:45:00+02:00"; late["collectedAt"] = "2026-11-20T23:10:00+02:00";
+                    Check(Recency.CloudNewer(early, Path.Combine(data, "A.json"), late, "2026-01-01T00:00:00Z") &&
+                        !Recency.CloudNewer(late, Path.Combine(data, "A.json"), early, "2030-01-01T00:00:00Z"), "the later collection is newer");
+                    Check(Recency.CloudNewer(Rec("A", "x", ""), Path.Combine(data, "A.json"), Rec("A", "y", ""), "2030-01-01T00:00:00Z") &&
+                        !Recency.CloudNewer(Rec("A", "x", ""), Path.Combine(data, "A.json"), Rec("A", "y", ""), null), "the same collection: the later change, the local one without dates");
+
+                    // Two files with one id are merged into one, then synchronized as usual.
+                    JsonObject copy = Rec("A", "copy", "");
+                    copy["collectedAt"] = "2030-01-01T00:00:00Z";
+                    Files.WriteJson(Path.Combine(data, "dup.json"), copy);
+                    c = new CloudSync(root, client, ui).Run();
+                    Check(c.Merged == 1 && c.Errors.Count == 0 && !File.Exists(Path.Combine(data, "dup.json")) &&
+                        Files.ReadRecord(Path.Combine(data, "A.json")).Text("hostname") == "copy" && cloud.Devices["A"].Data.Text("hostname") == "copy",
+                        "one record in two files merged and sent: " + string.Join("; ", c.Errors));
                 }
                 finally { Directory.Delete(root, true); }
             }

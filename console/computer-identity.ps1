@@ -1,4 +1,19 @@
-﻿# Read-only identity helpers. Loading this file does not collect or change anything.
+﻿# Identity helpers. Loading this file does not collect or change anything.
+# Merge-DuplicateRecordFiles: one record found in several files is kept in one.
+. (Join-Path $PSScriptRoot 'sync-merge.ps1')
+
+# The card of a record in the web interface: the site of the cloud API of cloud-config.json (Records.CardUrl).
+function Get-RecordCardUrl {
+    param([string]$DataPath, [string]$Id)
+    $site = 'https://comp-info.chagear.top'
+    try {
+        $config = Get-Content -LiteralPath (Join-Path (Split-Path -Parent $DataPath) 'cloud-config.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+        $site = ([Uri][string]$config.apiUrl).GetLeftPart([UriPartial]::Authority)
+    }
+    catch { }
+    return "$site/#/devices/$([Uri]::EscapeDataString($Id))"
+}
+
 function Test-UsableSerialNumber($Value) {
     if ([string]::IsNullOrWhiteSpace([string]$Value)) { return $false }
     $value = ([string]$Value).Trim()
@@ -36,7 +51,7 @@ function Get-InventoryIdentity {
         'WINDOWS-' + $installationId
     } }
     $newId = $id
-    $matches = @(if (Test-Path -LiteralPath $DataPath) {
+    $found = @(if (Test-Path -LiteralPath $DataPath) {
         foreach ($file in Get-ChildItem -LiteralPath $DataPath -Filter '*.json' -File) {
             try { $record = Get-Content -LiteralPath $file.FullName -Encoding UTF8 -Raw | ConvertFrom-Json }
             catch { throw "Не удалось проверить запись $($file.Name): $($_.Exception.Message)" }
@@ -53,16 +68,22 @@ function Get-InventoryIdentity {
             }
         }
     })
-    if ($matches.Count -gt 1) {
-        $list = ($matches | ForEach-Object { "$($_.Id) ($(if ($_.Record.hostname) { $_.Record.hostname } else { '?' }))" }) -join '; '
-        throw "Найдено несколько записей этого компьютера: $list. Удалите лишнюю в веб-интерфейсе (карточка записи → «Удалить»), затем синхронизируйте базу."
+    if ($found.Count -gt 1 -and @($found | Where-Object { $_.Id -cne $found[0].Id }).Count -eq 0) {
+        # One record in several files: one file is kept (Merge-DuplicateRecordFiles), the others go to data\.duplicates.
+        $kept = Merge-DuplicateRecordFiles $found[0].Id @($found | ForEach-Object { $_.Path })
+        $found = @([pscustomobject]@{ Id = $found[0].Id; Path = $kept; Record = (Read-SyncRecord $kept) })
+    }
+    if ($found.Count -gt 1) {
+        $list = ($found | ForEach-Object { "$($_.Id) ($(if ($_.Record.hostname) { $_.Record.hostname } else { '?' }))" }) -join '; '
+        $links = ($found | ForEach-Object { $_.Id } | Select-Object -Unique | ForEach-Object { Get-RecordCardUrl $DataPath $_ }) -join "`n"
+        throw "Найдено несколько записей этого компьютера: $list. Удалите лишнюю в веб-интерфейсе (карточка записи → «Удалить»), затем синхронизируйте базу.`n$links"
     }
     $path = $null
-    if ($matches.Count -eq 1) {
-        $id = $matches[0].Id
-        $path = $matches[0].Path
+    if ($found.Count -eq 1) {
+        $id = $found[0].Id
+        $path = $found[0].Path
         # Preserve the immutable cloud key, even if it originally came from a hostname.
-        if ($matches[0].Record.computerIdSource -in @('hostname','legacyId') -or $id -ne $newId) { $source = 'legacyId' }
+        if ($found[0].Record.computerIdSource -in @('hostname','legacyId') -or $id -ne $newId) { $source = 'legacyId' }
     }
     return [pscustomobject]@{ Id = $id; Source = $source; Path = $path; InstallationId = $installationId }
 }

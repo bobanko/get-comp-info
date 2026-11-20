@@ -228,6 +228,9 @@ namespace CompInfo.Wpf
                 collection = c;
                 before = c.Previous;
                 state.Clear();
+                if (c.Identity.Merged > 1)
+                    state.Show(Severity.Info, Glyph.Info, L.T("Запись этого компьютера лежала в нескольких файлах: оставлен один, с самым новым сбором. ") +
+                        L.T("Прежние файлы сохранены в data\\.duplicates."));
                 filling = true;
                 comment.Text = c.PreviousComment;
                 filling = false;
@@ -239,6 +242,16 @@ namespace CompInfo.Wpf
                     comment.IsEnabled = true;
                     comment.Focus();
                     comment.CaretIndex = comment.Text.Length;
+                }
+            }
+            catch (DuplicateRecordsException e)
+            {
+                // Two records of this computer in the cloud: only the web interface deletes the extra one.
+                state.Show(Severity.Error, Glyph.Warning, L.T("Не удалось собрать информацию: ") + e.Message);
+                foreach (string id in e.Ids)
+                {
+                    string url = Records.CardUrl(AppPaths.Root, id);
+                    state.AddLink(L.T("Открыть в веб-интерфейсе: ") + id, delegate { AboutContent.OpenUrl(url); });
                 }
             }
             catch (Exception e)

@@ -328,7 +328,7 @@ function Connect-Cloud {
 function New-CloudSyncCounts {
     return [pscustomobject]@{
         PushedNew = 0; PushedUpdated = 0; PushedSame = 0
-        ReceivedNew = 0; ReceivedUpdated = 0; Deleted = 0; Deferred = 0
+        ReceivedNew = 0; ReceivedUpdated = 0; Deleted = 0; Deferred = 0; Merged = 0
         Errors = New-Object 'System.Collections.Generic.List[string]'
         NewVersion = $null
         NetworkProfiles = $null
@@ -359,8 +359,18 @@ function Get-LocalCloudRecords {
         }
         $byId[$id] = @{ Id = $id; Path = $file.FullName; File = $file.Name; Record = $record; Hash = (Get-RecordHash $record) }
     }
-    foreach ($id in $duplicates.Keys) {
-        $Counts.Errors.Add("Несколько файлов с идентификатором ${id}: $($duplicates[$id] -join ', '). Оставьте один и повторите синхронизацию.")
+    # One record in several files: one file is kept (Merge-DuplicateRecordFiles), the record takes part as usual.
+    foreach ($id in @($duplicates.Keys)) {
+        try {
+            $kept = Merge-DuplicateRecordFiles $id @($duplicates[$id] | ForEach-Object { Join-Path $DataPath $_ })
+            $record = Read-SyncRecord $kept
+            $byId[$id] = @{ Id = $id; Path = $kept; File = (Split-Path -Leaf $kept); Record = $record; Hash = (Get-RecordHash $record) }
+            $Counts.Merged += $duplicates[$id].Count - 1
+            $duplicates.Remove($id)
+        }
+        catch {
+            $Counts.Errors.Add("Несколько файлов с идентификатором ${id}: $($duplicates[$id] -join ', '). Оставьте один и повторите синхронизацию. ($($_.Exception.Message))")
+        }
     }
     return [pscustomobject]@{ ById = $byId; Skipped = $duplicates }
 }
@@ -420,7 +430,8 @@ function Send-CloudRecord {
             409 {
                 $current = $response.Body.current
                 $title = "$(Get-CloudRecordTitle $Item) | в облаке изменил(а) $($current.updatedBy), $($current.updatedAt)"
-                $resolution = Resolve-SyncRecord $record $current.data $title
+                $cloudNewer = Test-CloudVersionNewer $record $Item.Path $current.data $current.updatedAt
+                $resolution = Resolve-SyncRecord $record $current.data $title -CloudNewer:$cloudNewer
                 switch ($resolution.Action) {
                     'defer' { $Context.Counts.Deferred++; return }
                     'cloud' {
@@ -441,7 +452,15 @@ function Send-CloudRecord {
                     "Запись удалена в облаке: $($current.updatedBy), $($current.updatedAt).",
                     'Локальная копия изменена после последней синхронизации.'
                 )
-                $choice = Select-SyncAction (Get-CloudRecordTitle $Item) $lines @('Восстановить запись в облаке', 'Удалить локальную запись', 'Отложить')
+                # The newer side is chosen at the start: the deletion or the local change.
+                $changed = Get-SyncFileTime $Item.Path
+                $deletionNewer = Test-CloudDeletionNewer $Item.Path $current.updatedAt
+                if ($changed -ne [datetime]::MinValue) { $lines += "Локальное изменение: $($changed.ToLocalTime().ToString('yyyy-MM-dd HH:mm'))." }
+                if ($changed -ne [datetime]::MinValue -and (Get-SyncMoment $current.updatedAt) -ne [datetime]::MinValue) {
+                    $lines += ''
+                    $lines += $(if ($deletionNewer) { 'Удаление в облаке новее локального изменения.' } else { 'Локальное изменение новее удаления в облаке.' })
+                }
+                $choice = Select-SyncAction (Get-CloudRecordTitle $Item) $lines @('Восстановить запись в облаке', 'Удалить локальную запись', 'Отложить') -Selected $(if ($deletionNewer) { 1 } else { 0 })
                 if ($choice -eq 0) { $restore = $true; continue }
                 if ($choice -eq 1) { Remove-LocalCloudRecord $Context $Item.Id; $Context.Counts.Deleted++; return }
                 $Context.Counts.Deferred++
@@ -574,6 +593,7 @@ function Show-CloudSyncSummary {
         @('Удалено по облаку', $Counts.Deleted),
         @('Конфликтов отложено', $Counts.Deferred)
     )
+    if ($Counts.Merged -gt 0) { $rows += , @('Лишних файлов записи убрано', $Counts.Merged) }
     foreach ($row in $rows) {
         $color = if ($row[0] -eq 'Конфликтов отложено' -and $row[1] -gt 0) { 'Yellow' } elseif ($row[1] -gt 0) { 'Cyan' } else { 'DarkGray' }
         Write-Host ('{0,-28} {1}' -f $row[0], $row[1]) -ForegroundColor $color

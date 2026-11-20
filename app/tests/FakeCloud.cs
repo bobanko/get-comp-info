@@ -198,16 +198,26 @@ namespace CompInfo
         public List<string> CloudFields = new List<string>();
         public int DeletedAnswer = 2;
         public int Conflicts, Deletions;
+        // What the synchronization offered first in the last question (Recency).
+        public bool LastCloudNewer, LastDeletionNewer;
+        public string LastDetails;
 
         public void Progress(string text) { }
 
-        public string ResolveConflict(string title, JsonObject local, JsonObject cloud, out JsonObject result)
+        public string ResolveConflict(string title, JsonObject local, JsonObject cloud, bool cloudNewer, out JsonObject result)
         {
             Conflicts++;
+            LastCloudNewer = cloudNewer;
             result = ConflictAnswer == "cloud" ? cloud : ConflictAnswer == "local" ? local : RecordDiff.Merge(local, cloud, CloudFields);
             return ConflictAnswer;
         }
 
-        public int DeletedInCloud(string title, string details) { Deletions++; return DeletedAnswer; }
+        public int DeletedInCloud(string title, string details, bool deletionNewer)
+        {
+            Deletions++;
+            LastDeletionNewer = deletionNewer;
+            LastDetails = details;
+            return DeletedAnswer;
+        }
     }
 }

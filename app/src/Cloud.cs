@@ -267,18 +267,49 @@ namespace CompInfo
     }
 
     // Decisions the synchronization needs from the user; called on the sync thread.
+    // The newer version is the one offered by default (user's choice, 21.11.2026; Recency).
     public interface ISyncQuestions
     {
         void Progress(string text);
         // Conflict with the cloud version: returns cloud | local | merged | defer and the record to keep.
-        string ResolveConflict(string title, JsonObject local, JsonObject cloud, out JsonObject result);
+        string ResolveConflict(string title, JsonObject local, JsonObject cloud, bool cloudNewer, out JsonObject result);
         // The record was deleted in the cloud but changed here: 0 restore, 1 delete locally, 2 defer.
-        int DeletedInCloud(string title, string details);
+        // deletionNewer: the deletion came after the last local change, so «delete locally» is offered first.
+        int DeletedInCloud(string title, string details, bool deletionNewer);
+    }
+
+    // Which version of a record is newer. Without the dates the local version wins, as before.
+    public static class Recency
+    {
+        public static DateTime FileTime(string path)
+        {
+            try { return File.Exists(path) ? File.GetLastWriteTimeUtc(path) : DateTime.MinValue; }
+            catch (Exception) { return DateTime.MinValue; }
+        }
+
+        // A conflict: the later collection (collectedAt); for the same collection the later change —
+        // of the local file or in the cloud (updatedAt of the cloud version). A late synchronization of an old
+        // collection elsewhere does not make the cloud version newer.
+        public static bool CloudNewer(JsonObject local, string localPath, JsonObject cloud, string cloudChangedAt)
+        {
+            DateTime a = Fmt.Moment(local == null ? null : local.Text("collectedAt"));
+            DateTime b = Fmt.Moment(cloud == null ? null : cloud.Text("collectedAt"));
+            if (a != DateTime.MinValue && b != DateTime.MinValue && a != b) return b > a;
+            return Fmt.Moment(cloudChangedAt) > FileTime(localPath);
+        }
+
+        // A record deleted in the cloud but changed here: the deletion is newer than the last change of the local file.
+        public static bool DeletionNewer(string localPath, string deletedAt)
+        {
+            return Fmt.Moment(deletedAt) > FileTime(localPath);
+        }
     }
 
     public class SyncCounts
     {
         public int PushedNew, PushedUpdated, PushedSame, ReceivedNew, ReceivedUpdated, Deleted, Deferred;
+        // Extra files of a record that were merged into one (Records.MergeDuplicates).
+        public int Merged;
         public List<string> Errors = new List<string>();
         public string NetworkProfiles;
         public string NewVersion;
@@ -352,8 +383,8 @@ namespace CompInfo
             return Counts;
         }
 
-        // Reads data\*.json and drops deprecated fields from the files. Records sharing one id are skipped
-        // entirely until the user keeps only one of the files.
+        // Reads data\*.json and drops deprecated fields from the files. Files sharing one id are merged into one
+        // (Records.MergeDuplicates); when that fails, the record is skipped until the user keeps only one of the files.
         void ReadLocal()
         {
             Directory.CreateDirectory(dataPath);
@@ -386,8 +417,26 @@ namespace CompInfo
                 item.Id = id; item.Path = path; item.File = file; item.Record = record; item.Hash = Json.Hash(record);
                 local[id] = item;
             }
-            foreach (KeyValuePair<string, List<string>> p in skipped)
-                Counts.Errors.Add(L.T("Несколько файлов с идентификатором ") + p.Key + ": " + string.Join(", ", p.Value) + L.T(". Оставьте один и повторите синхронизацию."));
+            // One record in several files: one file is kept (Records.MergeDuplicates), the record takes part as usual.
+            foreach (string id in new List<string>(skipped.Keys))
+            {
+                List<string> files2 = skipped[id];
+                try
+                {
+                    string kept = Records.MergeDuplicates(id, files2.ConvertAll(f => Path.Combine(dataPath, f)));
+                    JsonObject record = Files.ReadRecord(kept);
+                    Item item = new Item();
+                    item.Id = id; item.Path = kept; item.File = Path.GetFileName(kept); item.Record = record; item.Hash = Json.Hash(record);
+                    local[id] = item;
+                    skipped.Remove(id);
+                    Counts.Merged += files2.Count - 1;
+                }
+                catch (Exception e)
+                {
+                    Counts.Errors.Add(L.T("Несколько файлов с идентификатором ") + id + ": " + string.Join(", ", files2) + L.T(". Оставьте один и повторите синхронизацию.") +
+                        " (" + e.Message + ")");
+                }
+            }
         }
 
         void SetLocal(string id, string path, JsonObject record, int revision)
@@ -456,7 +505,8 @@ namespace CompInfo
                     JsonObject current = (JsonObject)o["current"];
                     string title = Title(item) + L.T(" | в облаке изменил(а) ") + current.Text("updatedBy") + ", " + Fmt.Date(current.Text("updatedAt"));
                     JsonObject result;
-                    string action = ui.ResolveConflict(title, record, (JsonObject)current["data"], out result);
+                    bool cloudNewer = Recency.CloudNewer(record, item.Path, (JsonObject)current["data"], current.Text("updatedAt"));
+                    string action = ui.ResolveConflict(title, record, (JsonObject)current["data"], cloudNewer, out result);
                     if (action == "defer") { Counts.Deferred++; return; }
                     if (action == "cloud")
                     {
@@ -472,8 +522,14 @@ namespace CompInfo
                 if (r.Status == 410)
                 {
                     JsonObject current = o["current"] as JsonObject ?? new JsonObject();
-                    int choice = ui.DeletedInCloud(Title(item), L.T("Запись удалена в облаке: ") + current.Text("updatedBy") + ", " + Fmt.Date(current.Text("updatedAt")) +
-                        L.T(".\nЛокальная копия изменена после последней синхронизации."));
+                    DateTime changed = Recency.FileTime(item.Path);
+                    string details = L.T("Запись удалена в облаке: ") + current.Text("updatedBy") + ", " + Fmt.Date(current.Text("updatedAt")) +
+                        L.T(".\nЛокальная копия изменена после последней синхронизации.");
+                    if (changed != DateTime.MinValue) details += "\n" + L.T("Локальное изменение: ") + Fmt.Date(changed.ToString("o"));
+                    bool deletionNewer = Recency.DeletionNewer(item.Path, current.Text("updatedAt"));
+                    if (changed != DateTime.MinValue && Fmt.Moment(current.Text("updatedAt")) != DateTime.MinValue)
+                        details += "\n\n" + (deletionNewer ? L.T("Удаление в облаке новее локального изменения.") : L.T("Локальное изменение новее удаления в облаке."));
+                    int choice = ui.DeletedInCloud(Title(item), details, deletionNewer);
                     if (choice == 0) { restore = true; continue; }
                     if (choice == 1) { RemoveLocal(item.Id); Counts.Deleted++; return; }
                     Counts.Deferred++;

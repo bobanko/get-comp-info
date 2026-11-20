@@ -23,7 +23,8 @@ function Assert-Throws([scriptblock]$Action, [string]$Pattern, [string]$Message)
 function Write-Host { }
 function Clear-Host { }
 function Select-SyncAction {
-    param($Title, $Lines, $Items, [switch]$AllowBack, $Section)
+    param($Title, $Lines, $Items, [switch]$AllowBack, $Section, [int]$Selected = 0)
+    $script:lastSelected = $Selected
     $script:lastPrompt = $Title
     if ($script:choices.Count -eq 0) { throw "Unexpected prompt: $Title" }
     return $script:choices.Dequeue()

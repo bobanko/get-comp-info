@@ -8,6 +8,7 @@ namespace CompInfo.Wpf
     public class StatusLine : Border
     {
         readonly TextBlock icon, text;
+        int links;
 
         public StatusLine()
         {
@@ -43,6 +44,16 @@ namespace CompInfo.Wpf
 
         public void Clear() { Visibility = Visibility.Collapsed; }
 
+        // A link under the message, after the ones before it (the web cards of records the program cannot fix itself).
+        public void AddLink(string label, System.Action click)
+        {
+            var link = new System.Windows.Documents.Hyperlink(new System.Windows.Documents.Run(label));
+            link.SetResourceReference(System.Windows.Documents.TextElement.ForegroundProperty, "Accent");
+            link.Click += delegate { click(); };
+            text.Inlines.Add(links++ == 0 ? (System.Windows.Documents.Inline)new System.Windows.Documents.LineBreak() : new System.Windows.Documents.Run("  ·  "));
+            text.Inlines.Add(link);
+        }
+
         public string Text { get { return text.Text; } }
 
         void Fill(string panel, string glyph, string message, string iconKey, string textKey)
@@ -64,6 +75,7 @@ namespace CompInfo.Wpf
             icon.SetResourceReference(TextBlock.ForegroundProperty, iconKey);
             text.SetResourceReference(TextBlock.ForegroundProperty, textKey);
             text.Text = message ?? "";
+            links = 0;
             Visibility = string.IsNullOrEmpty(message) ? Visibility.Collapsed : Visibility.Visible;
         }
     }

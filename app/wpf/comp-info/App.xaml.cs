@@ -89,7 +89,9 @@ namespace CompInfo.Wpf
         {
             JsonObject local = Json.ParseObject("{\"computerId\":\"A1\",\"hostname\":\"FR-042-PC\",\"comment\":\"кабинет 12\",\"ip\":\"10.1.1.5\",\"collectedAt\":\"2026-11-04T10:00:00+02:00\"}");
             JsonObject cloud = Json.ParseObject("{\"computerId\":\"A1\",\"hostname\":\"FR-042-PC\",\"comment\":\"кабинет 14, Петров\",\"ip\":\"10.1.1.5\",\"collectedAt\":\"2026-11-02T09:00:00+02:00\",\"model\":\"82YU\"}");
-            SaveWindow(new ConflictWindow("FR-042-PC — A1.json | " + L.T("в облаке изменил(а)") + " admin@example, 2026-11-04 12:00", local, cloud), stem + "-conflict.png");
+            string title = "FR-042-PC — A1.json | " + L.T("в облаке изменил(а)") + " admin@example, 2026-11-04 12:00";
+            SaveWindow(new ConflictWindow(title, local, cloud, Recency.CloudNewer(local, null, cloud, null)), stem + "-conflict.png");
+            SaveWindow(new ConflictWindow(title, cloud, local, Recency.CloudNewer(cloud, null, local, null)), stem + "-conflict-cloud.png");
             SaveWindow(new KeyWindow("https://example/api/client", false, L.T("Ключ из cloud-key.txt не подошёл: ") + "revoked"), stem + "-key.png");
             SaveWindow(new DialogWindow(owner, L.T("Запись удалена в облаке"), "PC — A1.json\n\n" + L.T("Запись удалена в облаке: ") + "admin, 2026-11-04 12:00.",
                 Severity.Warning, new[] { L.T("Восстановить в облаке"), L.T("Удалить локальную запись"), L.T("Отложить") }), stem + "-ask.png");

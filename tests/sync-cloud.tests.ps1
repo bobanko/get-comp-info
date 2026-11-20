@@ -13,10 +13,13 @@ function Assert-True([bool]$Value, [string]$Message) {
 function Write-Host { }
 function Clear-Host { }
 function Select-SyncAction {
-    param($Title, $Lines, $Items, [switch]$AllowBack, $Section)
+    param($Title, $Lines, $Items, [switch]$AllowBack, $Section, [int]$Selected = 0)
+    # What was offered first, by the first answer of the question (the newer version, Test-CloudVersionNewer).
+    $script:offered[$Items[0]] = $Selected
     if ($script:choices.Count -eq 0) { throw "Unexpected prompt: $Title" }
     return $script:choices.Dequeue()
 }
+$script:offered = @{}
 function Set-Choices([int[]]$Values) {
     $script:choices = New-Object 'System.Collections.Generic.Queue[int]'
     foreach ($value in $Values) { $script:choices.Enqueue($value) }
@@ -245,6 +248,7 @@ try {
     [void](Sync $flash @(2, 0))
     Assert-True ($script:server.Devices['UUID-1'].revision -eq $revision + 1) 'Local version must be sent as a new revision'
     Assert-True ((($script:server.Devices['UUID-1'].data | ConvertFrom-Json).comment) -eq 'final') 'Local version must win'
+    Assert-True ($script:offered['Выбрать значения по полям'] -eq 2) 'The local change after the cloud one is offered first'
 
     # ---------- Deletions in the cloud ----------
     Write-ServerDevice 'SERIAL2' ($script:server.Devices['SERIAL2'].data | ConvertFrom-Json) $true 'admin@example.com'
@@ -257,22 +261,35 @@ try {
     $counts = Sync $pc
     Assert-True ($counts.ReceivedNew -eq 1 -and (Test-Path (Join-Path $pc 'data\SERIAL2.json'))) 'Restored record must come back to the computer'
 
+    # ---------- Deleted in the cloud after the last local change: deleting the local copy is offered first ----------
+    Write-Record $flash 'DEL-9.json' '{"computerId":"DEL-9","hostname":"PC-9"}'
+    [void](Sync $flash)
+    Write-ServerDevice 'DEL-9' ($script:server.Devices['DEL-9'].data | ConvertFrom-Json) $true 'admin@example.com'
+    Write-Record $flash 'DEL-9.json' '{"computerId":"DEL-9","hostname":"PC-9 changed"}'
+    [IO.File]::SetLastWriteTimeUtc((Join-Path $flash 'data\DEL-9.json'), [datetime]'2026-01-01')
+    $counts = Sync $flash @(1)
+    Assert-True ($script:offered['Восстановить запись в облаке'] -eq 1 -and $counts.Deleted -eq 1 -and -not (Test-Path (Join-Path $flash 'data\DEL-9.json'))) 'The newer deletion is offered first'
+
     # ---------- A locally deleted file comes back ----------
     Remove-Item -LiteralPath (Join-Path $pc 'data\UUID-1.json')
     $counts = Sync $pc
     Assert-True (Test-Path (Join-Path $pc 'data\UUID-1.json')) 'Local deletion must not delete in the cloud'
     Assert-True (-not $script:server.Devices['UUID-1'].deleted) 'Cloud record must stay'
 
-    # ---------- Broken and duplicate files do not stop the others ----------
+    # ---------- A broken file does not stop the others; two files of one record become one ----------
     [IO.File]::WriteAllText((Join-Path $pc 'data\broken.json'), '{broken')
-    Write-Record $pc 'copy-of-uuid.json' '{"computerId":"UUID-1","hostname":"PC-1 copy","addedToExternalDatabase":true}'
+    Write-Record $pc 'copy-of-uuid.json' '{"computerId":"UUID-1","hostname":"PC-1 copy","collectedAt":"2030-01-01T00:00:00Z","addedToExternalDatabase":true}'
     Write-Record $pc 'NEW-3.json' '{"computerId":"NEW-3","hostname":"PC-3"}'
     $counts = Sync $pc
     Assert-True ($counts.PushedNew -eq 1) 'Valid record must still be uploaded'
-    Assert-True ($counts.Errors.Count -eq 2) "Expected errors for the broken and duplicate files: $($counts.Errors -join '; ')"
-    Assert-True (@($counts.Errors | Where-Object { $_ -like '*UUID-1*' }).Count -eq 1) 'Duplicate id must be reported'
-    Assert-True ($null -eq (Read-Record $pc 'copy-of-uuid.json').PSObject.Properties['addedToExternalDatabase']) 'Deprecated fields must be removed even from records that are not sent'
-    Remove-Item -LiteralPath (Join-Path $pc 'data\broken.json'), (Join-Path $pc 'data\copy-of-uuid.json')
+    Assert-True ($counts.Errors.Count -eq 1 -and $counts.Errors[0] -like 'broken.json*') "Expected only the broken file: $($counts.Errors -join '; ')"
+    Assert-True ($counts.Merged -eq 1 -and -not (Test-Path (Join-Path $pc 'data\copy-of-uuid.json'))) 'Two files of one record must be merged'
+    $kept = Read-Record $pc 'UUID-1.json'
+    Assert-True ($kept.hostname -eq 'PC-1 copy' -and $null -eq $kept.PSObject.Properties['addedToExternalDatabase']) 'The newest collection is kept in the file of the id'
+    Assert-True (($script:server.Devices['UUID-1'].data | ConvertFrom-Json).hostname -eq 'PC-1 copy') 'The merged record is sent'
+    $backups = @(Get-ChildItem (Join-Path $pc 'data\.duplicates') -Directory)
+    Assert-True ($backups.Count -eq 1 -and @(Get-ChildItem $backups[0].FullName -File).Count -eq 2) 'Both old files are kept in data\.duplicates'
+    Remove-Item -LiteralPath (Join-Path $pc 'data\broken.json')
 
     # ---------- Ids that .NET would otherwise change in the URL ----------
     $odd = New-ProgramCopy 'odd'

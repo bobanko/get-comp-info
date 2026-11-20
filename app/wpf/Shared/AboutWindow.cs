@@ -150,8 +150,13 @@ namespace CompInfo.Wpf
         // Opens in the default browser; if that fails (no browser, locked down PC), the address is copied.
         public static void OpenSite(string site)
         {
-            try { Process.Start(new ProcessStartInfo("https://" + site) { UseShellExecute = true }); }
-            catch (Exception) { ClipText.Set("https://" + site); }
+            OpenUrl("https://" + site);
+        }
+
+        public static void OpenUrl(string url)
+        {
+            try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
+            catch (Exception) { ClipText.Set(url); }
         }
     }
 

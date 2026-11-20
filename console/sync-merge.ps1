@@ -60,6 +60,80 @@ function Get-SyncDifferences {
     }
 }
 
+# A date of a record or of the cloud in UTC, to compare which is newer; [datetime]::MinValue when there is none.
+function Get-SyncMoment {
+    param($Value)
+    if ($Value -is [datetime]) { return $Value.ToUniversalTime() }
+    $parsed = [DateTimeOffset]::MinValue
+    if ([DateTimeOffset]::TryParse([string]$Value, [Globalization.CultureInfo]::InvariantCulture,
+        [Globalization.DateTimeStyles]::AssumeUniversal, [ref]$parsed)) { return $parsed.UtcDateTime }
+    return [datetime]::MinValue
+}
+
+function Get-SyncFileTime {
+    param([string]$Path)
+    if ($Path -and (Test-Path -LiteralPath $Path -PathType Leaf)) { return [IO.File]::GetLastWriteTimeUtc($Path) }
+    return [datetime]::MinValue
+}
+
+# Which version is newer, offered by default (Recency in Cloud.cs, user's choice 21.11.2026): the later collection;
+# for the same collection the later change — of the local file or in the cloud. Without dates the local one wins.
+function Test-CloudVersionNewer {
+    param($Local, [string]$LocalPath, $Cloud, $CloudChangedAt)
+    $a = Get-SyncMoment $Local.collectedAt
+    $b = Get-SyncMoment $Cloud.collectedAt
+    if ($a -ne [datetime]::MinValue -and $b -ne [datetime]::MinValue -and $a -ne $b) { return $b -gt $a }
+    return (Get-SyncMoment $CloudChangedAt) -gt (Get-SyncFileTime $LocalPath)
+}
+
+# A record deleted in the cloud but changed here: the deletion is newer than the last change of the local file.
+function Test-CloudDeletionNewer {
+    param([string]$LocalPath, $DeletedAt)
+    return (Get-SyncMoment $DeletedAt) -gt (Get-SyncFileTime $LocalPath)
+}
+
+function Set-SyncRecordField {
+    param($Record, [string]$Name, $Value)
+    $Record.PSObject.Properties.Remove($Name)
+    $Record | Add-Member -NotePropertyName $Name -NotePropertyValue $Value
+}
+
+# Several files of one record (Records.MergeDuplicates in Store.cs): one file stays — the file named after the id when
+# it is among them — with the newest collection, the earliest createdAt and the comment and web marks of the newest
+# version that has them. All of them are copied to data\.duplicates\<time>\ first. Returns the kept path.
+function Merge-DuplicateRecordFiles {
+    param([string]$Id, [string[]]$Paths)
+    $items = @(foreach ($path in $Paths) {
+        $record = Read-SyncRecord $path
+        [pscustomobject]@{ Path = $path; Record = $record; Collected = (Get-SyncMoment $record.collectedAt); Changed = (Get-SyncFileTime $path) }
+    })
+    $ordered = @($items | Sort-Object -Property @{ Expression = 'Collected'; Descending = $true }, @{ Expression = 'Changed'; Descending = $true })
+    $result = $ordered[0].Record
+    $first = [datetime]::MaxValue
+    $created = $null
+    foreach ($item in $items) {
+        $date = Get-SyncMoment $item.Record.createdAt
+        if ($date -ne [datetime]::MinValue -and $date -lt $first) { $first = $date; $created = $item.Record.createdAt }
+    }
+    if ($null -ne $created) { Set-SyncRecordField $result 'createdAt' $created }
+    foreach ($name in @('comment', 'inventoried')) {
+        if ([string]::IsNullOrEmpty([string]$result.$name)) {
+            foreach ($item in $ordered) {
+                if (-not [string]::IsNullOrEmpty([string]$item.Record.$name)) { Set-SyncRecordField $result $name $item.Record.$name; break }
+            }
+        }
+    }
+    $keep = $ordered[0].Path
+    $named = ($Id -replace '[<>:"/\\|?*\x00-\x1f]', '_') + '.json'
+    foreach ($path in $Paths) { if ((Split-Path -Leaf $path) -eq $named) { $keep = $path } }
+    $backup = Join-Path (Join-Path (Split-Path -Parent $keep) '.duplicates') (Get-Date -Format 'yyyyMMdd-HHmmss')
+    New-Item -ItemType Directory -Path $backup -Force | Out-Null
+    foreach ($path in $Paths) { Copy-Item -LiteralPath $path -Destination (Join-Path $backup (Split-Path -Leaf $path)) -Force }
+    Write-SyncJson $keep $result
+    foreach ($path in $Paths) { if ($path -ne $keep) { Remove-Item -LiteralPath $path -Force } }
+    return $keep
+}
+
 function Merge-SyncFields {
     param($Local, $Incoming, [string[]]$IncomingFields)
     $result = $Local | ConvertTo-Json -Depth 100 | ConvertFrom-Json
@@ -234,8 +308,10 @@ function Split-SyncTableCell {
 
 # Arrow-key menu. Returns the selected index, or -1 for Esc when -AllowBack is set.
 function Select-SyncAction {
-    param([string]$Title, [object[]]$Lines, [string[]]$Items, [switch]$AllowBack, [string]$Section = 'Синхронизация с облаком — разбор изменений')
-    $selected = 0
+    param([string]$Title, [object[]]$Lines, [string[]]$Items, [switch]$AllowBack, [string]$Section = 'Синхронизация с облаком — разбор изменений',
+        [int]$Selected = 0)
+    # The item chosen at the start (the newer version), Enter takes it.
+    $selected = [Math]::Max(0, [Math]::Min($Selected, $Items.Count - 1))
     while ($true) {
         Clear-Host
         Write-ToolboxHeader -Section $Section
@@ -269,12 +345,14 @@ function Select-SyncAction {
 
 # Conflict between the local record and the cloud version.
 # Returns @{ Action = 'cloud' | 'local' | 'merged' | 'defer'; Record = <result or $null> }.
+# -CloudNewer: the cloud version is newer (Test-CloudVersionNewer); the newer version is chosen at the start.
 function Resolve-SyncRecord {
-    param($Local, $Cloud, [string]$Title)
+    param($Local, $Cloud, [string]$Title, [switch]$CloudNewer)
     $fields = @(Get-SyncDifferences $Local $Cloud)
-    $lines = @(Get-SyncComparisonLines $Local $Cloud)
+    $newer = if ($CloudNewer) { 'Новее версия из облака — она выбрана сначала.' } else { 'Новее локальная версия — она выбрана сначала.' }
+    $lines = @(Get-SyncComparisonLines $Local $Cloud) + @('', $newer)
     while ($true) {
-        $action = Select-SyncAction $Title $lines @('Выбрать значения по полям', 'Оставить версию из облака', 'Отправить локальную версию', 'Отложить')
+        $action = Select-SyncAction $Title $lines @('Выбрать значения по полям', 'Оставить версию из облака', 'Отправить локальную версию', 'Отложить') -Selected $(if ($CloudNewer) { 1 } else { 2 })
         if ($action -eq 3) { return @{ Action = 'defer'; Record = $null } }
         $result = $null
         $kind = $null
@@ -286,7 +364,7 @@ function Resolve-SyncRecord {
             while ($index -lt $fields.Count) {
                 $name = $fields[$index]
                 $detail = @(Get-SyncComparisonLines $Local $Cloud -Fields @($name))
-                $pick = Select-SyncAction "$Title | Поле $($index + 1) из $($fields.Count): $(Get-SyncFieldLabel $name)" $detail @('Оставить локальное значение', 'Взять значение из облака') -AllowBack
+                $pick = Select-SyncAction "$Title | Поле $($index + 1) из $($fields.Count): $(Get-SyncFieldLabel $name)" $detail @('Оставить локальное значение', 'Взять значение из облака') -AllowBack -Selected $(if ($CloudNewer) { 1 } else { 0 })
                 if ($pick -eq -1) {
                     if ($index -eq 0) { break }
                     $index--

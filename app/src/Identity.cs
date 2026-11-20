@@ -5,6 +5,13 @@ using Microsoft.Win32;
 
 namespace CompInfo
 {
+    // Several records of this computer with different ids: only the web interface can delete the extra ones in the cloud.
+    public class DuplicateRecordsException : IOException
+    {
+        public readonly List<string> Ids;
+        public DuplicateRecordsException(string message, List<string> ids) : base(message) { Ids = ids; }
+    }
+
     // Which record in data\ belongs to this computer (computer-identity.ps1).
     public static class Identity
     {
@@ -55,6 +62,7 @@ namespace CompInfo
             public string Source;
             public string Path;        // existing record of this computer, or null
             public string InstallationId;
+            public int Merged;         // files of this record that were merged into one (Records.MergeDuplicates)
         }
 
         static bool Same(object a, string b)
@@ -101,18 +109,31 @@ namespace CompInfo
                     }
                 }
             }
+            int merged = 0;
+            if (matches.Count > 1 && matches.TrueForAll(m => m.Id == matches[0].Id))
+            {
+                // One record in several files: the program keeps one (Records.MergeDuplicates).
+                string kept = Records.MergeDuplicates(matches[0].Id, matches.ConvertAll(m => m.Path));
+                merged = matches.Count;
+                Match m0 = new Match();
+                m0.Id = matches[0].Id; m0.Path = kept; m0.Record = Files.ReadRecord(kept);
+                matches = new List<Match> { m0 };
+            }
             if (matches.Count > 1)
             {
                 List<string> list = new List<string>();
+                List<string> ids = new List<string>();
                 foreach (Match m in matches)
                 {
                     string date = Fmt.Date(m.Record.Text("collectedAt"));
                     list.Add(m.Id + " (" + (m.Record.Text("hostname") ?? "?") + (date == "" ? "" : ", " + date) + ")");
+                    if (!ids.Contains(m.Id)) ids.Add(m.Id);
                 }
-                throw new InvalidDataException(L.T("Найдено несколько записей этого компьютера: ") + string.Join("; ", list) +
-                    L.T(". Удалите лишнюю в веб-интерфейсе (карточка записи → «Удалить»), затем синхронизируйте базу."));
+                throw new DuplicateRecordsException(L.T("Найдено несколько записей этого компьютера: ") + string.Join("; ", list) +
+                    L.T(". Удалите лишнюю в веб-интерфейсе (карточка записи → «Удалить»), затем синхронизируйте базу."), ids);
             }
             Result result = new Result();
+            result.Merged = merged;
             result.InstallationId = installationId;
             if (matches.Count == 1)
             {

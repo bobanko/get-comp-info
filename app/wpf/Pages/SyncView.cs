@@ -133,6 +133,7 @@ namespace CompInfo.Wpf
             AddCount(L.T("Обновлено из облака"), c.ReceivedUpdated, false);
             AddCount(L.T("Удалено по облаку"), c.Deleted, false);
             AddCount(L.T("Конфликтов отложено"), c.Deferred, true);
+            if (c.Merged > 0) AddCount(L.T("Лишних файлов одной записи убрано"), c.Merged, false);
             string profiles = c.NetworkProfiles == "updated" ? L.T("обновлены") : c.NetworkProfiles == "unchanged" ? L.T("без изменений") :
                 c.NetworkProfiles == "missing" ? L.T("в облаке не заданы") : L.T("не загружены");
             AddLine(L.T("Профили сети"), profiles, "Text", c.NetworkProfiles == "updated" ? "Accent" : "Muted");
@@ -189,12 +190,12 @@ namespace CompInfo.Wpf
 
         public void Progress(string text) { owner.Dispatcher.BeginInvoke(new Action(() => progress(text))); }
 
-        public string ResolveConflict(string title, JsonObject local, JsonObject cloud, out JsonObject result)
+        public string ResolveConflict(string title, JsonObject local, JsonObject cloud, bool cloudNewer, out JsonObject result)
         {
             JsonObject chosen = null;
             string action = owner.Dispatcher.Invoke(() =>
             {
-                var w = new ConflictWindow(title, local, cloud) { Owner = owner };
+                var w = new ConflictWindow(title, local, cloud, cloudNewer) { Owner = owner };
                 w.ShowDialog();
                 chosen = w.Result;
                 return w.Action;
@@ -203,14 +204,16 @@ namespace CompInfo.Wpf
             return action;
         }
 
-        // 0 restore in the cloud, 1 delete the local record, 2 defer
-        public int DeletedInCloud(string title, string details)
+        // 0 restore in the cloud, 1 delete the local record, 2 defer. The newer side is the main button (Enter).
+        public int DeletedInCloud(string title, string details, bool deletionNewer)
         {
             return owner.Dispatcher.Invoke(() =>
             {
+                string restore = L.T("Восстановить в облаке"), delete = L.T("Удалить локальную запись");
                 int a = Dialog.Choose(owner, L.T("Запись удалена в облаке"), title + "\n\n" + details, Severity.Warning,
-                    L.T("Восстановить в облаке"), L.T("Удалить локальную запись"), L.T("Отложить"));
-                return a < 0 ? 2 : a;
+                    deletionNewer ? delete : restore, deletionNewer ? restore : delete, L.T("Отложить"));
+                if (a < 0 || a == 2) return 2;
+                return deletionNewer ? 1 - a : a;
             });
         }
     }
@@ -226,12 +229,17 @@ namespace CompInfo.Wpf
         public string Action = "defer";
         public JsonObject Result;
 
-        public ConflictWindow(string title, JsonObject local, JsonObject cloud)
+        readonly bool cloudNewer;
+
+        // cloudNewer: the cloud version is newer (Recency), so its values are chosen at the start.
+        public ConflictWindow(string title, JsonObject local, JsonObject cloud, bool cloudNewer)
         {
             this.local = local;
             this.cloud = cloud;
+            this.cloudNewer = cloudNewer;
             fields = RecordDiff.AllFields(local, cloud);
             different = RecordDiff.Differences(local, cloud);
+            if (cloudNewer) foreach (string name in different) fromCloud.Add(name);
             Title = L.T("Конфликт с облаком");
             Width = 820; Height = 560;
             MinWidth = 600; MinHeight = 400;
@@ -249,7 +257,9 @@ namespace CompInfo.Wpf
             DockPanel.SetDock(head, Dock.Top);
             root.Children.Add(head);
             var hint = new TextBlock { Text = Brand.Keep(L.T("Запись изменили и здесь, и в облаке. Различия выделены. Щёлкните значение, которое нужно оставить, ") +
-                L.T("или выберите версию целиком. Для разных дат более новая — зелёная.")), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 12) };
+                L.T("или выберите версию целиком. Для разных дат более новая — зелёная.") + " " +
+                (cloudNewer ? L.T("Сначала выбрана версия из облака: она новее.") : L.T("Сначала выбрана локальная версия: она новее."))),
+                TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 12) };
             hint.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
             DockPanel.SetDock(hint, Dock.Top);
             root.Children.Add(hint);
@@ -276,7 +286,7 @@ namespace CompInfo.Wpf
         {
             var b = new Button { Margin = new Thickness(0, 0, 8, 0) };
             if (glyph != null) Glyph.Label(b, glyph, text); else b.Content = text;
-            if (main) b.SetResourceReference(StyleProperty, "AccentButton");
+            if (main) { b.SetResourceReference(StyleProperty, "AccentButton"); b.IsDefault = true; }
             b.Click += delegate { click(); };
             panel.Children.Add(b);
         }
@@ -300,7 +310,8 @@ namespace CompInfo.Wpf
         {
             table.Children.Clear();
             table.RowDefinitions.Clear();
-            AddRow(new[] { L.T("Поле"), L.T("Локально (эта копия)"), L.T("В облаке") }, null, true);
+            string newer = L.T(" · новее");
+            AddRow(new[] { L.T("Поле"), L.T("Локально (эта копия)") + (cloudNewer ? "" : newer), L.T("В облаке") + (cloudNewer ? newer : "") }, null, true);
             foreach (string name in fields) AddRow(new[] { RecordDiff.Label(name), RecordDiff.ValueText(local, name), RecordDiff.ValueText(cloud, name) }, name, false);
         }
 
