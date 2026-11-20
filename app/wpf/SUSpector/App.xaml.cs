@@ -38,6 +38,7 @@ namespace CompInfo.Wpf
                 page, true, find, update)
         {
             Width = 1040; Height = 660;
+            SetBottomLeft(page.TakeStatus());
             MinWidth = 780; MinHeight = 520;
             About = AboutDialog;
             CanLeave = page.CanLeave;
@@ -53,6 +54,7 @@ namespace CompInfo.Wpf
             KeyDown += (s, e) =>
             {
                 if (e.Key == Key.F5) { e.Handled = true; page.RunAgain(); }
+                else if (e.Key == Key.Escape) { e.Handled = true; page.Stop(); }
                 else if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control) { e.Handled = true; OpenSearch(); }
             };
             Loaded += delegate { if (StandaloneStart.Demo) page.Demo(); else page.Opened(); };

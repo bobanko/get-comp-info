@@ -22,6 +22,7 @@ namespace CompInfo.Wpf
             SetResourceReference(ForegroundProperty, "Text");
             page.Margin = new Thickness(18, 14, 18, 14);
             Content = page;
+            WpfTheme.DarkTitle(this);   // a dark title bar in the dark theme, as the main window
 
             Loaded += delegate { page.Opened(); };
             // Esc stops a running search (the page), otherwise closes the window.

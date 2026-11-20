@@ -9,6 +9,7 @@ using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using Microsoft.Win32;
 
 namespace CompInfo
@@ -181,9 +182,29 @@ namespace CompInfo
 
         public static List<SecurityCheck> Run(Action<SecurityCheck> started, Action<SecurityCheck> completed, Action<SecurityProgress> detailedProgress, bool scanDocuments)
         {
+            return Run(started, completed, detailedProgress, scanDocuments, CancellationToken.None);
+        }
+
+        // The check of the running thread can be stopped (SUSpector «Остановить»): between the checks, at every folder and
+        // every document of the document search. Stopping throws OperationCanceledException.
+        [ThreadStatic] static CancellationToken stop;
+
+        static void StopIfAsked() { stop.ThrowIfCancellationRequested(); }
+
+        public static List<SecurityCheck> Run(Action<SecurityCheck> started, Action<SecurityCheck> completed, Action<SecurityProgress> detailedProgress,
+            bool scanDocuments, CancellationToken cancel)
+        {
+            stop = cancel;
+            try { return RunSteps(started, completed, detailedProgress, scanDocuments); }
+            finally { stop = CancellationToken.None; }
+        }
+
+        static List<SecurityCheck> RunSteps(Action<SecurityCheck> started, Action<SecurityCheck> completed, Action<SecurityProgress> detailedProgress, bool scanDocuments)
+        {
             List<SecurityCheck> result = new List<SecurityCheck>();
             foreach (AuditStep step in Steps())
             {
+                StopIfAsked();
                 if (!scanDocuments && step.Key == "documents")
                 {
                     SecurityCheck skipped = Skipped(step);
@@ -208,6 +229,7 @@ namespace CompInfo
                 check.Key = step.Key; check.Title = step.Title;
                 return check;
             }
+            catch (OperationCanceledException) { throw; }
             catch (Exception e)
             {
                 return new SecurityCheck(step.Key, step.Title, SecurityLevel.Error, L.T("Не удалось выполнить проверку"), e.Message);
@@ -546,6 +568,7 @@ namespace CompInfo
             if (progress != null) progress(new SecurityProgress(false, scan.Files, 0, scan.Files, 0));
             for (int i = 0; i < candidates.Count; i++)
             {
+                StopIfAsked();
                 InspectDocument(candidates[i], scan);
                 if (progress != null && ((i + 1) % 10 == 0 || i + 1 == candidates.Count))
                     progress(new SecurityProgress(false, scan.Files, i + 1, scan.Files, scan.MatchCount));
@@ -604,6 +627,7 @@ namespace CompInfo
             pending.Push(root);
             while (pending.Count > 0)
             {
+                StopIfAsked();
                 string directory = pending.Pop();
                 try
                 {

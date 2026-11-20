@@ -62,6 +62,16 @@ namespace CompInfo
             return OpenXml.Contains(e) || OpenDocument.Contains(e) || Binary.Contains(e) || Plain.Contains(e) || Rtf.Contains(e);
         }
 
+        // Every ready disk of the computer, the fixed ones and the removable ones (a flash drive); no network drives or CDs.
+        public static List<DriveInfo> Disks()
+        {
+            List<DriveInfo> disks = new List<DriveInfo>();
+            foreach (DriveInfo drive in DriveInfo.GetDrives())
+                try { if (drive.IsReady && (drive.DriveType == DriveType.Fixed || drive.DriveType == DriveType.Removable)) disks.Add(drive); }
+                catch (Exception) { }
+            return disks;
+        }
+
         public static List<string> LocalDisks()
         {
             List<string> roots = new List<string>();

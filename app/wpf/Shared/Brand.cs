@@ -21,6 +21,7 @@ namespace CompInfo.Wpf
             Database = "", Sync = "", Search = "", Cloud = "", Dash = "",
             Export = "", Save = "", Back = "", Forward = "";
         public static readonly string Upload = ((char)0xE898).ToString();
+        public static readonly string Document = ((char)0xE8A5).ToString();
 
         // A glyph of the icon font in a colour of the palette (a key of WpfTheme).
         public static TextBlock Block(string glyph, double size, string brushKey)

@@ -102,7 +102,10 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <Button x:Name="RunButton" Style="{StaticResource AccentButton}" VerticalAlignment="Center" Click="Run_Click" />
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Button x:Name="RunButton" Style="{StaticResource AccentButton}" VerticalAlignment="Center" Click="Run_Click" />
+                <Button x:Name="StopButton" VerticalAlignment="Center" Visibility="Collapsed" Click="Stop_Click" />
+            </StackPanel>
             <CheckBox x:Name="ScanDocuments" Grid.Column="1" IsChecked="True" VerticalAlignment="Center" Margin="14,0,4,0" />
             <Button x:Name="OneDriveButton" Grid.Column="2" VerticalAlignment="Center" Margin="10,0,0,0" Visibility="Collapsed"
                     Click="OneDrive_Click" />

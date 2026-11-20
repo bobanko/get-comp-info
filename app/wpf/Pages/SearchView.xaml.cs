@@ -18,9 +18,42 @@ namespace CompInfo.Wpf
     public partial class SearchView : UserControl, ISection
     {
         readonly ObservableCollection<HitRow> hits = new ObservableCollection<HitRow>();
-        readonly string allDisks = L.T("Все локальные диски");
         CancellationTokenSource cancel;
         bool running;
+
+        // A choice of «Где»: all disks (Path null), one disk (a flash drive too) or the folder picked by the user.
+        class Place
+        {
+            public string Text, Path;
+            public bool Folder;
+            public override string ToString() { return Text; }
+        }
+
+        // The list of «Где» again (a flash drive may have come or gone), keeping the choice when it is still there.
+        void FillPlaces()
+        {
+            Place chosen = Where.SelectedItem as Place;
+            Place folder = null;
+            foreach (object o in Where.Items) { Place p = o as Place; if (p != null && p.Folder) folder = p; }
+            Where.Items.Clear();
+            Where.Items.Add(new Place { Text = L.T("Все диски") });
+            foreach (DriveInfo d in DocumentSearch.Disks())
+            {
+                string label = "";
+                try { label = d.VolumeLabel; } catch (Exception) { }
+                if (string.IsNullOrWhiteSpace(label)) label = d.DriveType == DriveType.Removable ? L.T("Съёмный диск") : L.T("Локальный диск");
+                Where.Items.Add(new Place
+                {
+                    Text = d.Name.TrimEnd('\\') + "  " + label + (d.DriveType == DriveType.Removable ? L.T(" · флешка") : ""),
+                    Path = d.RootDirectory.FullName,
+                });
+            }
+            if (folder != null) Where.Items.Add(folder);
+            int index = 0;
+            for (int i = 0; i < Where.Items.Count; i++)
+                if (chosen != null && string.Equals(((Place)Where.Items[i]).Path, chosen.Path, StringComparison.OrdinalIgnoreCase)) index = i;
+            Where.SelectedIndex = index;
+        }
 
         public SearchView()
         {
@@ -31,11 +64,15 @@ namespace CompInfo.Wpf
             Glyph.Label(FindButton, Glyph.Search, L.T("Найти"));
             Glyph.Label(StopButton, Glyph.Cross, L.T("Остановить"));
             WhereLabel.Text = L.T("Где");
-            Where.Items.Add(allDisks);
-            Where.SelectedIndex = 0;
+            FillPlaces();
+            Where.DropDownOpened += delegate { FillPlaces(); };
             Glyph.Label(PickButton, Glyph.Folder, L.T("Папка…"));
-            Contents.Content = L.T("в тексте документов");
-            Recycle.Content = L.T("в корзине");
+            // the folder icon in the yellow-orange of Explorer folders
+            ((TextBlock)((StackPanel)PickButton.Content).Children[0]).SetResourceReference(TextBlock.ForegroundProperty, "Folder");
+            Contents.Content = Glyph.WithText(Glyph.Document, L.T("в тексте документов"));
+            System.Windows.Automation.AutomationProperties.SetName(Contents, L.T("в тексте документов"));
+            Recycle.Content = Glyph.WithText(Glyph.Delete, L.T("в корзине"));
+            System.Windows.Automation.AutomationProperties.SetName(Recycle, L.T("в корзине"));
             TypeHeader.Text = L.T("Тип");
             WhereHeader.Text = L.T("Где · совпадений");
             FileHeader.Text = L.T("Файл");
@@ -59,7 +96,7 @@ namespace CompInfo.Wpf
             return !running;
         }
 
-        public void DevicesChanged() { }
+        public void DevicesChanged() { if (!running && !Where.IsDropDownOpen) FillPlaces(); }
 
         void UpdateButtons()
         {
@@ -85,11 +122,12 @@ namespace CompInfo.Wpf
             {
                 dialog.Description = L.T("Папка для поиска (со всеми вложенными папками)");
                 dialog.ShowNewFolderButton = false;
-                if (Where.SelectedIndex > 0) dialog.SelectedPath = (string)Where.SelectedItem;
+                Place chosen = Where.SelectedItem as Place;
+                if (chosen != null && chosen.Path != null) dialog.SelectedPath = chosen.Path;
                 if (dialog.ShowDialog(new Owner(Window.GetWindow(this))) != System.Windows.Forms.DialogResult.OK) return;
-                while (Where.Items.Count > 1) Where.Items.RemoveAt(1);
-                Where.Items.Add(dialog.SelectedPath);
-                Where.SelectedIndex = 1;
+                for (int i = Where.Items.Count - 1; i >= 0; i--) if (((Place)Where.Items[i]).Folder) Where.Items.RemoveAt(i);
+                Where.Items.Add(new Place { Text = dialog.SelectedPath, Path = dialog.SelectedPath, Folder = true });
+                Where.SelectedIndex = Where.Items.Count - 1;
                 // A single folder is not the whole computer: the Recycle Bin is usually not wanted then.
                 Recycle.IsChecked = false;
             }
@@ -108,13 +146,15 @@ namespace CompInfo.Wpf
             if (DocumentSearch.Normalize(options.Phrase).Length == 0) return;
             options.Contents = Contents.IsChecked == true;
             options.Recycle = Recycle.IsChecked == true;
-            bool everywhere = Where.SelectedIndex <= 0;
-            if (!everywhere && !Directory.Exists((string)Where.SelectedItem))
+            Place place = Where.SelectedItem as Place;
+            string root = place == null ? null : place.Path;
+            if (root != null && !Directory.Exists(root))
             {
-                Status.Show(Severity.Error, Glyph.Warning, L.T("Папка не найдена: ") + Where.SelectedItem);
+                Status.Show(Severity.Error, Glyph.Warning, L.T("Папка не найдена: ") + root);
                 return;
             }
-            options.Roots = everywhere ? DocumentSearch.LocalDisks() : new List<string> { (string)Where.SelectedItem };
+            if (root != null) options.Roots = new List<string> { root };
+            else options.Roots = DocumentSearch.Disks().ConvertAll(d => d.RootDirectory.FullName);
 
             running = true;
             cancel = new CancellationTokenSource();

@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -24,6 +25,7 @@ namespace CompInfo.Wpf
 
         readonly ObservableCollection<CheckRow> checks = new ObservableCollection<CheckRow>();
         bool running, ready;
+        CancellationTokenSource cancel;
 
         public SecurityView()
         {
@@ -31,6 +33,8 @@ namespace CompInfo.Wpf
             Checks.ItemsSource = checks;
             Glyph.Label(RunButton, Glyph.Play, L.T("Запустить проверку"));
             RunButton.ToolTip = L.T("Запустить проверку") + "   (F5)";
+            Glyph.Label(StopButton, Glyph.Cross, L.T("Остановить"));
+            StopButton.ToolTip = L.T("Остановить") + "   (Esc)";
             ScanDocuments.Content = L.T("Сканировать документы");
             Glyph.Label(OneDriveButton, Glyph.Power, L.T("Отключить OneDrive"));
             Bottom.ToolTip = L.T("Таблицы одна под другой");
@@ -55,14 +59,37 @@ namespace CompInfo.Wpf
         // The window may close (or be built again) only when no check is running.
         public bool CanLeave()
         {
-            if (running) Dialog.Show(Window.GetWindow(this), L.T("Дождитесь окончания проверки."), Severity.Info, L.T("Проверка выполняется"));
+            if (running) Dialog.Show(Window.GetWindow(this), L.T("Остановите проверку или дождитесь её окончания."), Severity.Info, L.T("Проверка выполняется"));
             return !running;
         }
 
         public bool Shortcut(KeyEventArgs e)
         {
             if (e.Key == Key.F5 && Keyboard.Modifiers == ModifierKeys.None) { Run(); return true; }
+            if (e.Key == Key.Escape && running) { Stop(); return true; }
             return false;
+        }
+
+        // The status line, for the host to show elsewhere (SUSpector: at the bottom left, in the row of its buttons).
+        public StatusLine TakeStatus()
+        {
+            var parent = Status.Parent as Panel;
+            if (parent != null) parent.Children.Remove(Status);
+            Status.Margin = new Thickness(0, 0, 16, 0);
+            Status.HorizontalAlignment = HorizontalAlignment.Left;
+            Status.VerticalAlignment = VerticalAlignment.Center;
+            return Status;
+        }
+
+        void Stop_Click(object sender, RoutedEventArgs e) { Stop(); }
+
+        // The check stops at the next folder or document, or between the checks.
+        public void Stop()
+        {
+            if (!running || cancel == null) return;
+            cancel.Cancel();
+            StopButton.IsEnabled = false;
+            Status.Note(Glyph.More, L.T("Останавливается…"));
         }
 
         public void DevicesChanged() { }
@@ -76,7 +103,11 @@ namespace CompInfo.Wpf
         {
             if (running) return;
             running = true;
-            RunButton.IsEnabled = false;
+            cancel = new CancellationTokenSource();
+            CancellationToken token = cancel.Token;
+            RunButton.Visibility = Visibility.Collapsed;
+            StopButton.IsEnabled = true;
+            StopButton.Visibility = Visibility.Visible;
             ScanDocuments.IsEnabled = false;
             bool documents = ScanDocuments.IsChecked == true;
             OneDriveButton.Visibility = Visibility.Collapsed;
@@ -139,7 +170,7 @@ namespace CompInfo.Wpf
                     Progress.Value = Math.Min(Progress.Maximum, scan.Checked);
                     Status.Note(Glyph.More, L.F("Проверено {0} из {1} файлов; документов с совпадениями: {2}.", scan.Checked, scan.Total, scan.Matches));
                 });
-                List<SecurityCheck> results = await Task.Run(() => SecurityAudit.Run(started, completed, detailed, documents));
+                List<SecurityCheck> results = await Task.Run(() => SecurityAudit.Run(started, completed, detailed, documents, token));
                 int bad = 0, warnings = 0;
                 foreach (SecurityCheck check in results)
                 {
@@ -154,6 +185,19 @@ namespace CompInfo.Wpf
                     Status.Show(Severity.Warning, Glyph.Warning, L.F("Проверка завершена без критических проблем. Предупреждений: {0}.", warnings));
                 else Status.Show(Severity.Success, Glyph.Check, L.T("Проверка завершена: проблем не найдено."));
             }
+            catch (OperationCanceledException)
+            {
+                // the updates already sent come first, then the checks that did not finish are marked
+                await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+                int done = 0;
+                foreach (CheckRow row in checks)
+                {
+                    if (row.State == "Waiting" || row.State == "Running") row.Set(row.Check, "Info", L.T("Не проверено: проверку остановили"));
+                    else done++;
+                }
+                ShowDetails();
+                Status.Show(Severity.Warning, Glyph.Info, L.F("Проверка остановлена. Выполнено проверок: {0} из {1}.", done, checks.Count));
+            }
             catch (Exception e)
             {
                 Status.Show(Severity.Error, Glyph.Warning, L.T("Проверка прервана: ") + e.Message);
@@ -161,8 +205,11 @@ namespace CompInfo.Wpf
             finally
             {
                 running = false;
+                cancel = null;
                 Progress.Visibility = Visibility.Hidden;
                 Progress.IsIndeterminate = false;
+                StopButton.Visibility = Visibility.Collapsed;
+                RunButton.Visibility = Visibility.Visible;
                 RunButton.IsEnabled = true;
                 ScanDocuments.IsEnabled = true;
                 UpdateActions();

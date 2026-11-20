@@ -24,6 +24,14 @@ namespace CompInfo.Wpf
         public event Action DevicesChanged;
 
         readonly StackPanel row;
+        DockPanel bottomBar;
+
+        // Left of the buttons at the bottom (SUSpector: the status of the check), in the same row.
+        protected void SetBottomLeft(FrameworkElement e)
+        {
+            if (bottomBar == null) return;
+            bottomBar.Children.Add(e);
+        }
 
         // A button after «О программе», at the very edge of the window (the pin of youSBee: user's choice, 20.11.2026).
         protected void AddAtEdge(Button b)
@@ -72,10 +80,12 @@ namespace CompInfo.Wpf
             root.Children.Add(header);
             if (buttonsAtBottom)
             {
-                row.Margin = new Thickness(0, 14, 0, 0);
-                row.HorizontalAlignment = HorizontalAlignment.Right;
-                DockPanel.SetDock(row, Dock.Bottom);
-                root.Children.Add(row);
+                bottomBar = new DockPanel { Margin = new Thickness(0, 14, 0, 0), LastChildFill = true };
+                row.VerticalAlignment = VerticalAlignment.Center;
+                DockPanel.SetDock(row, Dock.Right);
+                bottomBar.Children.Add(row);
+                DockPanel.SetDock(bottomBar, Dock.Bottom);
+                root.Children.Add(bottomBar);
             }
             else
             {
