@@ -34,7 +34,7 @@ export async function renderDownloads(context) {
       ),
       downloadPanel(
         'Консольная версия',
-        'Меню и скрипты PowerShell (comp-info-menu.BAT) — для компьютеров, где удобнее консоль.',
+        'Меню и скрипты PowerShell (console\\comp-info-menu.BAT) — для компьютеров, где удобнее консоль.',
         'console',
         info.version,
         info.console,
