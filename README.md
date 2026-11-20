@@ -36,7 +36,7 @@ which the programs' built-in updaters download from.
 | Path | Contents |
 |---|---|
 | `app/src` | C# source of `comp-info.exe`, `SUSpector.exe` and `youSBee.exe` (they share most of the code) |
-| `*.BAT`, `console/` | the console version of the toolbox: launchers in the root, PowerShell scripts in `console/` |
+| `comp-info-menu.BAT`, `console/` | the console version of the toolbox: the menu launcher in the root, PowerShell scripts in `console/` |
 | `cloud/` | the cloud database: Cloudflare Worker, D1 and the web interface |
 | `tools/` | build and release scripts |
 | `tests/`, `app/tests` | tests |

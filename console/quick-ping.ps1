@@ -1,7 +1,6 @@
 ﻿[CmdletBinding()]
 param(
-    [int]$InterfaceIndex,
-    [switch]$PauseAtEnd
+    [int]$InterfaceIndex
 )
 
 $ErrorActionPreference = "Stop"
@@ -108,10 +107,5 @@ try {
 }
 catch {
     Write-Host ("❌ [ОШИБКА] {0}" -f $_.Exception.Message) -ForegroundColor Red
-}
-if ($PauseAtEnd) {
-    Write-Host ''
-    Write-ToolboxHint '[Enter] — закрыть.'
-    Read-Host | Out-Null
 }
 exit $exitCode
