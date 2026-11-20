@@ -19,7 +19,6 @@ $menuItems = @(
     [PSCustomObject]@{ Title = "🏢 Домен: ввод / вывод"; Script = "manage-computer-domain.ps1" }
     [PSCustomObject]@{ Title = "📡 Быстрый ping (свой IP, шлюз, DNS, домен/интернет)"; Script = "quick-ping.ps1" }
     [PSCustomObject]@{ Title = "🗃️ Просмотреть сохранённую информацию"; Script = "view-comp-info.ps1" }
-    [PSCustomObject]@{ Title = "🔑 Серийные номера USB-накопителей"; Script = "get-usb-serial.ps1" }
     [PSCustomObject]@{ Title = "📤 Экспортировать все устройства в CSV"; Script = "export-comp-info.ps1" }
     [PSCustomObject]@{ Title = "☁️ Синхронизировать с облаком"; Script = "sync-cloud.ps1" }
     [PSCustomObject]@{ Title = "🆕 Обновить программу"; Script = "update-program.ps1" }

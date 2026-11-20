@@ -232,7 +232,7 @@ namespace CompInfo
         }
     }
 
-    // USB disk with the serial number the device reports (get-usb-serial.ps1).
+    // USB disk with the serial number the device reports (youSBee).
     public class UsbDisk
     {
         public int Number;

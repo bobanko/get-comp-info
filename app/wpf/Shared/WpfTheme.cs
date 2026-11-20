@@ -52,7 +52,7 @@ namespace CompInfo.Wpf
             { "Mark",        "#E4D19E", "#716229" },
             // the shield of a copy already running with administrator rights
             { "AdminReady",  "#0B6E36", "#57C47F" },
-            // violet of SUSpector (its name and the security section); folders yellow-orange, as in Explorer
+            // violet of SUSpector; folders yellow-orange, as in Explorer
             { "Suspector",   "#6D3FD0", "#A585FF" },
             { "Folder",      "#DE9200", "#FFC43D" },
             // location chips of found files (FileChips.ColorKey): Danger / Warn / Ok / Muted use the state colours

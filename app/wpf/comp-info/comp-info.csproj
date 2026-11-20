@@ -51,10 +51,10 @@
     <Compile Include="..\..\src\Cloud.cs" Link="Core\Cloud.cs" />
     <Compile Include="..\..\src\Shell.cs" Link="Core\Shell.cs" />
     <Compile Include="..\..\src\SystemChanges.cs" Link="Core\SystemChanges.cs" />
+    <!-- only for the place tags of the found documents (SecurityAudit.LocationTags, FileChips); the check itself is SUSpector -->
     <Compile Include="..\..\src\Security.cs" Link="Core\Security.cs" />
-    <Compile Include="..\..\src\DocumentSearch.cs" Link="Core\DocumentSearch.cs" />
-    <Compile Include="..\..\src\UsbList.cs" Link="Core\UsbList.cs" />
     <Compile Include="..\..\src\SecurityFiles.cs" Link="Core\SecurityFiles.cs" />
+    <Compile Include="..\..\src\DocumentSearch.cs" Link="Core\DocumentSearch.cs" />
     <Compile Include="..\..\src\DeviceList.cs" Link="Core\DeviceList.cs" />
     <Compile Include="..\..\src\ComputerForms.cs" Link="Core\ComputerForms.cs" />
     <!-- not used by the toolbox itself, but by the shared frame of the standalone programs (Shared\Standalone.cs) -->
@@ -63,20 +63,22 @@
     <Compile Include="..\..\src\Strings.cs" Link="Core\Strings.cs" />
   </ItemGroup>
 
-  <!-- the shared look of the WPF programs and every section page -->
+  <!-- the shared look of the WPF programs and the section pages; the security check and the USB drives are the separate
+       programs SUSpector and youSBee (WINDOWS_APP.md) -->
   <ItemGroup>
     <Compile Include="..\Shared\*.cs" Link="Shared\%(Filename)%(Extension)" />
     <Page Include="..\Shared\*.xaml" Link="Shared\%(Filename)%(Extension)" />
     <Compile Include="..\Pages\*.cs" Link="Pages\%(Filename)%(Extension)" />
     <Page Include="..\Pages\*.xaml" Link="Pages\%(Filename)%(Extension)" />
+    <Compile Remove="..\Pages\SecurityView.xaml.cs;..\Pages\UsbView.xaml.cs" />
+    <Page Remove="..\Pages\SecurityView.xaml;..\Pages\UsbView.xaml" />
   </ItemGroup>
 
-  <!-- the gear of the brand, the pictures of «О программе»; the trigger words of the document check -->
+  <!-- the gear of the brand, the pictures of «О программе» -->
   <ItemGroup>
     <Resource Include="..\..\brand.png" Link="brand.png" />
     <Resource Include="..\..\face.png" Link="face.png" />
     <Resource Include="..\..\face-ru.png" Link="face-ru.png" />
-    <EmbeddedResource Include="..\..\trigger-words.txt" LogicalName="CompInfo.trigger-words.txt" />
   </ItemGroup>
 
 </Project>

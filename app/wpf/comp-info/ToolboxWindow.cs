@@ -192,12 +192,6 @@ namespace CompInfo.Wpf
                     Description = L.T("Отправляет новые и изменённые записи в облако и загружает базу из облака. Нужен интернет и личный ключ доступа.") },
                 new Section { Key = "update", Title = L.T("Обновление программы"), NavTitle = L.T("Обновление"), Icon = Glyph.Update, NeedsInternet = true, Create = () => new UpdateView(),
                     Description = L.T("Проверяет новую версию в облаке и устанавливает её в эту копию программы. Данные (папка data) не меняются.") },
-                // Also separate programs (SUSpector, youSBee): at the bottom, in the colours of their icons.
-                new Section { Key = "security", Title = L.T("Проверка кибербезопасности"), NavTitle = L.T("Кибербезопасность"), Icon = Glyph.Shield,
-                    IconKey = "Suspector", Bottom = true, Create = () => new SecurityView(),
-                    Description = L.T("Локальная проверка домена, антивируса, VPN, нежелательного ПО, OneDrive, документов и паролей Windows. Результаты никуда не отправляются.") },
-                new Section { Key = "usb", Title = L.T("USB-накопители"), Icon = Glyph.Usb, IconKey = "Flash", Bottom = true, Create = () => new UsbView(),
-                    Description = L.T("Серийные номера подключённых флешек и USB-дисков. Список обновляется сам, когда накопитель подключают или отключают.") },
                 new Section { Key = "about", Title = L.T("О программе"), Icon = Glyph.Info, Bottom = true, Create = () => new ToolboxAbout(window),
                     Description = L.T("Версия, назначение программы и связь с разработчиком.") },
             };
@@ -404,7 +398,7 @@ namespace CompInfo.Wpf
                 L.T("Учёт компьютеров при подготовке и выдаче сотрудникам"),
                 L.T("Программа собирает сведения о компьютере (имя, серийный номер, сеть, ESET), хранит их на флешке и синхронизирует ") +
                 L.T("с облачной базой. Здесь же — настройка сети по профилям корпусов, имя компьютера и домен, быстрая проверка связи ") +
-                L.T("и серийные номера USB-накопителей."), Sections, Settings.Set, delegate { window.Rebuild(); }, 520)
+                L.T("и поиск по документам."), Sections, Settings.Set, delegate { window.Rebuild(); }, 520)
             { HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 4, 0, 10) };
             about.AddLink(Glyph.Cloud, WebInterface, L.T("веб-интерфейс базы"), delegate { AboutContent.OpenSite(WebInterface); });
             about.AddLink(Glyph.Folder, L.T("Открыть папку программы"), null, delegate

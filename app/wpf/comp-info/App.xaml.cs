@@ -27,8 +27,6 @@ namespace CompInfo.Wpf
             L.Choice = StandaloneStart.Option(args, "--language", 1) ?? Settings.Get("language", "system");
             L.ApplyChoice();
             ToolboxWindow.ColorBlind = (StandaloneStart.Option(args, "--colorblind", 1) ?? Settings.Get("colorblind", "off")) == "on";
-            SecurityView.TableLayout = Settings.Get("securityLayout", "bottom");
-            SecurityView.LayoutSaved = value => Settings.Set("securityLayout", value);
 
             string shot = StandaloneStart.Option(args, "--screenshot", 1);
             if (shot != null) { CollectView.AutoSave = false; Screenshot(shot, StandaloneStart.Option(args, "--screenshot", 2), StandaloneStart.Option(args, "--screenshot", 3)); return; }

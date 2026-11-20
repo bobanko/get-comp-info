@@ -48,6 +48,7 @@ namespace CompInfo
             Run("deleting found documents", DocumentDeletion);
             Run("document search", DocumentSearchFiles);
             Run("standalone SUSpector", StandaloneSuspector);
+            Run("toolbox sections", ToolboxSections);
             Run("SUSpector update install", SuspectorInstall);
             Run("record differences and merge", Differences);
             Run("program files and versions", ProgramFiles);
@@ -575,6 +576,19 @@ namespace CompInfo
             Check(assembly.GetType("CompInfo.Wpf.ToolboxWindow", false) == null && assembly.GetType("CompInfo.Wpf.DatabaseView", false) == null &&
                 assembly.GetType("CompInfo.Wpf.SyncView", false) == null && assembly.GetType("CompInfo.CloudClient", false) == null,
                 "SUSpector excludes the toolbox, device database and cloud UI");
+        }
+
+        // The security check and the USB drives are SUSpector and youSBee only, not sections of the toolbox.
+        static void ToolboxSections()
+        {
+            string path = Path.GetFullPath(Path.Combine(here, @"..\bin\comp-info.exe"));
+            Check(File.Exists(path), "comp-info.exe was built");
+            if (!File.Exists(path)) return;
+            System.Reflection.Assembly assembly = System.Reflection.Assembly.LoadFrom(path);
+            Check(assembly.GetType("CompInfo.Wpf.ToolboxWindow", false) != null && assembly.GetType("CompInfo.Wpf.SearchView", false) != null,
+                "comp-info.exe contains the toolbox");
+            Check(assembly.GetType("CompInfo.Wpf.SecurityView", false) == null && assembly.GetType("CompInfo.Wpf.UsbView", false) == null &&
+                assembly.GetType("CompInfo.UsbList", false) == null, "comp-info.exe excludes the security check and the USB drives");
         }
 
         static void ZipWith(string path, string entry, string xml)

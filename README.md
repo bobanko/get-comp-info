@@ -6,7 +6,7 @@ of Windows, without third-party packages. They need no installation and run from
 
 | Program | What it does | Download |
 |---|---|---|
-| **CHAGEAR Toolbox** (`comp-info.exe` and the PowerShell console version) | Collects a computer's inventory (hardware, serial numbers, network adapters), sets up the network, computer name and domain membership, runs security checks, searches documents, shows the device database and synchronizes it with the team's cloud database | [chagear.top/toolbox](https://chagear.top/toolbox/) |
+| **CHAGEAR Toolbox** (`comp-info.exe` and the PowerShell console version) | Collects a computer's inventory (hardware, serial numbers, network adapters), sets up the network, computer name and domain membership, searches documents, shows the device database and synchronizes it with the team's cloud database | [chagear.top/toolbox](https://chagear.top/toolbox/) |
 | **SUSpector** (`SUSpector.exe`) | Checks a user's computer before a security inspection: domain membership, antivirus, VPN, WinRAR, OneDrive sync, local administrators, expired passwords, and documents marked "for official use" that must not be stored on the computer. The user can then turn off OneDrive sync or delete the files that were found | [chagear.top/suspector](https://chagear.top/suspector/) |
 | **youSBee** (`youSBee.exe`) | Shows the serial numbers of connected USB flash drives and disks and copies them with one click. Needs no administrator rights | [chagear.top/yousbee](https://chagear.top/yousbee/) |
 

@@ -88,8 +88,8 @@
 | Раздел | Состояние |
 |---|---|
 | Быстрый ping | готов (`Pages\PingView`) |
-| Кибербезопасность | готов (`Pages\SecurityView`, общий с SUSpector) |
-| USB-накопители | готов (`Pages\UsbView`, общий с youSBee) |
+| Кибербезопасность | готов (`Pages\SecurityView`); с 21.11.2026 только в SUSpector |
+| USB-накопители | готов (`Pages\UsbView`); с 21.11.2026 только в youSBee |
 | О программе | готов (`ToolboxAbout` в `ToolboxWindow.cs`; содержимое — `Shared\AboutWindow.cs` → `AboutContent`, общее с отдельными программами) |
 | Поиск | готов (`Pages\SearchView`; папка — `FolderBrowserDialog` WinForms, ссылка на `System.Windows.Forms`). Проверено: поиск по именам на всех дисках — 211 тыс. файлов за 25 с |
 | Обновление | готов (`Pages\UpdateView`; ключ облака — `Pages\Cloud.cs`: `CloudConnect`, окно `KeyWindow`). Проверено: «Проверить обновления» с ключом из `cloud-key.txt`. Перезапуск запускает тот же exe с `--page update` |

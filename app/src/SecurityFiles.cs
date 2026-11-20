@@ -38,7 +38,7 @@ namespace CompInfo
         }
     }
 
-    // The found documents of the ДСК check (SecurityView of appwpfPages): tags, the files that are never
+    // The found documents of the ДСК check (SecurityView of app\wpf\Pages, in SUSpector): tags, the files that are never
     // deleted, deleting all files with a tag, and the summary of the check after deletions.
     public static class SecurityFiles
     {

@@ -15,7 +15,7 @@ namespace CompInfo
         public bool HasSerial { get { return Disk.Serial.Length > 0; } }
     }
 
-    // The list of «USB-накопители» (UsbView of comp-info.exe and youSBee), without any window code.
+    // The list of «USB-накопители» (UsbView of youSBee), without any window code.
     // Drives removed since the last «Обновить» stay in it as not connected, so several drives can be plugged in
     // one after another and their serial numbers compared.
     public class UsbList
