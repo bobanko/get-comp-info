@@ -17,4 +17,10 @@ namespace CompInfo.Wpf
         // A USB device was plugged in or removed.
         void DevicesChanged();
     }
+
+    // A section that another one can start (the synchronization, from «Синхронизировать» of the collection).
+    public interface SyncStarter
+    {
+        void Start();
+    }
 }

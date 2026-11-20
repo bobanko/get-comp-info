@@ -102,7 +102,23 @@ namespace CompInfo.Wpf
                 HwndSource source = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
                 if (source != null) source.AddHook(DeviceHook);
             };
-            Loaded += delegate { Open(Find(startPage ?? "") ?? sections[0]); };
+            Loaded += delegate
+            {
+                Section start = Find(startPage ?? "") ?? sections[0];
+                Open(start);
+                // The record of this computer is read and saved right after the start, whatever section opens first.
+                var collect = Find("collect").View as CollectView;
+                if (collect != null && start.Key != "collect") collect.StartInBackground();
+            };
+        }
+
+        // «Синхронизировать» of the collection: the synchronization opens (and starts once it is moved to WPF).
+        public void OpenSync()
+        {
+            Section sync = Find("sync");
+            Open(sync);
+            var page = sync.View as SyncStarter;
+            if (page != null && current == sync) page.Start();
         }
 
         // The sections in the order of comp-info.exe: the domain is the main operation; network and name are steps
@@ -113,6 +129,7 @@ namespace CompInfo.Wpf
             var list = new List<Section>
             {
                 new Section { Key = "collect", Title = L.T("Сбор информации о компьютере"), NavTitle = L.T("Сбор информации"), Icon = Glyph.Computer,
+                    Create = () => new CollectView { SyncRequested = window.OpenSync },
                     Description = L.T("Сведения об этом компьютере сохраняются в базу рядом с программой сами: при запуске и при любом изменении, в том числе комментария. В облако запись попадает при синхронизации.") },
                 new Section { Key = "domain", Title = L.T("Домен"), Icon = Glyph.Domain, NeedsAdmin = true,
                     Description = L.T("Ввод в домен gu.gvardia.mvs со свободным IP-адресом из базы и вывод в рабочую группу WORKGROUP с возвратом сети на DHCP. Префикс имени меняется вместе с доменом. После изменения нужна перезагрузка.") },

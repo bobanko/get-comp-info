@@ -29,7 +29,7 @@ namespace CompInfo.Wpf
             SecurityView.LayoutSaved = value => Settings.Set("securityLayout", value);
 
             string shot = StandaloneStart.Option(args, "--screenshot", 1);
-            if (shot != null) { Screenshot(shot, StandaloneStart.Option(args, "--screenshot", 2), StandaloneStart.Option(args, "--screenshot", 3)); return; }
+            if (shot != null) { CollectView.AutoSave = false; Screenshot(shot, StandaloneStart.Option(args, "--screenshot", 2), StandaloneStart.Option(args, "--screenshot", 3)); return; }
 
             Open(new ToolboxWindow(StandaloneStart.Option(args, "--page", 1)));
         }
