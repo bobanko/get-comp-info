@@ -26,6 +26,11 @@
 youSBee.exe --theme light --language uk --screenshot yousbee.png 1500
 ```
 
+**Переход на WPF** (WPF_MIGRATION.md): пока идёт перевод, `tools\build.BAT yousbee` собирает рядом ещё и
+`youSBee-wpf.exe` из `app\wpf\youSBee` (нужен .NET SDK; без него WPF-версия пропускается). Окно, таблица, ini и клавиши те же,
+тема меняется на месте, без пересборки окна. Её снимки умеют больше: `--about`, `--width N`, `--demo` (все виды строк без флешек).
+Публикуется пока WinForms-версия.
+
 Иконка — `app\yousbee.ico`, картинка «О программе» — `app\yousbee.png`; обе делает `tools\make-icon.BAT`
 из `app\yousbee-source.png` (неоновая пчела-флешка на прозрачном фоне); размеры до 32 px — из
 `app\yousbee-small-source.png`, оранжевой контурной флешки из шрифта значков (так её видно на панели задач).

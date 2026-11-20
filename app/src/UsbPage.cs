@@ -15,22 +15,16 @@ namespace CompInfo
         // Columns: flash drive icon, drive letter, name, size, serial number, «Копировать».
         const int IconColumn = 0, DiskColumn = 1, NameColumn = 2, SerialColumn = 4, CopyColumn = 5;
 
-        // A drive seen since the last «Обновить»: the key is its serial number (or disk number and name without one).
-        class Entry
-        {
-            public string Key;
-            public UsbDisk Disk;
-            public bool Connected;
-            public DateTime HighlightUntil, CopiedUntil;
-        }
-
-        readonly List<Entry> entries = new List<Entry>();
+        // The drives seen since the last «Обновить» (UsbList.cs, shared with the WPF youSBee).
+        readonly UsbList list = new UsbList();
+        List<UsbEntry> entries { get { return list.Entries; } }
         readonly DataGridView grid;
         readonly FlowLayoutPanel toolbar;
         readonly StatusLine status = new StatusLine();
         readonly Bitmap driveIcon, removedIcon, emptyIcon;
         readonly Timer fade = new Timer();
-        bool loading, again, againManual, loaded, compact;
+        bool loading, again, againManual, compact;
+        bool loaded { get { return list.Loaded; } }
         int hoverRow = -1;
 
         public UsbPage()
@@ -108,7 +102,7 @@ namespace CompInfo
                 bool any = false;
                 foreach (DataGridViewRow row in grid.Rows)
                 {
-                    Entry e = row.Tag as Entry;
+                    UsbEntry e = row.Tag as UsbEntry;
                     if (e == null) continue;
                     if (e.HighlightUntil != DateTime.MinValue || e.CopiedUntil != DateTime.MinValue) { any = true; Style(row, e); }
                 }
@@ -154,10 +148,11 @@ namespace CompInfo
             try
             {
                 List<UsbDisk> disks = await Task.Run(delegate { return UsbDisk.List(); });
-                Merge(disks, manual);
+                // Light up drives that appear while the program is open (not the ones already there at start).
+                foreach (UsbEntry e in list.Merge(disks, manual)) e.HighlightUntil = DateTime.Now.AddSeconds(3);
                 Render();
                 if (entries.Count == 0) status.Clear();
-                else if (entries.Exists(delegate (Entry e) { return !e.Connected; }))
+                else if (list.AnyRemoved)
                     status.Set(Glyph.Info, L.T("Серые строки — отключённые флешки. «Обновить» убирает их из списка."), Theme.Muted);
                 else status.Set(Glyph.Info, L.T("Кнопка «Копировать», двойной щелчок или Ctrl+C копирует серийный номер."), Theme.Muted);
             }
@@ -172,44 +167,22 @@ namespace CompInfo
             }
         }
 
-        void Merge(List<UsbDisk> disks, bool manual)
-        {
-            if (manual) entries.Clear();
-            // Drives connected before this update; the others that show up now have just arrived.
-            HashSet<string> before = new HashSet<string>();
-            foreach (Entry e in entries) { if (e.Connected) before.Add(e.Key); e.Connected = false; }
-            foreach (UsbDisk d in disks)
-            {
-                string key = d.Serial.Length > 0 ? "serial:" + d.Serial : "disk:" + d.Number + "|" + d.Name;
-                Entry entry = entries.Find(delegate (Entry e) { return e.Key == key; });
-                bool arrived = !before.Contains(key);
-                if (entry == null) { entry = new Entry(); entry.Key = key; entries.Add(entry); }
-                entry.Disk = d;
-                entry.Connected = true;
-                // Light up drives that appear while the program is open (not the ones already there at start).
-                if (arrived && loaded && !manual) entry.HighlightUntil = DateTime.Now.AddSeconds(3);
-            }
-            loaded = true;
-        }
-
         void Render()
         {
-            Entry selected = grid.CurrentRow == null ? null : grid.CurrentRow.Tag as Entry;
+            UsbEntry selected = grid.CurrentRow == null ? null : grid.CurrentRow.Tag as UsbEntry;
             grid.Rows.Clear();
-            foreach (Entry e in entries)
+            foreach (UsbEntry e in entries)
             {
                 UsbDisk d = e.Disk;
-                bool has = d.Serial.Length > 0;
-                string name = d.VolumeName.Length > 0 ? d.VolumeName : d.Name;
-                string letter = d.DriveLetters.Length > 0 ? d.DriveLetters : "—";
-                int i = grid.Rows.Add(e.Connected ? driveIcon : removedIcon, e.Connected ? letter : L.T("отключена"), name,
-                    string.Format(L.T("{0:N1} ГБ"), d.Size / 1073741824.0),
-                    has ? d.Serial : L.T("устройство не сообщает номер"), has ? L.T("Копировать") : "");
+                bool has = e.HasSerial;
+                string letter = UsbList.Letters(d);
+                int i = grid.Rows.Add(e.Connected ? driveIcon : removedIcon, e.Connected ? letter : L.T("отключена"), UsbList.Name(d),
+                    UsbList.Size(d), has ? d.Serial : L.T("устройство не сообщает номер"), has ? L.T("Копировать") : "");
                 DataGridViewRow row = grid.Rows[i];
                 row.Tag = e;
                 row.Cells[IconColumn].ToolTipText = e.Connected ? L.T("Подключена") : L.T("Отключена — «Обновить» уберёт её из списка");
                 row.Cells[DiskColumn].ToolTipText = L.T("Диск ") + d.Number + (e.Connected ? "" : " (" + letter + ")");
-                row.Cells[NameColumn].ToolTipText = d.VolumeName.Length > 0 && d.Name.Length > 0 ? d.VolumeName + " — " + d.Name : name;
+                row.Cells[NameColumn].ToolTipText = UsbList.FullName(d);
                 Style(row, e);
                 if (e == selected) grid.CurrentCell = row.Cells[DiskColumn];
             }
@@ -220,12 +193,12 @@ namespace CompInfo
 
         bool fadeNeeded()
         {
-            return entries.Exists(delegate (Entry e) { return e.HighlightUntil > DateTime.Now || e.CopiedUntil > DateTime.Now; });
+            return entries.Exists(delegate (UsbEntry e) { return e.HighlightUntil > DateTime.Now || e.CopiedUntil > DateTime.Now; });
         }
 
         // Colours of a row: grey when the drive is removed, lit up for a few seconds when it has just arrived,
         // and «Скопировано» with a check on the button right after copying.
-        void Style(DataGridViewRow row, Entry e)
+        void Style(DataGridViewRow row, UsbEntry e)
         {
             DateTime now = DateTime.Now;
             if (e.HighlightUntil != DateTime.MinValue && e.HighlightUntil <= now) e.HighlightUntil = DateTime.MinValue;
@@ -260,7 +233,7 @@ namespace CompInfo
 
         void Copy(int index)
         {
-            Entry e = grid.Rows[index].Tag as Entry;
+            UsbEntry e = grid.Rows[index].Tag as UsbEntry;
             if (e == null || e.Disk.Serial.Length == 0) return;
             try
             {
@@ -328,7 +301,7 @@ namespace CompInfo
             if (e.RowIndex < 0 || e.ColumnIndex != CopyColumn) return;
             e.PaintBackground(e.CellBounds, (e.State & DataGridViewElementStates.Selected) != 0);
             e.Handled = true;
-            Entry entry = grid.Rows[e.RowIndex].Tag as Entry;
+            UsbEntry entry = grid.Rows[e.RowIndex].Tag as UsbEntry;
             if (entry == null || entry.Disk.Serial.Length == 0) return;
             int em = Font.Height;
             Rectangle box = new Rectangle(e.CellBounds.X + em / 4, e.CellBounds.Y + em / 4, e.CellBounds.Width - em / 2 - 1, e.CellBounds.Height - em / 2 - 1);

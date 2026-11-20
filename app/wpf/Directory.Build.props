@@ -1,0 +1,10 @@
+<Project>
+  <!-- The WPF programs (the move from WinForms, WPF_MIGRATION.md): everything the build leaves behind goes to the root obj\,
+       so app\wpf holds only sources. The folder name, not the project name: WPF also builds a temporary *_wpftmp project
+       in the same folder, and it must find the same restore files. -->
+  <PropertyGroup>
+    <WpfProgramFolder>$([System.IO.Path]::GetFileName($(MSBuildProjectDirectory)))</WpfProgramFolder>
+    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)..\..\obj\wpf\$(WpfProgramFolder)\</BaseIntermediateOutputPath>
+    <BaseOutputPath>$(MSBuildThisFileDirectory)..\..\obj\wpf\$(WpfProgramFolder)\bin\</BaseOutputPath>
+  </PropertyGroup>
+</Project>

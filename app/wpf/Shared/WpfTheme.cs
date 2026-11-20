@@ -1,0 +1,126 @@
+using System;
+using System.Runtime.InteropServices;
+using System.Windows;
+using System.Windows.Interop;
+using System.Windows.Media;
+using Microsoft.Win32;
+
+namespace CompInfo.Wpf
+{
+    // Light and dark theme of the WPF programs: the brushes of Styles.xaml are replaced at the application level,
+    // so open windows repaint at once (DynamicResource), nothing is built again.
+    // The palette is the one of the web interface (cloud/public/app.css) and of the WinForms Theme.Apply:
+    // a change there is a change here too.
+    public static class WpfTheme
+    {
+        // key, light, dark
+        static readonly string[,] Palette = {
+            { "WindowBack",  "#F5F6F8", "#111317" },
+            { "Surface",     "#FFFFFF", "#1A1D23" },
+            { "HeaderBack",  "#F0F2F5", "#22262D" },
+            { "Text",        "#1A1D21", "#E6E8EB" },
+            { "Muted",       "#5D6673", "#9AA3AE" },
+            { "Border",      "#DDE1E6", "#2E333B" },
+            { "Divider",     "#E6E9ED", "#262A31" },
+            // blue as on the web; hover = brightness 1.08, pressed a bit darker (lighter in the dark theme)
+            { "Accent",      "#2563EB", "#6C9BFF" },
+            { "AccentHover", "#3B73ED", "#7BA5FF" },
+            { "AccentDown",  "#1F54C8", "#82AAFF" },
+            { "AccentSoft",  "#E8EFFF", "#1D2A45" },
+            { "OnAccent",    "#FFFFFF", "#0B1020" },
+            // states: the colour of a mark or a text, the soft background, the frame of a panel on that background
+            { "Good",        "#16723A", "#57C47F" },
+            { "GoodBack",    "#E3F5E9", "#173323" },
+            { "GoodLine",    "#A6CEB4", "#2A5F3F" },
+            { "Warn",        "#9A5B00", "#E8B04F" },
+            { "WarnBack",    "#FDF1DC", "#3A2C12" },
+            { "WarnLine",    "#DFC59A", "#6E5424" },
+            { "Bad",         "#B42318", "#F2837A" },
+            { "BadBack",     "#FDECEB", "#3D1C1A" },
+            { "BadLine",     "#E7B0AC", "#733B37" },
+            // flash drives are orange, like the youSBee icon; «SBee» is honey yellow, as on chagear.top
+            { "Flash",       "#E87E04", "#FFAA3C" },
+            { "Honey",       "#B47A00", "#F5B82E" },
+            // a subtle fill under the mouse / pressed (WinUI 3 SubtleFillColorSecondary / Tertiary)
+            { "SubtleHover", "#0A000000", "#0FFFFFFF" },
+            { "SubtleDown",  "#06000000", "#0AFFFFFF" },
+            // text fields and buttons
+            { "FieldBack",   "#FFFFFF", "#1A1D23" },
+            { "FieldHover",  "#F0F2F5", "#22262D" },
+            { "FieldDown",   "#E6E9ED", "#2E333B" },
+            { "FieldFocus",  "#FFFFFF", "#111317" },
+            { "FieldBottom", "#8A9099", "#7D8590" },
+            // drop-down lists, tooltips, scroll bars
+            { "FlyoutBack",  "#FFFFFF", "#22262D" },
+            { "ScrollThumb", "#A3AAB4", "#5D6673" },
+            // InfoBar and Dialog (WinUI 3): background and icon circle per severity, the mark inside the circle, the frame
+            { "BarInfoBack", "#F8F9FB", "#1A1D23" },
+            { "BarInfoIcon", "#2563EB", "#6C9BFF" },
+            { "BarGoodBack", "#E3F5E9", "#173323" },
+            { "BarGoodIcon", "#16723A", "#57C47F" },
+            { "BarWarnBack", "#FDF1DC", "#3A2C12" },
+            { "BarWarnIcon", "#9A5B00", "#E8B04F" },
+            { "BarBadBack",  "#FDECEB", "#3D1C1A" },
+            { "BarBadIcon",  "#B42318", "#F2837A" },
+            { "BarIconMark", "#FFFFFF", "#E4000000" },
+            { "BarBorder",   "#0F000000", "#19000000" },
+        };
+
+        public static bool Dark { get; private set; }
+
+        // "system", "light" or "dark" (the ini of the program); "system" follows Windows while the program runs.
+        public static string Choice { get; private set; } = "system";
+
+        public static void Start(string choice)
+        {
+            Apply(choice);
+            SystemEvents.UserPreferenceChanged += (s, a) =>
+            {
+                if (a.Category == UserPreferenceCategory.General && Choice == "system" && Application.Current != null)
+                    Application.Current.Dispatcher.BeginInvoke(new Action(() => Apply("system")));
+            };
+        }
+
+        public static void Apply(string choice)
+        {
+            Choice = choice == "light" || choice == "dark" ? choice : "system";
+            Dark = Choice == "dark" || (Choice == "system" && WindowsIsDark());
+            var res = Application.Current.Resources;
+            for (int i = 0; i < Palette.GetLength(0); i++)
+            {
+                var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(Palette[i, Dark ? 2 : 1]));
+                brush.Freeze();
+                res[Palette[i, 0]] = brush;
+            }
+            foreach (Window w in Application.Current.Windows) DarkTitle(w);
+        }
+
+        // Windows setting «Режим приложений по умолчанию».
+        static bool WindowsIsDark()
+        {
+            try
+            {
+                object v = Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "AppsUseLightTheme", 1);
+                return v is int i && i == 0;
+            }
+            catch (Exception) { return false; }
+        }
+
+        [DllImport("dwmapi.dll")]
+        static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
+
+        // The title bar is drawn by Windows: tell it the theme (Windows 10 2004+ uses 20, older builds 19).
+        // Every window calls it once; Apply repeats it for the open windows.
+        public static void DarkTitle(Window w)
+        {
+            IntPtr h = new WindowInteropHelper(w).Handle;
+            if (h == IntPtr.Zero) { w.SourceInitialized += (s, e) => DarkTitle(w); return; }
+            int on = Dark ? 1 : 0;
+            try
+            {
+                if (DwmSetWindowAttribute(h, 20, ref on, sizeof(int)) != 0) DwmSetWindowAttribute(h, 19, ref on, sizeof(int));
+            }
+            catch (Exception) { }
+        }
+    }
+}

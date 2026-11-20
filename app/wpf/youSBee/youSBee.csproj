@@ -1,0 +1,66 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- youSBee on WPF (YOUSBEE.md, WPF_MIGRATION.md). Runs on .NET Framework 4.8 of Windows without anything else;
+       building needs the .NET SDK (tools\build.BAT finds it). No third-party packages.
+       While the move goes on, tools\build.BAT copies the result next to the WinForms youSBee.exe as youSBee-wpf.exe. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net481</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>youSBee</AssemblyName>
+    <RootNamespace>CompInfo.Wpf</RootNamespace>
+    <ApplicationIcon>..\..\yousbee.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Title, product, company, version and the target framework (4.8, as the WinForms programs: no 4.0 compatibility
+         mode) come from obj\YouSBeeVersion.cs, written by tools\build.BAT from app\youSBee.version. -->
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+    <!-- no youSBee.exe.config next to the exe: one file that works from a flash drive -->
+    <GenerateSupportedRuntime>false</GenerateSupportedRuntime>
+    <DebugType>none</DebugType>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Management" />
+    <Reference Include="System.Web.Extensions" />
+    <!-- not used itself, but the XAML compiler loads it for System.Web.Extensions (JavaScriptSerializer of Json.cs) -->
+    <Reference Include="System.Web" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
+    <Reference Include="System.DirectoryServices.AccountManagement" />
+  </ItemGroup>
+
+  <!-- the core, shared with the WinForms programs and the tests (C# 5) -->
+  <ItemGroup>
+    <Compile Include="..\..\..\obj\YouSBeeVersion.cs" Link="Core\YouSBeeVersion.cs" />
+    <Compile Include="..\..\src\Json.cs" Link="Core\Json.cs" />
+    <Compile Include="..\..\src\Store.cs" Link="Core\Store.cs" />
+    <Compile Include="..\..\src\Identity.cs" Link="Core\Identity.cs" />
+    <Compile Include="..\..\src\Machine.cs" Link="Core\Machine.cs" />
+    <Compile Include="..\..\src\Network.cs" Link="Core\Network.cs" />
+    <Compile Include="..\..\src\Shell.cs" Link="Core\Shell.cs" />
+    <Compile Include="..\..\src\IniSettings.cs" Link="Core\IniSettings.cs" />
+    <Compile Include="..\..\src\UsbList.cs" Link="Core\UsbList.cs" />
+    <Compile Include="..\..\src\Lang.cs" Link="Core\Lang.cs" />
+    <Compile Include="..\..\src\Strings.cs" Link="Core\Strings.cs" />
+  </ItemGroup>
+
+  <!-- the shared look of the WPF programs and the USB page (also for the WPF toolbox later) -->
+  <ItemGroup>
+    <Compile Include="..\Shared\*.cs" Link="Shared\%(Filename)%(Extension)" />
+    <Page Include="..\Shared\*.xaml" Link="Shared\%(Filename)%(Extension)" />
+    <Compile Include="..\Pages\UsbView.xaml.cs" Link="Pages\UsbView.xaml.cs" />
+    <Page Include="..\Pages\UsbView.xaml" Link="Pages\UsbView.xaml" />
+  </ItemGroup>
+
+  <!-- the picture of «О программе» -->
+  <ItemGroup>
+    <Resource Include="..\..\yousbee.png" Link="yousbee.png" />
+  </ItemGroup>
+
+</Project>

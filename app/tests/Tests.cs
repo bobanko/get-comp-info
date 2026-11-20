@@ -37,6 +37,7 @@ namespace CompInfo
             Run("network profiles", Profiles);
             Run("free addresses from the database", FreeAddresses);
             Run("USB serial numbers", UsbSerials);
+            Run("USB drive list", UsbDriveList);
             Run("collected record", CollectedRecord);
             Run("search in any alphabet", LooseSearchMatches);
             Run("cloud state", CloudStateFile);
@@ -50,7 +51,7 @@ namespace CompInfo
             Run("program files and versions", ProgramFiles);
             Run("program update install", InstallRelease);
             Run("synchronization with a fake cloud", Synchronization);
-            Run("translations cover the interface", delegate { Translations(Path.Combine(fixtures, @"..\src")); });
+            Run("translations cover the interface", delegate { Translations(Path.Combine(fixtures, "..")); });
             Run("settings file", SettingsFile);
             Console.WriteLine(failures == 0 ? "All checks passed." : failures + " check(s) failed.");
             return failures == 0 ? 0 : 1;
@@ -258,6 +259,32 @@ namespace CompInfo
             Check(UsbDisk.SerialFromDeviceId(@"USBSTOR\DISK&VEN_GENERAL&PROD_USB_DISK&REV_5.00\7&2A5A8D4F&0") == "", "generated id is not a serial");
             Check(UsbDisk.SerialFromDeviceId(@"USBSTOR\DISK&VEN_KINGSTON&PROD_DT&REV_PMAP\408D5C1EB2F1E12039CF0A27&0") == "408D5C1EB2F1E12039CF0A27", "serial with LUN");
             Check(UsbDisk.SerialFromDeviceId(@"SCSI\DISK&VEN_NVME\5&1") == "", "not a USB disk");
+        }
+
+        // The list of «USB-накопители»: removed drives stay, new ones are marked, «Обновить» starts over.
+        static void UsbDriveList()
+        {
+            Func<int, string, string, UsbDisk> disk = delegate (int number, string name, string serial)
+            {
+                UsbDisk d = new UsbDisk();
+                d.Number = number; d.Name = name; d.Serial = serial; d.Size = 8L << 30; d.VolumeName = ""; d.DriveLetters = "E:";
+                return d;
+            };
+            UsbList list = new UsbList();
+            Check(list.Merge(new List<UsbDisk> { disk(1, "Kingston", "AAA") }, false).Count == 0, "drives present at start are not new");
+            List<UsbEntry> arrived = list.Merge(new List<UsbDisk> { disk(1, "Kingston", "AAA"), disk(2, "Generic", "") }, false);
+            Check(arrived.Count == 1 && arrived[0].Key == "disk:2|Generic" && !arrived[0].HasSerial, "a new drive without a serial is keyed by disk and name");
+            list.Merge(new List<UsbDisk> { disk(2, "Generic", "") }, false);
+            Check(list.Entries.Count == 2 && !list.Entries[0].Connected && list.AnyRemoved, "a removed drive stays, not connected");
+            // the same drive plugged in again (another disk number): the same row, connected and lit up again
+            arrived = list.Merge(new List<UsbDisk> { disk(3, "Kingston", "AAA"), disk(2, "Generic", "") }, false);
+            Check(list.Entries.Count == 2 && list.Entries[0].Connected && list.Entries[0].Disk.Number == 3 && arrived.Count == 1, "a drive back again");
+            list.Merge(new List<UsbDisk> { disk(2, "Generic", "") }, false);
+            Check(list.Merge(new List<UsbDisk> { disk(2, "Generic", "") }, true).Count == 0 && list.Entries.Count == 1 && !list.AnyRemoved,
+                "«Обновить» forgets the removed drives and lights nothing up");
+            UsbDisk labelled = disk(4, "SanDisk Ultra", "BBB");
+            labelled.VolumeName = "WORK";
+            Check(UsbList.Name(labelled) == "WORK" && UsbList.FullName(labelled) == "WORK — SanDisk Ultra" && UsbList.Name(disk(5, "X", "")) == "X", "names");
         }
 
         static void CollectedRecord()
@@ -798,8 +825,34 @@ namespace CompInfo
             finally { AppPaths.Root = saved; L.Code = "ru"; L.Choice = "system"; Directory.Delete(dir, true); }
         }
 
-        // Every L.T / L.F text of the program has Ukrainian and English versions with the same edges and placeholders.
-        static void Translations(string sources)
+        // Every L.T / L.F text of the programs has Ukrainian and English versions with the same edges and placeholders:
+        // the WinForms sources (app\src) and the WPF ones (app\wpf, with their subfolders). XAML holds no texts:
+        // they are set from the code through L.T, so a Cyrillic letter in a .xaml file is a missed translation.
+        static void Translations(string app)
+        {
+            List<string> files = new List<string>(Directory.GetFiles(Path.Combine(app, "src"), "*.cs"));
+            string wpf = Path.Combine(app, "wpf");
+            if (Directory.Exists(wpf))
+                foreach (string file in Directory.GetFiles(wpf, "*.*", SearchOption.AllDirectories))
+                {
+                    string ext = Path.GetExtension(file).ToLowerInvariant();
+                    if (ext == ".cs") files.Add(file);
+                    else if (ext == ".xaml")
+                    {
+                        string[] lines = File.ReadAllLines(file, Encoding.UTF8);
+                        for (int n = 0; n < lines.Length; n++)
+                        {
+                            // comments may be in any language
+                            string line = System.Text.RegularExpressions.Regex.Replace(lines[n], "<!--.*?(-->|$)", "");
+                            Check(!System.Text.RegularExpressions.Regex.IsMatch(line, "[А-Яа-яЁёІіЇїЄєҐґ]"),
+                                Path.GetFileName(file) + ":" + (n + 1) + ": a text in XAML, set it from the code with L.T");
+                        }
+                    }
+                }
+            TranslationsOf(files);
+        }
+
+        static void TranslationsOf(List<string> files)
         {
             Dictionary<string, string[]> table = new Dictionary<string, string[]>(StringComparer.Ordinal);
             for (int i = 0; i + 2 < Strings.All.Length; i += 3)
@@ -811,7 +864,7 @@ namespace CompInfo
             System.Text.RegularExpressions.Regex call = new System.Text.RegularExpressions.Regex("L\\.[TF]\\(\\s*\"((?:[^\"\\\\]|\\\\.)*)\"");
             System.Text.RegularExpressions.Regex holes = new System.Text.RegularExpressions.Regex("\\{\\d+[^}]*\\}");
             int used = 0;
-            foreach (string file in Directory.GetFiles(sources, "*.cs"))
+            foreach (string file in files)
             {
                 foreach (System.Text.RegularExpressions.Match m in call.Matches(File.ReadAllText(file, Encoding.UTF8)))
                 {

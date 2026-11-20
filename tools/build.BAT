@@ -45,11 +45,11 @@ call :version obj\SuspectorVersion.cs "SUSpector" %SUSVER%
 call :version obj\YouSBeeVersion.cs "youSBee" %YSBVER%
 
 set "REFS=/r:System.Management.dll /r:System.Web.Extensions.dll /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll /r:System.DirectoryServices.AccountManagement.dll"
-set "CORE=obj\Version.cs app\src\Json.cs app\src\Store.cs app\src\LooseSearch.cs app\src\Identity.cs app\src\Machine.cs app\src\Network.cs app\src\Export.cs app\src\Collector.cs app\src\Cloud.cs app\src\Shell.cs app\src\SystemChanges.cs app\src\Security.cs app\src\DocumentSearch.cs app\src\Lang.cs app\src\Strings.cs"
+set "CORE=obj\Version.cs app\src\Json.cs app\src\Store.cs app\src\LooseSearch.cs app\src\Identity.cs app\src\Machine.cs app\src\Network.cs app\src\Export.cs app\src\Collector.cs app\src\Cloud.cs app\src\Shell.cs app\src\SystemChanges.cs app\src\Security.cs app\src\DocumentSearch.cs app\src\UsbList.cs app\src\Lang.cs app\src\Strings.cs"
 set "UI=app\src\Theme.cs app\src\Ui.cs app\src\MainForm.cs app\src\CollectPage.cs app\src\DatabasePage.cs app\src\ToolPages.cs app\src\UsbPage.cs app\src\FileChips.cs app\src\SecurityPage.cs app\src\SearchPage.cs app\src\CloudPages.cs app\src\SystemPages.cs app\src\AboutPage.cs app\src\Program.cs"
-set "SUSPECTOR_CORE=obj\SuspectorVersion.cs app\src\Json.cs app\src\Store.cs app\src\Identity.cs app\src\Machine.cs app\src\Network.cs app\src\Shell.cs app\src\SystemChanges.cs app\src\Security.cs app\src\SuspectorUpdate.cs app\src\Lang.cs app\src\Strings.cs"
+set "SUSPECTOR_CORE=obj\SuspectorVersion.cs app\src\Json.cs app\src\Store.cs app\src\Identity.cs app\src\Machine.cs app\src\Network.cs app\src\Shell.cs app\src\SystemChanges.cs app\src\Security.cs app\src\SuspectorUpdate.cs app\src\IniSettings.cs app\src\Lang.cs app\src\Strings.cs"
 set "SUSPECTOR_UI=app\src\Theme.cs app\src\Ui.cs app\src\Standalone.cs app\src\FileChips.cs app\src\SecurityPage.cs app\src\SuspectorUpdateDialog.cs app\src\Suspector.cs"
-set "YOUSBEE_CORE=obj\YouSBeeVersion.cs app\src\Json.cs app\src\Store.cs app\src\Identity.cs app\src\Machine.cs app\src\Network.cs app\src\Shell.cs app\src\Lang.cs app\src\Strings.cs"
+set "YOUSBEE_CORE=obj\YouSBeeVersion.cs app\src\Json.cs app\src\Store.cs app\src\Identity.cs app\src\Machine.cs app\src\Network.cs app\src\Shell.cs app\src\IniSettings.cs app\src\UsbList.cs app\src\Lang.cs app\src\Strings.cs"
 set "YOUSBEE_UI=app\src\Theme.cs app\src\Ui.cs app\src\Standalone.cs app\src\UsbPage.cs app\src\YouSBee.cs"
 set "WINFORMS=/r:System.Windows.Forms.dll /r:System.Drawing.dll"
 
@@ -76,6 +76,15 @@ call :free youSBee || exit /b 1
 if errorlevel 1 exit /b 1
 echo Built youSBee.exe %YSBVER%
 
+rem The WPF youSBee (app\wpf\youSBee, WPF_MIGRATION.md) is built next to it as youSBee-wpf.exe while the move goes on.
+rem It needs the .NET SDK; without one it is skipped and the rest is built as before.
+call :dotnet || goto checks
+call :free youSBee-wpf || exit /b 1
+"%DOTNET%" build app\wpf\youSBee\youSBee.csproj -c Release -o obj\wpf\youSBee-out -nologo -v q -clp:NoSummary
+if errorlevel 1 exit /b 1
+copy /y obj\wpf\youSBee-out\youSBee.exe youSBee-wpf.exe >nul || exit /b 1
+echo Built youSBee-wpf.exe %YSBVER%
+
 :checks
 "%CSC%" /nologo /optimize+ /codepage:65001 /target:exe /out:obj\tests.exe /resource:app\trigger-words.txt,CompInfo.trigger-words.txt %REFS% %CORE% app\src\SuspectorUpdate.cs app\tests\Tests.cs app\tests\FakeCloud.cs
 if errorlevel 1 exit /b 1
@@ -95,6 +104,18 @@ if exist %1.exe (
   exit /b 1
 )
 exit /b 0
+
+rem Finds dotnet.exe of the .NET SDK: in PATH, installed for all users, or per user (dotnet-install.ps1).
+:dotnet
+set DOTNET_CLI_TELEMETRY_OPTOUT=1
+set DOTNET_NOLOGO=1
+set "DOTNET="
+for /f "delims=" %%i in ('where dotnet 2^>nul') do if not defined DOTNET set "DOTNET=%%i"
+if not defined DOTNET if exist "%ProgramFiles%\dotnet\dotnet.exe" set "DOTNET=%ProgramFiles%\dotnet\dotnet.exe"
+if not defined DOTNET if exist "%LOCALAPPDATA%\Microsoft\dotnet\dotnet.exe" set "DOTNET=%LOCALAPPDATA%\Microsoft\dotnet\dotnet.exe"
+if defined DOTNET exit /b 0
+echo .NET SDK not found: youSBee-wpf.exe is not built (https://dotnet.microsoft.com/download).
+exit /b 1
 
 rem Version information of one program: file, title (in quotes), version.
 :version
