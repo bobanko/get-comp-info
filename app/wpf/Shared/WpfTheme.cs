@@ -41,6 +41,16 @@ namespace CompInfo.Wpf
             // flash drives are orange, like the youSBee icon; «SBee» is honey yellow, as on chagear.top
             { "Flash",       "#E87E04", "#FFAA3C" },
             { "Honey",       "#B47A00", "#F5B82E" },
+            // violet of SUSpector (its name and the security section); folders yellow-orange, as in Explorer
+            { "Suspector",   "#6D3FD0", "#A585FF" },
+            { "Folder",      "#DE9200", "#FFC43D" },
+            // location chips of found files (FileChips.ColorKey): Danger / Warn / Ok / Muted use the state colours
+            { "ChipSupraWeedText", "#0E706A", "#5ED4C8" },
+            { "ChipSupraWeedBack", "#D2F0EC", "#163A38" },
+            { "ChipViberText",     "#6640B2", "#BEA0FF" },
+            { "ChipViberBack",     "#EAE2FC", "#302648" },
+            { "ChipClaudeText",    "#A64B31", "#E89A7D" },
+            { "ChipClaudeBack",    "#F7E5DD", "#432A24" },
             // a subtle fill under the mouse / pressed (WinUI 3 SubtleFillColorSecondary / Tertiary)
             { "SubtleHover", "#0A000000", "#0FFFFFFF" },
             { "SubtleDown",  "#06000000", "#0AFFFFFF" },

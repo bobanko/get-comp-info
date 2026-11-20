@@ -13,6 +13,9 @@ namespace CompInfo.Wpf
             Warning = "", Info = "", Open = "", Person = "", Globe = "",
             Pin = "", Pinned = "", Sun = "", Theme = "", Moon = "";
 
+        public const string Shield = "", Play = "", Power = "", Circle = "", More = "", Folder = "",
+            Delete = "", Lock = "", DockBottom = "", DockRight = "", Update = "";
+
         // A glyph of the icon font in a colour of the palette (a key of WpfTheme).
         public static TextBlock Block(string glyph, double size, string brushKey)
         {

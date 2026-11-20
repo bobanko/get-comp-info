@@ -6,28 +6,9 @@ using System.Windows.Forms;
 namespace CompInfo
 {
     // Location chips (#даунлоадс #корзина …) in front of a note in a grid cell: «#Desktop #документы · 3».
-    // Used by the ДСК document check and the document search.
-    public class FileChips
+    // Used by the ДСК document check and the document search. Parsing and colours: SecurityFiles.cs.
+    public partial class FileChips
     {
-        public readonly List<string> Labels = new List<string>();
-        public string Text = "";
-
-        public static FileChips Parse(string value)
-        {
-            string rest = (value ?? "").Trim();
-            FileChips chips = new FileChips();
-            while (rest.StartsWith("#", StringComparison.Ordinal))
-            {
-                int space = rest.IndexOf(' ');
-                string token = space < 0 ? rest : rest.Substring(0, space);
-                chips.Labels.Add(token.Substring(1));
-                rest = space < 0 ? "" : rest.Substring(space + 1).TrimStart();
-            }
-            if (chips.Labels.Count == 0) return null;
-            if (rest.StartsWith("·", StringComparison.Ordinal)) rest = rest.Substring(1).TrimStart();
-            chips.Text = rest;
-            return chips;
-        }
 
         // CellPainting handler body: draws the chips kept in the cell's Tag.
         public static void Paint(DataGridView grid, DataGridViewCellPaintingEventArgs e, int column)
@@ -78,11 +59,8 @@ namespace CompInfo
 
         static BadgeKind Kind(string label)
         {
-            if (label == L.T("#корзина").TrimStart('#')) return BadgeKind.Danger;
-            if (label == L.T("#даунлоадс").TrimStart('#')) return BadgeKind.Warn;
-            if (label == "WhatsApp") return BadgeKind.Ok;
-            if (label == "Desktop") return BadgeKind.Muted;
-            return BadgeKind.Ok;
+            string key = ColorKey(label);
+            return key == "Danger" ? BadgeKind.Danger : key == "Warn" ? BadgeKind.Warn : key == "Muted" ? BadgeKind.Muted : BadgeKind.Ok;
         }
 
         static void Colors(string label, out Color fore, out Color back)

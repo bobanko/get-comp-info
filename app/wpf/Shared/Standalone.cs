@@ -32,7 +32,14 @@ namespace CompInfo.Wpf
             row.Children.Add(b);
         }
 
+        // false while the page is busy (a check runs): the window is not closed and not built again.
+        public Func<bool> CanLeave = () => true;
+
         public StandaloneWindow(string name, string highlightKey, string description, FrameworkElement page, params Button[] buttons)
+            : this(name, highlightKey, description, page, false, buttons) { }
+
+        // buttonsAtBottom: the buttons in a row at the bottom right (SUSpector: its page has a toolbar of its own at the top).
+        public StandaloneWindow(string name, string highlightKey, string description, FrameworkElement page, bool buttonsAtBottom, params Button[] buttons)
         {
             Title = Brand.Plain(name) + " " + AppVersion.Text;
             UseLayoutRounding = true;
@@ -61,12 +68,23 @@ namespace CompInfo.Wpf
             Glyph.Label(about, Glyph.Info, L.T("О программе"));
             about.Click += delegate { if (ShowAbout != null) ShowAbout(this); };
             row.Children.Add(about);
-            Grid.SetColumn(row, 1);
-            header.Children.Add(row);
             DockPanel.SetDock(header, Dock.Top);
             root.Children.Add(header);
+            if (buttonsAtBottom)
+            {
+                row.Margin = new Thickness(0, 14, 0, 0);
+                row.HorizontalAlignment = HorizontalAlignment.Right;
+                DockPanel.SetDock(row, Dock.Bottom);
+                root.Children.Add(row);
+            }
+            else
+            {
+                Grid.SetColumn(row, 1);
+                header.Children.Add(row);
+            }
             root.Children.Add(page);
 
+            Closing += (s, e) => { if (!CanLeave()) e.Cancel = true; };
             WpfTheme.DarkTitle(this);
             SourceInitialized += delegate
             {
@@ -155,7 +173,7 @@ namespace CompInfo.Wpf
             about.Owner = owner;
             about.WindowStartupLocation = WindowStartupLocation.CenterOwner;
             about.ShowDialog();
-            if (about.LanguageChanged) Rebuild(owner);
+            if (about.LanguageChanged && owner.CanLeave()) Rebuild(owner);
         }
 
         // A new language: the window is built again in the same place and «О программе» opens once more.

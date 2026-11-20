@@ -35,11 +35,8 @@ namespace CompInfo
         public static string TableLayout = "bottom";
         public static Action<string> LayoutSaved;
 
-        // Location tags whose documents can be deleted all at once.
-        static string[] BulkTags
-        {
-            get { return new[] { L.T("#корзина"), L.T("#даунлоадс"), L.T("#телеграм"), "#WhatsApp", "#Viber", "#Claude" }; }
-        }
+        // Tags, protected files and deleting all files with a tag: SecurityFiles.cs, shared with the WPF page.
+        static string[] BulkTags { get { return SecurityFiles.BulkTags; } }
 
         public SecurityPage()
         {
@@ -479,34 +476,11 @@ namespace CompInfo
             else if (split.Width > em * 24 && split.SplitterDistance < em * 10) split.SplitterDistance = split.Width * 9 / 20;
         }
 
-        // Files in a SupraWeed folder are the program's own templates: they hold trigger words, not ДСК content.
-        static bool Protected(SecurityDetail item)
-        {
-            return TagsOf(item).Contains("SupraWeed");
-        }
+        static bool Protected(SecurityDetail item) { return SecurityFiles.Protected(item); }
 
-        static List<string> TagsOf(SecurityDetail item)
-        {
-            FileChips chips = FileChips.Parse(item.Note);
-            return chips == null ? new List<string>() : chips.Labels;
-        }
-
-        // Found files with the tag that may be deleted all at once (SupraWeed files never are); skipped counts the SupraWeed ones.
         static List<SecurityDetail> Tagged(SecurityCheck check, string tag, out int skipped)
         {
-            List<SecurityDetail> result = new List<SecurityDetail>();
-            skipped = 0;
-            if (check == null) return result;
-            string label = tag.TrimStart('#');
-            foreach (SecurityDetail item in check.Items)
-            {
-                if (item.FilePath.Length == 0) continue;
-                List<string> tags = TagsOf(item);
-                if (!tags.Contains(label)) continue;
-                if (tags.Contains("SupraWeed")) skipped++;
-                else result.Add(item);
-            }
-            return result;
+            return SecurityFiles.Tagged(check, tag, out skipped);
         }
 
         void UpdateBulkBar(SecurityCheck check)
@@ -636,16 +610,7 @@ namespace CompInfo
 
         void AfterDeletion(SecurityCheck check, DataGridViewRow checkRow, int removed, int rowIndex)
         {
-            if (check.ScanSummary == null) check.ScanSummary = check.Summary;
-            check.DeletedFiles += removed;
-            bool anyLeft = false;
-            foreach (SecurityDetail left in check.Items) if (left.FilePath.Length > 0) { anyLeft = true; break; }
-            if (!anyLeft && check.Level == SecurityLevel.Bad)
-            {
-                check.Level = SecurityLevel.Warning;
-                check.Summary = L.F("Найденные документы удалены ({0}). Запустите проверку снова, чтобы убедиться.", check.DeletedFiles);
-            }
-            else check.Summary = check.ScanSummary + L.F("; удалено: {0}", check.DeletedFiles);
+            SecurityFiles.Removed(check, removed);
             checkRow.Cells[0].Value = icons[check.Level];
             checkRow.Cells[2].Value = check.Summary;
             checkRow.Cells[2].Style.ForeColor = ColorOf(check.Level);
