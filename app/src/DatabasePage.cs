@@ -21,17 +21,18 @@ namespace CompInfo
         readonly StatusLine notes = new StatusLine();
         readonly DataGridView grid;
         readonly Label footer;
-        List<RecordFile> all = new List<RecordFile>();
+        // The records, repeats, filters and order: DeviceList.cs, shared with the WPF page.
+        readonly DeviceList list = new DeviceList();
+        List<RecordFile> all { get { return list.All; } }
+        CloudState cloud { get { return list.Cloud; } }
         List<RecordFile> shown = new List<RecordFile>();
-        Dictionary<string, int> ipCounts = new Dictionary<string, int>(), hostCounts = new Dictionary<string, int>(), serialCounts = new Dictionary<string, int>();
-        CloudState cloud = new CloudState();
         string lastSync = "";
         CurrentComputer me;
         int sortColumn = 0;
         bool descending;
 
-        static string[] Columns { get { return new[] { L.T("Имя компьютера"), L.T("IP-адрес"), L.T("Серийный номер"), L.T("Пользователь"), L.T("Собрано"), L.T("Облако"), "ESET", L.T("Инвентаризация"), L.T("Комментарий") }; } }
-        const int CommentColumn = 8;
+        static string[] Columns { get { return DeviceList.Columns; } }
+        const int CommentColumn = DeviceList.CommentColumn;
         // Columns whose text is searched and highlighted (the pills and the date are not).
         static readonly int[] TextColumns = { 0, 1, 2, 3, CommentColumn };
 
@@ -47,8 +48,8 @@ namespace CompInfo
             search.Margin = new Padding(0, em / 6, em / 2, em / 3);
             Ui.SetCue(search, L.T("Поиск по всем полям, кириллицей или латиницей"));
             search.TextChanged += delegate { Fill(); };
-            esetFilter.Items.AddRange(new object[] { L.T("ESET: все"), L.T("ESET: установлен"), L.T("ESET: не установлен"), L.T("ESET: не проверено") });
-            inventoryFilter.Items.AddRange(new object[] { L.T("Инвентаризация: все"), L.T("Инвентаризация: да"), L.T("Инвентаризация: нет") });
+            esetFilter.Items.AddRange(DeviceList.EsetFilters);
+            inventoryFilter.Items.AddRange(DeviceList.InventoryFilters);
             repeatsFilter.Items.AddRange(new object[] { "", "", "", "" });
             RepeatTexts();
             foreach (ComboBox c in new[] { esetFilter, inventoryFilter, repeatsFilter })
@@ -105,7 +106,7 @@ namespace CompInfo
             grid.ScrollBars = ScrollBars.Vertical;
             grid.ColumnHeaderMouseClick += delegate (object o, DataGridViewCellMouseEventArgs e)
             {
-                if (e.ColumnIndex == 6 || e.ColumnIndex == CommentColumn) return;   // ESET and comment are not sortable, as in the console
+                if (!DeviceList.Sortable(e.ColumnIndex)) return;   // ESET and comment are not sortable, as in the console
                 if (sortColumn == e.ColumnIndex) descending = !descending; else { sortColumn = e.ColumnIndex; descending = false; }
                 Fill();
             };
@@ -153,24 +154,12 @@ namespace CompInfo
         {
             if (me == null) me = CurrentComputer.Read();
             string selected = grid.CurrentRow != null && grid.CurrentRow.Index < shown.Count ? shown[grid.CurrentRow.Index].Path : null;
-            List<string> warnings = new List<string>();
-            cloud = CloudState.ForDisplay(AppPaths.Root);
-            all = Records.ReadAll(AppPaths.Data, cloud, warnings);
-            // Compare full addresses across the whole base, before the search.
-            // Repeats across the whole base, before the search, by the keys of the web interface (logic.js).
-            ipCounts = new Dictionary<string, int>();
-            hostCounts = new Dictionary<string, int>();
-            serialCounts = new Dictionary<string, int>();
-            foreach (RecordFile r in all)
-            {
-                Count(ipCounts, IpKey(r.Data));
-                Count(hostCounts, HostKey(r.Data));
-                Count(serialCounts, SerialKey(r.Data));
-            }
+            list.Load(AppPaths.Root);
+            List<string> warnings = list.Warnings;
             if (warnings.Count > 0)
                 notes.Set(Glyph.Warning, L.T("Пропущены файлы, которые не удалось прочитать (") + warnings.Count + "): " + string.Join("; ", warnings), Theme.Warn);
             else notes.Clear();
-            lastSync = string.IsNullOrEmpty(cloud.LastSyncAt) ? L.T("не было") : Fmt.Date(cloud.LastSyncAt);
+            lastSync = list.LastSync;
             RepeatTexts();
             Fill();
             if (selected != null)
@@ -180,108 +169,17 @@ namespace CompInfo
             }
         }
 
-        static void Count(Dictionary<string, int> counts, string key)
-        {
-            if (key.Length == 0) return;
-            int n;
-            counts[key] = counts.TryGetValue(key, out n) ? n + 1 : 1;
-        }
-
-        static bool Repeated(Dictionary<string, int> counts, string key)
-        {
-            int n;
-            return key.Length > 0 && counts.TryGetValue(key, out n) && n > 1;
-        }
-
-        static string IpKey(JsonObject d) { return (d.Text("ip") ?? "").Trim(); }
-        static string HostKey(JsonObject d) { return (d.Text("hostname") ?? "").Trim().ToUpperInvariant(); }
-        static string SerialKey(JsonObject d) { return Identity.UsableSerial(d.Text("serial")) ? d.Text("serial").Trim().ToUpperInvariant() : ""; }
-
-        // Naming policy of the web interface: "AB-123-…"; DESKTOP-, LAPTOP-, WIN- are names Windows made up.
-        static string HostIssue(string name)
-        {
-            name = (name ?? "").Trim();
-            if (name.Length == 0) return null;
-            if (System.Text.RegularExpressions.Regex.IsMatch(name, "^(DESKTOP|LAPTOP|WIN)-", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
-                return L.T("Имя по умолчанию от Windows: переименуйте по правилам");
-            return System.Text.RegularExpressions.Regex.IsMatch(name, "^[A-Z]{2}-\\d{3}-.", System.Text.RegularExpressions.RegexOptions.IgnoreCase) ? null : L.T("Имя не по правилам (ожидается вид АА-000-…)");
-        }
-
-        static bool Recent(string value)
-        {
-            DateTime d;
-            if (!DateTime.TryParse(value ?? "", out d)) return false;
-            TimeSpan age = DateTime.Now - d;
-            return age.TotalDays <= 7 && age.TotalMinutes >= -1;
-        }
-
-        static long IpOrder(string value)
-        {
-            string[] octets = (value ?? "").Trim().Split('.');
-            if (octets.Length != 4) return long.MaxValue;
-            long n = 0;
-            foreach (string o in octets)
-            {
-                int v;
-                if (o.Length == 0 || o.Length > 3 || !int.TryParse(o, NumberStyles.None, CultureInfo.InvariantCulture, out v) || v > 255) return long.MaxValue;
-                n = n * 256 + v;
-            }
-            return n;
-        }
-
-        static string EsetShort(object value)
-        {
-            if (value == null) return "—";
-            return value is bool && (bool)value ? L.T("да") : L.T("нет");
-        }
-
-        // The inventory mark set on the website.
-        static bool Inventoried(JsonObject d) { return d["inventoried"] is bool && (bool)d["inventoried"]; }
-
         // Repeats filter: how many values repeat per field, refreshed with the base.
         void RepeatTexts()
         {
-            int ip = 0, host = 0, serial = 0;
-            foreach (int n in ipCounts.Values) if (n > 1) ip++;
-            foreach (int n in hostCounts.Values) if (n > 1) host++;
-            foreach (int n in serialCounts.Values) if (n > 1) serial++;
-            string[] texts = { L.T("Повторы: все"), L.T("Повторы IP: ") + ip, L.T("Повторы имён: ") + host, L.T("Повторы серийников: ") + serial };
+            string[] texts = list.RepeatFilters;
             for (int i = 0; i < texts.Length; i++)
                 if ((string)repeatsFilter.Items[i] != texts[i]) repeatsFilter.Items[i] = texts[i];
         }
 
-        // Every word of the search occurs somewhere in the record (any field), as typed or in the other alphabet.
-        static bool MatchesSearch(RecordFile r, List<string> words)
-        {
-            if (words.Count == 0) return true;
-            StringBuilder text = new StringBuilder(r.Id);
-            foreach (string name in r.Data.Names) text.Append('\n').Append(r.Data.Text(name));
-            string haystack = text.ToString();
-            string key = LooseSearch.LooseKey(haystack).Text;
-            foreach (string word in words)
-                if (!LooseSearch.Matches(haystack, word, key)) return false;
-            return true;
-        }
-
-        bool PassesFilters(RecordFile r)
-        {
-            object eset = r.Data["esetInstalled"];
-            switch (esetFilter.SelectedIndex)
-            {
-                case 1: if (!(eset is bool && (bool)eset)) return false; break;
-                case 2: if (!(eset is bool && !(bool)eset)) return false; break;
-                case 3: if (eset is bool) return false; break;
-            }
-            if (inventoryFilter.SelectedIndex == 1 && !Inventoried(r.Data)) return false;
-            if (inventoryFilter.SelectedIndex == 2 && Inventoried(r.Data)) return false;
-            switch (repeatsFilter.SelectedIndex)
-            {
-                case 1: if (!Repeated(ipCounts, IpKey(r.Data))) return false; break;
-                case 2: if (!Repeated(hostCounts, HostKey(r.Data))) return false; break;
-                case 3: if (!Repeated(serialCounts, SerialKey(r.Data))) return false; break;
-            }
-            return true;
-        }
+        static string HostIssue(string name) { return DeviceList.HostIssue(name); }
+        static bool Recent(string value) { return DeviceList.Recent(value); }
+        static bool Inventoried(JsonObject d) { return DeviceList.Inventoried(d); }
 
         // Search words in the text cells: the matched parts on a yellow background, as <mark> on the website.
         void PaintMatches(object sender, DataGridViewCellPaintingEventArgs e)
@@ -328,58 +226,11 @@ namespace CompInfo
             e.Handled = true;
         }
 
-        static int CloudOrder(string status)
-        {
-            return status == CloudState.Synced ? 0 : status == CloudState.Changed ? 1 : 2;
-        }
-
-        static DateTime DateOf(string value)
-        {
-            DateTime d;
-            return DateTime.TryParse(value ?? "", out d) ? d : DateTime.MinValue;
-        }
-
-        int Compare(RecordFile a, RecordFile b)
-        {
-            StringComparer text = StringComparer.Create(CultureInfo.CurrentCulture, true);
-            string ha = a.Data.Text("hostname") ?? "", hb = b.Data.Text("hostname") ?? "";
-            int c;
-            switch (sortColumn)
-            {
-                case 1: c = IpOrder(a.Data.Text("ip")).CompareTo(IpOrder(b.Data.Text("ip"))); break;
-                case 2: c = text.Compare(a.Data.Text("serial") ?? "", b.Data.Text("serial") ?? ""); break;
-                case 3:
-                    string ua = a.Data.Text("username") ?? "", ub = b.Data.Text("username") ?? "";
-                    // Records without a user go last.
-                    c = (ua.Trim().Length == 0).CompareTo(ub.Trim().Length == 0);
-                    if (c == 0) c = text.Compare(ua, ub);
-                    break;
-                case 4: c = DateOf(a.Data.Text("collectedAt")).CompareTo(DateOf(b.Data.Text("collectedAt"))); break;
-                case 5: c = CloudOrder(a.CloudStatus).CompareTo(CloudOrder(b.CloudStatus)); break;
-                case 7: c = Inventoried(a.Data).CompareTo(Inventoried(b.Data)); break;
-                default: c = 0; break;
-            }
-            if (c == 0) c = text.Compare(ha, hb);
-            return descending ? -c : c;
-        }
-
         void Fill()
         {
             words = LooseSearch.Words(search.Text);
-            shown = new List<RecordFile>();
-            foreach (RecordFile r in all)
-                if (PassesFilters(r) && MatchesSearch(r, words)) shown.Add(r);
+            shown = list.Shown(words, esetFilter.SelectedIndex, inventoryFilter.SelectedIndex, repeatsFilter.SelectedIndex, sortColumn, descending);
             bool filtered = words.Count > 0 || esetFilter.SelectedIndex > 0 || inventoryFilter.SelectedIndex > 0 || repeatsFilter.SelectedIndex > 0;
-            // Stable sort: equal rows keep the file order.
-            List<KeyValuePair<int, RecordFile>> indexed = new List<KeyValuePair<int, RecordFile>>();
-            for (int i = 0; i < shown.Count; i++) indexed.Add(new KeyValuePair<int, RecordFile>(i, shown[i]));
-            indexed.Sort(delegate (KeyValuePair<int, RecordFile> a, KeyValuePair<int, RecordFile> b)
-            {
-                int c = Compare(a.Value, b.Value);
-                return c != 0 ? c : a.Key.CompareTo(b.Key);
-            });
-            shown.Clear();
-            foreach (KeyValuePair<int, RecordFile> p in indexed) shown.Add(p.Value);
 
             grid.SuspendLayout();
             grid.Rows.Clear();
@@ -403,19 +254,19 @@ namespace CompInfo
                 List<string> notes = new List<string>();
                 string issue = HostIssue(d.Text("hostname"));
                 if (issue != null) { row.Cells[0].Style.ForeColor = Theme.Warn; notes.Add(issue); }
-                if (Repeated(hostCounts, HostKey(d))) { row.Cells[0].Style.ForeColor = Theme.Bad; notes.Insert(0, L.T("Это имя есть у нескольких устройств")); }
+                if (list.RepeatedHost(d)) { row.Cells[0].Style.ForeColor = Theme.Bad; notes.Insert(0, L.T("Это имя есть у нескольких устройств")); }
                 if (me != null && me.Matches(d))
                 {
                     row.DefaultCellStyle.BackColor = Theme.GoodLight;
                     notes.Insert(0, L.T("Этот компьютер"));
                 }
                 row.Cells[0].ToolTipText = string.Join("\n", notes);
-                if (Repeated(ipCounts, IpKey(d)))
+                if (list.RepeatedIp(d))
                 {
                     row.Cells[1].Style.ForeColor = Theme.Bad;
                     row.Cells[1].ToolTipText = L.T("Этот IP есть у нескольких устройств");
                 }
-                if (Repeated(serialCounts, SerialKey(d)))
+                if (list.RepeatedSerial(d))
                 {
                     row.Cells[2].Style.ForeColor = Theme.Bad;
                     row.Cells[2].ToolTipText = L.T("Этот серийный номер есть у нескольких устройств");
@@ -541,15 +392,7 @@ namespace CompInfo
         public int Index;
         public bool Changed;
 
-        static string[][] Labels { get { return new[]
-        {
-            new[] { "hostname", L.T("Имя компьютера") }, new[] { "computerId", L.T("ID компьютера") }, new[] { "computerIdSource", L.T("Источник ID") },
-            new[] { "serial", L.T("Серийный номер") }, new[] { "smbiosUuid", "UUID" }, new[] { "windowsMachineGuid", L.T("ID установки Windows") },
-            new[] { "manufacturer", L.T("Производитель") }, new[] { "model", L.T("Модель") }, new[] { "windows", "Windows" },
-            new[] { "partOfDomain", L.T("Член домена") }, new[] { "domain", L.T("Домен / группа") }, new[] { "ip", L.T("IP-адрес") }, new[] { "mac", L.T("MAC-адрес") },
-            new[] { "username", L.T("Пользователь") }, new[] { "esetInstalled", "ESET" }, new[] { "inventoried", L.T("Инвентаризация") },
-            new[] { "createdAt", L.T("Создана") }, new[] { "collectedAt", L.T("Собрана") },
-        }; } }
+        static string[][] Labels { get { return DeviceList.CardFields; } }
 
         public RecordDialog(List<RecordFile> records, int index, CloudState cloud)
         {
@@ -666,14 +509,7 @@ namespace CompInfo
             status.Clear();
         }
 
-        static string Value(JsonObject d, string name)
-        {
-            if (name == "esetInstalled") return ComputerSnapshot.EsetText(d[name]);
-            if (name == "createdAt" || name == "collectedAt") return Fmt.Date(d.Text(name));
-            if (name == "partOfDomain") { object v = d[name]; return v == null ? "" : (v is bool && (bool)v ? L.T("да") : L.T("нет")); }
-            if (name == "inventoried") return d[name] is bool && (bool)d[name] ? L.T("да") : L.T("нет") + L.T(" (отметку ставят на сайте)");
-            return d.Text(name) ?? "";
-        }
+        static string Value(JsonObject d, string name) { return DeviceList.CardValue(d, name); }
 
         void AddField(string label, string value)
         {

@@ -38,6 +38,7 @@ namespace CompInfo
             Run("free addresses from the database", FreeAddresses);
             Run("USB serial numbers", UsbSerials);
             Run("USB drive list", UsbDriveList);
+            Run("device list", DeviceListing);
             Run("collected record", CollectedRecord);
             Run("search in any alphabet", LooseSearchMatches);
             Run("cloud state", CloudStateFile);
@@ -285,6 +286,47 @@ namespace CompInfo
             UsbDisk labelled = disk(4, "SanDisk Ultra", "BBB");
             labelled.VolumeName = "WORK";
             Check(UsbList.Name(labelled) == "WORK" && UsbList.FullName(labelled) == "WORK — SanDisk Ultra" && UsbList.Name(disk(5, "X", "")) == "X", "names");
+        }
+
+        // «База устройств»: repeats across the base, filters, search in any alphabet, order, naming policy, the comment.
+        static void DeviceListing()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "compinfo-devices-" + Guid.NewGuid().ToString("N"));
+            string data = Path.Combine(root, "data");
+            Directory.CreateDirectory(data);
+            try
+            {
+                Action<string, string> write = delegate (string name, string json) { File.WriteAllText(Path.Combine(data, name + ".json"), json, new UTF8Encoding(false)); };
+                write("a", "{\"computerId\":\"A\",\"hostname\":\"IF-042-PC1\",\"ip\":\"10.0.0.10\",\"serial\":\"S1\",\"esetInstalled\":true,\"inventoried\":true,\"comment\":\"кабинет 12\"}");
+                write("b", "{\"computerId\":\"B\",\"hostname\":\"if-042-pc1\",\"ip\":\"10.0.0.9\",\"serial\":\"S2\",\"esetInstalled\":false,\"username\":\"petrov\"}");
+                write("c", "{\"computerId\":\"C\",\"hostname\":\"DESKTOP-AB12\",\"ip\":\"10.0.0.9\",\"serial\":\"S3\"}");
+                write("d", "{\"computerId\":\"D\",\"hostname\":\"BAD\",\"ip\":\"10.0.0.100\",\"serial\":\"S3\",\"esetInstalled\":true}");
+                DeviceList list = new DeviceList();
+                list.Load(root);
+                Check(list.All.Count == 4 && list.Warnings.Count == 0, "records read");
+                Func<int, int, int, List<string>, string> ids = delegate (int eset, int inventory, int repeats, List<string> words)
+                {
+                    List<string> result = new List<string>();
+                    foreach (RecordFile r in list.Shown(words ?? new List<string>(), eset, inventory, repeats, 0, false)) result.Add(r.Id);
+                    return string.Join(",", result.ToArray());
+                };
+                Check(list.RepeatFilters[1].EndsWith("1") && list.RepeatFilters[2].EndsWith("1") && list.RepeatFilters[3].EndsWith("1"), "one repeated IP, name and serial");
+                Check(ids(0, 0, 1, null) == "C,B", "repeated IP, ordered by name");
+                Check(ids(0, 0, 2, null) == "A,B", "repeated names, case does not matter");
+                Check(ids(0, 0, 3, null) == "D,C", "repeated serial numbers, ordered by name");
+                Check(ids(1, 0, 0, null) == "D,A" && ids(2, 0, 0, null) == "B" && ids(3, 0, 0, null) == "C", "ESET filter");
+                Check(ids(0, 1, 0, null) == "A" && ids(0, 2, 0, null) == "D,C,B", "inventory filter");
+                Check(ids(0, 0, 0, LooseSearch.Words("кабинет")) == "A" && ids(0, 0, 0, LooseSearch.Words("петров")) == "B", "search in any alphabet");
+                List<string> byIp = new List<string>();
+                foreach (RecordFile r in list.Shown(new List<string>(), 0, 0, 0, 1, false)) byIp.Add(r.Id);
+                Check(string.Join(",", byIp.ToArray()) == "C,B,A,D", "IP order is numeric, ties by name: " + string.Join(",", byIp.ToArray()));
+                Check(DeviceList.HostIssue("IF-042-PC1") == null && DeviceList.HostIssue("DESKTOP-AB12") != null && DeviceList.HostIssue("BAD") != null, "naming policy");
+                Check(DeviceList.Recent(DateTime.Now.AddDays(-2).ToString("o")) && !DeviceList.Recent(DateTime.Now.AddDays(-9).ToString("o")), "collected during 7 days");
+                RecordFile b = list.All.Find(delegate (RecordFile r) { return r.Id == "B"; });
+                RecordFile saved = DeviceList.SaveComment(b, "новый", list.Cloud);
+                Check(saved.Data.Text("comment") == "новый" && saved.Data.Text("username") == "petrov", "comment saved, other fields kept");
+            }
+            finally { Directory.Delete(root, true); }
         }
 
         static void CollectedRecord()
