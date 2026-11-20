@@ -68,7 +68,13 @@ namespace CompInfo.Wpf
             timer.Tick += delegate
             {
                 timer.Stop();
-                try { StandaloneStart.Save(w, file); }
+                try
+                {
+                    StandaloneStart.Save(w, file);
+                    // as comp-info.exe: the database also gives the card of its first record
+                    var database = w.Find(page) == null ? null : w.Find(page).View as DatabaseView;
+                    if (database != null) database.SaveCardImage(System.IO.Path.ChangeExtension(file, null) + "-card.png");
+                }
                 finally { Environment.Exit(0); }
             };
             timer.Start();

@@ -1,0 +1,101 @@
+<!-- «База устройств» on WPF (DatabasePage.cs on WinForms; the logic is DeviceList.cs). No texts here: they come from the code. -->
+<UserControl x:Class="CompInfo.Wpf.DatabaseView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:CompInfo.Wpf">
+    <UserControl.Resources>
+        <!-- the widths of the columns, fitted to the window by the code (FitColumns) -->
+        <local:ColumnWidths x:Key="Widths" />
+        <!-- a record: name (semibold; yellow when not by the rules, red when repeated), IP and serial (mono; red when
+             repeated), user, collected (green and bold during 7 days), pills of the cloud, ESET and inventory, the comment;
+             this computer on the soft green -->
+        <DataTemplate x:Key="DeviceTemplate">
+            <Grid x:Name="Row" MinHeight="34" Background="Transparent">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="{Binding W0, Source={StaticResource Widths}}" />
+                    <ColumnDefinition Width="{Binding W1, Source={StaticResource Widths}}" />
+                    <ColumnDefinition Width="{Binding W2, Source={StaticResource Widths}}" />
+                    <ColumnDefinition Width="{Binding W3, Source={StaticResource Widths}}" />
+                    <ColumnDefinition Width="{Binding W4, Source={StaticResource Widths}}" />
+                    <ColumnDefinition Width="{Binding W5, Source={StaticResource Widths}}" />
+                    <ColumnDefinition Width="{Binding W6, Source={StaticResource Widths}}" />
+                    <ColumnDefinition Width="{Binding W7, Source={StaticResource Widths}}" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="Name" local:Marked.Text="{Binding Name}" ToolTip="{Binding NameTip}" FontWeight="SemiBold"
+                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="12,0,12,0" />
+                <TextBlock x:Name="Ip" Grid.Column="1" local:Marked.Text="{Binding Ip}" ToolTip="{Binding IpTip}" FontFamily="{StaticResource MonoFont}"
+                           FontSize="13" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="0,0,12,0" />
+                <TextBlock x:Name="Serial" Grid.Column="2" local:Marked.Text="{Binding Serial}" ToolTip="{Binding SerialTip}" FontFamily="{StaticResource MonoFont}"
+                           FontSize="13" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="0,0,12,0" />
+                <TextBlock Grid.Column="3" local:Marked.Text="{Binding User}" TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center" Margin="0,0,12,0" />
+                <TextBlock x:Name="Collected" Grid.Column="4" Text="{Binding Collected}" ToolTip="{Binding CollectedTip}" VerticalAlignment="Center" Margin="0,0,12,0" />
+                <Border Grid.Column="5" Style="{StaticResource Pill}" Tag="{Binding CloudKind}" Margin="0,0,10,0">
+                    <TextBlock Text="{Binding CloudText}" />
+                </Border>
+                <Border Grid.Column="6" Style="{StaticResource Pill}" Tag="{Binding EsetKind}" Margin="0,0,10,0">
+                    <TextBlock Text="{Binding EsetText}" />
+                </Border>
+                <Border Grid.Column="7" Style="{StaticResource Pill}" Tag="{Binding InventoryKind}" ToolTip="{Binding InventoryTip}" Margin="0,0,10,0">
+                    <TextBlock Text="{Binding InventoryText}" />
+                </Border>
+                <TextBlock Grid.Column="8" local:Marked.Text="{Binding Comment}" ToolTip="{Binding CommentTip}" Foreground="{DynamicResource Muted}"
+                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="0,0,8,0" />
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding NameState}" Value="Warn">
+                    <Setter TargetName="Name" Property="Foreground" Value="{DynamicResource Warn}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding NameState}" Value="Bad">
+                    <Setter TargetName="Name" Property="Foreground" Value="{DynamicResource Bad}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IpRepeated}" Value="True">
+                    <Setter TargetName="Ip" Property="Foreground" Value="{DynamicResource Bad}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding SerialRepeated}" Value="True">
+                    <Setter TargetName="Serial" Property="Foreground" Value="{DynamicResource Bad}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Recent}" Value="True">
+                    <Setter TargetName="Collected" Property="Foreground" Value="{DynamicResource Good}" />
+                    <Setter TargetName="Collected" Property="FontWeight" Value="Bold" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Mine}" Value="True">
+                    <Setter TargetName="Row" Property="Background" Value="{DynamicResource GoodBack}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <DockPanel>
+        <!-- search, the three filters of the web device list, «Обновить», «Экспорт в CSV» -->
+        <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+            <TextBox x:Name="Search" Width="300" Margin="0,0,8,6" TextChanged="Search_TextChanged" />
+            <ComboBox x:Name="EsetFilter" Margin="0,0,8,6" SelectionChanged="Filter_Changed" />
+            <ComboBox x:Name="InventoryFilter" Margin="0,0,8,6" SelectionChanged="Filter_Changed" />
+            <ComboBox x:Name="RepeatsFilter" Margin="0,0,8,6" SelectionChanged="Filter_Changed" />
+            <Button x:Name="ReloadButton" Margin="0,0,8,6" Click="Reload_Click" />
+            <Button x:Name="ExportButton" Margin="0,0,8,6" Click="Export_Click" />
+        </WrapPanel>
+        <local:StatusLine x:Name="Notes" DockPanel.Dock="Top" Margin="0,0,0,8" />
+        <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+            <TextBlock x:Name="CountText" Foreground="{DynamicResource Muted}" />
+            <TextBlock x:Name="Legend" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" Margin="0,2,0,0" />
+        </StackPanel>
+
+        <Border Style="{StaticResource TableFrame}">
+            <Grid Grid.IsSharedSizeScope="True">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition />
+                </Grid.RowDefinitions>
+                <Border Style="{StaticResource TableHeader}">
+                    <Grid x:Name="Header" Height="34" />
+                </Border>
+                <ListBox x:Name="Table" Grid.Row="1" Style="{StaticResource BareListBox}" ItemContainerStyle="{StaticResource TableRow}"
+                         ItemTemplate="{StaticResource DeviceTemplate}" VirtualizingPanel.IsVirtualizing="False"
+                         MouseDoubleClick="Table_MouseDoubleClick" KeyDown="Table_KeyDown" />
+            </Grid>
+        </Border>
+    </DockPanel>
+</UserControl>

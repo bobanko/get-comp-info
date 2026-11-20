@@ -18,7 +18,8 @@ namespace CompInfo.Wpf
 
         // the sections of the toolbox
         public const string Computer = "", Network = "", Tag = "", Domain = "", Ping = "",
-            Database = "", Sync = "", Search = "", Cloud = "", Dash = "";
+            Database = "", Sync = "", Search = "", Cloud = "", Dash = "",
+            Export = "", Save = "", Back = "", Forward = "";
 
         // A glyph of the icon font in a colour of the palette (a key of WpfTheme).
         public static TextBlock Block(string glyph, double size, string brushKey)

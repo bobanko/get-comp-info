@@ -49,6 +49,8 @@ namespace CompInfo.Wpf
             { "Rainbow4",    "#2563EB", "#6C9BFF" },
             { "Rainbow5",    "#B425C4", "#E599F7" },
             { "Toolbox",     "#3D6FB6", "#79A6E8" },
+            // found words in a table, as <mark> of the website: the yellow of the brand letters over the row
+            { "Mark",        "#E4D19E", "#716229" },
             // the shield of a copy already running with administrator rights
             { "AdminReady",  "#0B6E36", "#57C47F" },
             // violet of SUSpector (its name and the security section); folders yellow-orange, as in Explorer

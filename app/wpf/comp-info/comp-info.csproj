@@ -56,6 +56,7 @@
     <Compile Include="..\..\src\DocumentSearch.cs" Link="Core\DocumentSearch.cs" />
     <Compile Include="..\..\src\UsbList.cs" Link="Core\UsbList.cs" />
     <Compile Include="..\..\src\SecurityFiles.cs" Link="Core\SecurityFiles.cs" />
+    <Compile Include="..\..\src\DeviceList.cs" Link="Core\DeviceList.cs" />
     <!-- not used by the toolbox itself, but by the shared frame of the standalone programs (Shared\Standalone.cs) -->
     <Compile Include="..\..\src\IniSettings.cs" Link="Core\IniSettings.cs" />
     <Compile Include="..\..\src\Lang.cs" Link="Core\Lang.cs" />

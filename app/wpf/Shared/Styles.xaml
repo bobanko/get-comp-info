@@ -634,6 +634,58 @@
             <Setter Property="TextElement.Foreground" Value="{DynamicResource Muted}" />
             <Setter Property="TextElement.FontWeight" Value="SemiBold" />
         </Style>
+        <!-- A pill of the web interface (cloud status, ESET, inventory): Tag = "Good", "Warn", "Bad" or anything else (muted). -->
+        <Style x:Key="Pill" TargetType="Border">
+            <Setter Property="CornerRadius" Value="9" />
+            <Setter Property="Padding" Value="8,1,8,2" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Background" Value="{DynamicResource HeaderBack}" />
+            <Setter Property="TextElement.Foreground" Value="{DynamicResource Muted}" />
+            <Setter Property="TextElement.FontSize" Value="12" />
+            <Style.Triggers>
+                <Trigger Property="Tag" Value="Good">
+                    <Setter Property="Background" Value="{DynamicResource GoodBack}" />
+                    <Setter Property="TextElement.Foreground" Value="{DynamicResource Good}" />
+                </Trigger>
+                <Trigger Property="Tag" Value="Warn">
+                    <Setter Property="Background" Value="{DynamicResource WarnBack}" />
+                    <Setter Property="TextElement.Foreground" Value="{DynamicResource Warn}" />
+                </Trigger>
+                <Trigger Property="Tag" Value="Bad">
+                    <Setter Property="Background" Value="{DynamicResource BadBack}" />
+                    <Setter Property="TextElement.Foreground" Value="{DynamicResource Bad}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- a column title that sorts the table: the header text, a subtle fill under the mouse -->
+        <Style x:Key="HeaderButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Box" Background="Transparent" CornerRadius="4" Padding="4,0">
+                            <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Box" Property="Background" Value="{DynamicResource SubtleHover}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Cursor" Value="Arrow" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- a row of a table: a thin line under it, a subtle fill under the mouse, the chosen row with a short blue bar -->
         <Style x:Key="TableRow" TargetType="ListBoxItem">
             <Setter Property="Foreground" Value="{DynamicResource Text}" />
