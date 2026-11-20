@@ -74,6 +74,9 @@ namespace CompInfo.Wpf
                 try
                 {
                     StandaloneStart.Save(w, file);
+                    // the search also gives its table with made-up files (file-table.png)
+                    var search = w.Find(page) == null ? null : w.Find(page).View as SearchView;
+                    if (search != null) { search.Demo(); search.UpdateLayout(); StandaloneStart.Save(w, System.IO.Path.ChangeExtension(file, null) + "-table.png"); }
                     // as comp-info.exe: the database also gives the card of its first record
                     var database = w.Find(page) == null ? null : w.Find(page).View as DatabaseView;
                     if (database != null) database.SaveCardImage(System.IO.Path.ChangeExtension(file, null) + "-card.png");

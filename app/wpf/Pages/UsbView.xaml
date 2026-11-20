@@ -48,14 +48,15 @@
 
         <!-- a row: the soft red of a removed drive, the soft green of a new one fading out, a subtle fill under the mouse,
              the chosen row with a short blue bar on the left; a thin line under every row -->
-        <Style x:Key="UsbRowItem" TargetType="ListBoxItem">
+        <Style x:Key="UsbRowItem" TargetType="ListViewItem">
             <Setter Property="Foreground" Value="{DynamicResource Text}" />
             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="ToolTipService.InitialShowDelay" Value="600" />
             <Setter Property="Template">
                 <Setter.Value>
-                    <ControlTemplate TargetType="ListBoxItem">
+                    <ControlTemplate TargetType="ListViewItem">
                         <Border x:Name="Line" BorderBrush="{DynamicResource Divider}" BorderThickness="0,0,0,1">
                             <Grid>
                                 <Border x:Name="Back" Background="Transparent" />
@@ -63,7 +64,7 @@
                                 <Border x:Name="Hover" Background="Transparent" />
                                 <Border x:Name="Pill" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left"
                                         Margin="2,0,0,0" Background="{DynamicResource Accent}" Visibility="Collapsed" />
-                                <ContentPresenter />
+                                <GridViewRowPresenter VerticalAlignment="Center" />
                             </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -97,55 +98,62 @@
             </Setter>
         </Style>
 
-        <!-- The columns: icon, drive letter, name, size, serial number (takes the free width), «Копировать».
-             The header uses the same groups, so its titles stand over their columns. -->
-        <DataTemplate x:Key="UsbRowTemplate">
-            <Grid Height="38">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="36" />
-                    <ColumnDefinition Width="Auto" SharedSizeGroup="Disk" />
-                    <ColumnDefinition Width="110" />
-                    <ColumnDefinition Width="Auto" SharedSizeGroup="Size" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" SharedSizeGroup="Copy" />
-                </Grid.ColumnDefinitions>
-                <!-- a flash drive; removed: grey with a red cross on a ring of the row colour -->
-                <Grid HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="{Binding IconTip}">
-                    <TextBlock x:Name="Drive" Text="&#xE88E;" FontFamily="{StaticResource IconFont}" FontSize="17"
-                               Foreground="{DynamicResource Flash}" />
-                    <Grid x:Name="Removed" Width="11" Height="11" HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                          Margin="0,0,-4,-1" Visibility="Collapsed">
-                        <Ellipse Fill="{DynamicResource BadBack}" Margin="-1.5" />
-                        <TextBlock Text="&#xE711;" FontFamily="{StaticResource IconFont}" FontSize="9" FontWeight="Bold"
-                                   Foreground="{DynamicResource Bad}" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    </Grid>
+        <!-- The columns, cell by cell: icon, drive letter, name, size, serial number (takes the free width), «Копировать». -->
+        <DataTemplate x:Key="IconCell">
+            <!-- a flash drive; removed: grey with a red cross on a ring of the row colour -->
+            <Grid Height="38" HorizontalAlignment="Center" ToolTip="{Binding IconTip}">
+                <TextBlock x:Name="Drive" Text="&#xE88E;" FontFamily="{StaticResource IconFont}" FontSize="17" VerticalAlignment="Center"
+                           Foreground="{DynamicResource Flash}" />
+                <Grid x:Name="Removed" Width="11" Height="11" HorizontalAlignment="Right" VerticalAlignment="Center"
+                      Margin="0,14,-4,0" Visibility="Collapsed">
+                    <Ellipse Fill="{DynamicResource BadBack}" Margin="-1.5" />
+                    <TextBlock Text="&#xE711;" FontFamily="{StaticResource IconFont}" FontSize="9" FontWeight="Bold"
+                               Foreground="{DynamicResource Bad}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Grid>
-                <TextBlock x:Name="Disk" Grid.Column="1" Text="{Binding DiskText}" ToolTip="{Binding DiskTip}"
-                           VerticalAlignment="Center" Margin="8,0,12,0" />
-                <TextBlock Grid.Column="2" Text="{Binding NameText}" ToolTip="{Binding NameTip}" TextTrimming="CharacterEllipsis"
-                           VerticalAlignment="Center" Margin="0,0,12,0" />
-                <TextBlock Grid.Column="3" Text="{Binding SizeText}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,12,0" />
-                <TextBlock x:Name="Serial" Grid.Column="4" Text="{Binding SerialText}" FontFamily="{StaticResource MonoFont}" FontWeight="Bold"
-                           FontSize="13" TextTrimming="CharacterEllipsis" ToolTip="{Binding SerialText}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                <Button x:Name="Copy" Grid.Column="5" Style="{StaticResource CopyButton}" Margin="0,0,5,0"
-                        ToolTip="{Binding CopyTip}" AutomationProperties.Name="{Binding CopyText}" Click="Copy_Click">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock x:Name="CopyIcon" Text="&#xE8C8;" FontFamily="{StaticResource IconFont}" FontSize="14" VerticalAlignment="Center" />
-                        <TextBlock x:Name="CopyLabel" Text="{Binding CopyText}" VerticalAlignment="Center" Margin="8,0,0,1" />
-                    </StackPanel>
-                </Button>
             </Grid>
             <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding Connected}" Value="False">
                     <Setter TargetName="Drive" Property="Foreground" Value="{DynamicResource Muted}" />
                     <Setter TargetName="Removed" Property="Visibility" Value="Visible" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+        <DataTemplate x:Key="DiskCell">
+            <TextBlock x:Name="Disk" Text="{Binding DiskText}" ToolTip="{Binding DiskTip}" VerticalAlignment="Center" Margin="0,0,6,0" />
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Connected}" Value="False">
                     <Setter TargetName="Disk" Property="Foreground" Value="{DynamicResource Bad}" />
                 </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+        <DataTemplate x:Key="NameCell">
+            <TextBlock Text="{Binding NameText}" ToolTip="{Binding NameTip}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+        </DataTemplate>
+        <DataTemplate x:Key="SizeCell">
+            <TextBlock Text="{Binding SizeText}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,6,0" />
+        </DataTemplate>
+        <DataTemplate x:Key="SerialCell">
+            <TextBlock x:Name="Serial" Text="{Binding SerialText}" FontFamily="{StaticResource MonoFont}" FontWeight="Bold"
+                       FontSize="13" TextTrimming="CharacterEllipsis" ToolTip="{Binding SerialText}" VerticalAlignment="Center" />
+            <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding HasSerial}" Value="False">
                     <Setter TargetName="Serial" Property="Foreground" Value="{DynamicResource Warn}" />
                     <Setter TargetName="Serial" Property="FontFamily" Value="Segoe UI" />
                     <Setter TargetName="Serial" Property="FontWeight" Value="Normal" />
                     <Setter TargetName="Serial" Property="FontSize" Value="13.333" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+        <DataTemplate x:Key="CopyCell">
+            <Button x:Name="Copy" Style="{StaticResource CopyButton}" ToolTip="{Binding CopyTip}" AutomationProperties.Name="{Binding CopyText}"
+                    Click="Copy_Click">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock x:Name="CopyIcon" Text="&#xE8C8;" FontFamily="{StaticResource IconFont}" FontSize="14" VerticalAlignment="Center" />
+                    <TextBlock x:Name="CopyLabel" Text="{Binding CopyText}" VerticalAlignment="Center" Margin="8,0,0,1" />
+                </StackPanel>
+            </Button>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding HasSerial}" Value="False">
                     <Setter TargetName="Copy" Property="Visibility" Value="Hidden" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Copied}" Value="True">
@@ -166,38 +174,27 @@
         <local:StatusLine x:Name="Status" DockPanel.Dock="Bottom" Margin="0,10,0,0" />
 
         <Border Style="{StaticResource TableFrame}">
-            <Grid Grid.IsSharedSizeScope="True">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition />
-                </Grid.RowDefinitions>
-                <Border Style="{StaticResource TableHeader}">
-                    <Grid Height="34">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="36" />
-                            <ColumnDefinition Width="Auto" SharedSizeGroup="Disk" />
-                            <ColumnDefinition Width="110" />
-                            <ColumnDefinition Width="Auto" SharedSizeGroup="Size" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" SharedSizeGroup="Copy" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock x:Name="DiskHeader" Grid.Column="1" VerticalAlignment="Center" Margin="8,0,12,0" />
-                        <TextBlock x:Name="NameHeader" Grid.Column="2" VerticalAlignment="Center" Margin="0,0,12,0" TextTrimming="CharacterEllipsis" />
-                        <TextBlock x:Name="SizeHeader" Grid.Column="3" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,12,0" />
-                        <TextBlock x:Name="SerialHeader" Grid.Column="4" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                    </Grid>
-                </Border>
-                <ListBox x:Name="Table" Grid.Row="1" Style="{StaticResource BareListBox}" ItemContainerStyle="{StaticResource UsbRowItem}"
-                         ItemTemplate="{StaticResource UsbRowTemplate}" SelectionMode="Single"
-                         MouseDoubleClick="Table_MouseDoubleClick" KeyDown="Table_KeyDown" />
+            <Grid>
+                <ListView x:Name="Table" Style="{StaticResource GridTable}" ItemContainerStyle="{StaticResource UsbRowItem}" SelectionMode="Single"
+                          MouseDoubleClick="Table_MouseDoubleClick" KeyDown="Table_KeyDown">
+                    <ListView.View>
+                        <GridView ColumnHeaderContainerStyle="{StaticResource GridTableHeader}">
+                            <GridViewColumn Width="36" CellTemplate="{StaticResource IconCell}" />
+                            <GridViewColumn x:Name="DiskColumn" CellTemplate="{StaticResource DiskCell}" />
+                            <GridViewColumn x:Name="NameColumn" Width="130" CellTemplate="{StaticResource NameCell}" />
+                            <GridViewColumn x:Name="SizeColumn" CellTemplate="{StaticResource SizeCell}" />
+                            <GridViewColumn x:Name="SerialColumn" local:TableColumns.Fill="1" CellTemplate="{StaticResource SerialCell}" />
+                            <GridViewColumn x:Name="CopyColumn" CellTemplate="{StaticResource CopyCell}" />
+                        </GridView>
+                    </ListView.View>
+                </ListView>
                 <!-- an empty table says what to do -->
-                <StackPanel x:Name="Empty" Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"
+                <StackPanel x:Name="Empty" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,34,0,0" Visibility="Collapsed"
                             IsHitTestVisible="False">
                     <TextBlock Text="&#xE88E;" FontFamily="{StaticResource IconFont}" FontSize="48" Foreground="{DynamicResource Border}"
                                HorizontalAlignment="Center" />
                     <TextBlock x:Name="EmptyText" Foreground="{DynamicResource Muted}" HorizontalAlignment="Center" Margin="0,10,0,0" />
                 </StackPanel>
             </Grid>
-        </Border>
-    </DockPanel>
+        </Border>    </DockPanel>
 </UserControl>

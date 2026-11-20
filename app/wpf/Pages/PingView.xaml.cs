@@ -21,9 +21,9 @@ namespace CompInfo.Wpf
             Nodes.ItemsSource = rows;
             Glyph.Label(RunButton, Glyph.Refresh, L.T("Проверить ещё раз"));
             RunButton.ToolTip = L.T("Проверить ещё раз") + "   (F5)";
-            NodeHeader.Text = L.T("Узел");
-            AddressHeader.Text = L.T("Адрес");
-            ResultHeader.Text = L.T("Результат");
+            NodeColumn.Header = L.T("Узел");
+            AddressColumn.Header = L.T("Адрес");
+            ResultColumn.Header = L.T("Результат");
         }
 
         public void Opened() { Run(); }

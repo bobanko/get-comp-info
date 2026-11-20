@@ -4,23 +4,10 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:CompInfo.Wpf">
     <UserControl.Resources>
-        <!-- a node: state icon, name, address (mono), result in the colour of the state -->
-        <DataTemplate x:Key="NodeTemplate">
-            <Grid MinHeight="36">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="34" />
-                    <ColumnDefinition Width="Auto" SharedSizeGroup="Node" />
-                    <ColumnDefinition Width="Auto" SharedSizeGroup="Address" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <TextBlock x:Name="Icon" Text="&#xEA3A;" FontFamily="{StaticResource IconFont}" FontSize="15" HorizontalAlignment="Center"
-                           VerticalAlignment="Center" Foreground="{DynamicResource Border}" />
-                <TextBlock Grid.Column="1" Text="{Binding Label}" VerticalAlignment="Center" Margin="2,0,16,0" />
-                <TextBlock Grid.Column="2" Text="{Binding Address}" FontFamily="{StaticResource MonoFont}" FontSize="13"
-                           VerticalAlignment="Center" Margin="0,0,16,0" />
-                <TextBlock x:Name="Result" Grid.Column="3" Text="{Binding Result}" TextWrapping="Wrap" VerticalAlignment="Center"
-                           Margin="0,8,10,8" Foreground="{DynamicResource Muted}" />
-            </Grid>
+        <!-- a node, column by column: state icon, name, address (mono), result in the colour of the state -->
+        <DataTemplate x:Key="IconCell">
+            <TextBlock x:Name="Icon" Text="&#xEA3A;" FontFamily="{StaticResource IconFont}" FontSize="15" HorizontalAlignment="Center"
+                       VerticalAlignment="Center" Margin="0,10" Foreground="{DynamicResource Border}" />
             <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding State}" Value="Running">
                     <Setter TargetName="Icon" Property="Text" Value="&#xE712;" />
@@ -29,16 +16,32 @@
                 <DataTrigger Binding="{Binding State}" Value="Ok">
                     <Setter TargetName="Icon" Property="Text" Value="&#xE73E;" />
                     <Setter TargetName="Icon" Property="Foreground" Value="{DynamicResource Good}" />
-                    <Setter TargetName="Result" Property="Foreground" Value="{DynamicResource Good}" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding State}" Value="Failed">
                     <Setter TargetName="Icon" Property="Text" Value="&#xE711;" />
                     <Setter TargetName="Icon" Property="Foreground" Value="{DynamicResource Bad}" />
-                    <Setter TargetName="Result" Property="Foreground" Value="{DynamicResource Bad}" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding State}" Value="Skipped">
                     <Setter TargetName="Icon" Property="Text" Value="&#xE738;" />
                     <Setter TargetName="Icon" Property="Foreground" Value="{DynamicResource Muted}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+        <DataTemplate x:Key="NodeCell">
+            <TextBlock Text="{Binding Label}" VerticalAlignment="Center" Margin="0,0,10,0" />
+        </DataTemplate>
+        <DataTemplate x:Key="AddressCell">
+            <TextBlock Text="{Binding Address}" FontFamily="{StaticResource MonoFont}" FontSize="13" VerticalAlignment="Center" Margin="0,0,10,0" />
+        </DataTemplate>
+        <DataTemplate x:Key="ResultCell">
+            <TextBlock x:Name="Result" Text="{Binding Result}" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,8,4,8"
+                       Foreground="{DynamicResource Muted}" />
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding State}" Value="Ok">
+                    <Setter TargetName="Result" Property="Foreground" Value="{DynamicResource Good}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding State}" Value="Failed">
+                    <Setter TargetName="Result" Property="Foreground" Value="{DynamicResource Bad}" />
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
@@ -50,27 +53,15 @@
         <local:StatusLine x:Name="Adapter" DockPanel.Dock="Top" Margin="0,0,0,10" />
         <local:StatusLine x:Name="Summary" DockPanel.Dock="Bottom" Margin="0,10,0,0" />
         <Border Style="{StaticResource TableFrame}">
-            <Grid Grid.IsSharedSizeScope="True">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition />
-                </Grid.RowDefinitions>
-                <Border Style="{StaticResource TableHeader}">
-                    <Grid Height="34">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="34" />
-                            <ColumnDefinition Width="Auto" SharedSizeGroup="Node" />
-                            <ColumnDefinition Width="Auto" SharedSizeGroup="Address" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock x:Name="NodeHeader" Grid.Column="1" VerticalAlignment="Center" Margin="2,0,16,0" />
-                        <TextBlock x:Name="AddressHeader" Grid.Column="2" VerticalAlignment="Center" Margin="0,0,16,0" />
-                        <TextBlock x:Name="ResultHeader" Grid.Column="3" VerticalAlignment="Center" />
-                    </Grid>
-                </Border>
-                <ListBox x:Name="Nodes" Grid.Row="1" Style="{StaticResource BareListBox}" ItemContainerStyle="{StaticResource TableRow}"
-                         ItemTemplate="{StaticResource NodeTemplate}" />
-            </Grid>
-        </Border>
-    </DockPanel>
+            <ListView x:Name="Nodes" Style="{StaticResource GridTable}">
+                <ListView.View>
+                    <GridView ColumnHeaderContainerStyle="{StaticResource GridTableHeader}">
+                        <GridViewColumn Width="34" CellTemplate="{StaticResource IconCell}" />
+                        <GridViewColumn x:Name="NodeColumn" CellTemplate="{StaticResource NodeCell}" />
+                        <GridViewColumn x:Name="AddressColumn" CellTemplate="{StaticResource AddressCell}" />
+                        <GridViewColumn x:Name="ResultColumn" local:TableColumns.Fill="1" CellTemplate="{StaticResource ResultCell}" />
+                    </GridView>
+                </ListView.View>
+            </ListView>
+        </Border>    </DockPanel>
 </UserControl>

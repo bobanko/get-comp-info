@@ -41,13 +41,13 @@ namespace CompInfo.Wpf
             Right.ToolTip = L.T("Таблицы рядом");
             System.Windows.Automation.AutomationProperties.SetName(Bottom, (string)Bottom.ToolTip);
             System.Windows.Automation.AutomationProperties.SetName(Right, (string)Right.ToolTip);
-            CheckHeader.Text = L.T("Проверка");
-            ResultHeader.Text = L.T("Результат");
+            CheckColumn.Header = L.T("Проверка");
+            ResultColumn.Header = L.T("Результат");
             DetailsHeader.Text = L.T("Детали");
-            TypeHeader.Text = L.T("Тип");
-            TagsHeader.Text = L.T("Метки");
-            MatchesHeader.Text = L.T("Совпадений");
-            FileHeader.Text = L.T("Файл");
+            TypeColumn.Header = L.T("Тип");
+            TagsColumn.Header = L.T("Метки");
+            MatchesColumn.Header = L.T("Совпадений");
+            FileColumn.Header = L.T("Файл");
             (TableLayout == "right" ? Right : Bottom).IsChecked = true;
             ApplyLayout();
             ready = true;
@@ -295,7 +295,8 @@ namespace CompInfo.Wpf
                     }
                 }
             foreach (FileRow row in found) row.ChipsVisibility = tags ? Visibility.Visible : Visibility.Collapsed;
-            TagsHeader.Visibility = tags ? Visibility.Visible : Visibility.Collapsed;
+            // without tags the column keeps no title and shrinks to nothing (a GridView column cannot be hidden)
+            TagsColumn.Header = tags ? L.T("Метки") : "";
             Lines.ItemsSource = lines;
             Files.ItemsSource = found;
         }

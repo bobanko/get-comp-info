@@ -6,75 +6,59 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:CompInfo.Wpf">
     <UserControl.Resources>
-        <!-- a check: its state icon, its name, the result in the colour of the result -->
-        <DataTemplate x:Key="CheckTemplate">
-            <Grid MinHeight="36">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="34" />
-                    <ColumnDefinition Width="Auto" SharedSizeGroup="CheckName" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <TextBlock x:Name="Icon" Text="{Binding Glyph}" FontFamily="{StaticResource IconFont}" FontSize="15"
-                           HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,10,0,0" Foreground="{DynamicResource Accent}" />
-                <TextBlock Grid.Column="1" Text="{Binding Title}" VerticalAlignment="Top" Margin="2,9,16,8" />
-                <TextBlock x:Name="Result" Grid.Column="2" Text="{Binding Summary}" TextWrapping="Wrap" VerticalAlignment="Top"
-                           Margin="0,9,10,8" Foreground="{DynamicResource Accent}" />
-            </Grid>
+        <!-- a check, cell by cell: its state icon, its name, the result in the colour of the result -->
+        <DataTemplate x:Key="CheckIconCell">
+            <TextBlock x:Name="Icon" Text="{Binding Glyph}" FontFamily="{StaticResource IconFont}" FontSize="15"
+                       HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,10,0,10" Foreground="{DynamicResource Accent}" />
             <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding State}" Value="Waiting">
                     <Setter TargetName="Icon" Property="Foreground" Value="{DynamicResource Border}" />
-                    <Setter TargetName="Result" Property="Foreground" Value="{DynamicResource Muted}" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding State}" Value="Good">
                     <Setter TargetName="Icon" Property="Foreground" Value="{DynamicResource Good}" />
-                    <Setter TargetName="Result" Property="Foreground" Value="{DynamicResource Good}" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding State}" Value="Warning">
                     <Setter TargetName="Icon" Property="Foreground" Value="{DynamicResource Warn}" />
-                    <Setter TargetName="Result" Property="Foreground" Value="{DynamicResource Warn}" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding State}" Value="Bad">
                     <Setter TargetName="Icon" Property="Foreground" Value="{DynamicResource Bad}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+        <DataTemplate x:Key="CheckNameCell">
+            <TextBlock Text="{Binding Title}" VerticalAlignment="Top" Margin="0,9,6,8" />
+        </DataTemplate>
+        <DataTemplate x:Key="CheckResultCell">
+            <TextBlock x:Name="Result" Text="{Binding Summary}" TextWrapping="Wrap" VerticalAlignment="Top" Margin="0,9,4,8"
+                       Foreground="{DynamicResource Accent}" />
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding State}" Value="Waiting">
+                    <Setter TargetName="Result" Property="Foreground" Value="{DynamicResource Muted}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding State}" Value="Good">
+                    <Setter TargetName="Result" Property="Foreground" Value="{DynamicResource Good}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding State}" Value="Warning">
+                    <Setter TargetName="Result" Property="Foreground" Value="{DynamicResource Warn}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding State}" Value="Bad">
                     <Setter TargetName="Result" Property="Foreground" Value="{DynamicResource Bad}" />
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
-
         <!-- a line of the details of a check that has no files -->
         <DataTemplate x:Key="LineTemplate">
             <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Margin="12,8,10,8" />
         </DataTemplate>
 
-        <!-- a found file: Windows icon, type, location chips, matches, name; open, folder, delete (or a lock) -->
-        <DataTemplate x:Key="FileTemplate">
-            <Grid MinHeight="36">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="34" />
-                    <ColumnDefinition Width="Auto" SharedSizeGroup="Type" />
-                    <ColumnDefinition Width="Auto" SharedSizeGroup="Tags" />
-                    <ColumnDefinition Width="Auto" SharedSizeGroup="Matches" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <Image Source="{Binding Icon}" Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center"
-                       ToolTip="{Binding Path}" />
-                <TextBlock x:Name="Type" Grid.Column="1" Text="{Binding Type}" FontSize="12" FontWeight="SemiBold" MinWidth="44"
-                           VerticalAlignment="Center" Margin="2,0,10,0" Foreground="{DynamicResource Warn}" />
-                <ContentPresenter Grid.Column="2" Content="{Binding Chips}" VerticalAlignment="Center" Margin="0,0,8,0"
-                                  ToolTip="{Binding ChipsTip}" Visibility="{Binding ChipsVisibility}" />
-                <TextBlock Grid.Column="3" Text="{Binding Matches}" ToolTip="{Binding MatchesTip}" HorizontalAlignment="Center"
-                           VerticalAlignment="Center" Margin="0,0,12,0" />
-                <TextBlock Grid.Column="4" Text="{Binding Name}" ToolTip="{Binding Path}" FontWeight="SemiBold" TextWrapping="Wrap"
-                           VerticalAlignment="Center" Margin="0,7,8,7" />
-                <StackPanel Grid.Column="5" Orientation="Horizontal" Margin="0,0,4,0">
-                    <Button Style="{StaticResource RowIconButton}" Content="&#xE8A7;" Foreground="{DynamicResource Accent}"
-                            ToolTip="{Binding OpenTip}" AutomationProperties.Name="{Binding OpenTip}" Click="Open_Click" />
-                    <Button Style="{StaticResource RowIconButton}" Content="&#xE838;" Foreground="{DynamicResource Folder}"
-                            ToolTip="{Binding FolderTip}" AutomationProperties.Name="{Binding FolderTip}" Click="Folder_Click" />
-                    <Button x:Name="Delete" Style="{StaticResource RowIconButton}" Content="&#xE74D;" Foreground="{DynamicResource Bad}"
-                            ToolTip="{Binding DeleteTip}" AutomationProperties.Name="{Binding DeleteTip}" Click="Delete_Click" />
-                </StackPanel>
-            </Grid>
+        <!-- a found file, cell by cell: Windows icon, type, location chips, matches, name; open, folder, delete (or a lock) -->
+        <DataTemplate x:Key="FileIconCell">
+            <Image Source="{Binding Icon}" Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,10"
+                   ToolTip="{Binding Path}" />
+        </DataTemplate>
+        <DataTemplate x:Key="FileTypeCell">
+            <TextBlock x:Name="Type" Text="{Binding Type}" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"
+                       Foreground="{DynamicResource Warn}" />
             <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding Type}" Value="WORD">
                     <Setter TargetName="Type" Property="Foreground" Value="{DynamicResource Accent}" />
@@ -82,6 +66,27 @@
                 <DataTrigger Binding="{Binding Type}" Value="EXCEL">
                     <Setter TargetName="Type" Property="Foreground" Value="{DynamicResource Good}" />
                 </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+        <DataTemplate x:Key="TagsCell">
+            <ContentPresenter Content="{Binding Chips}" VerticalAlignment="Center" ToolTip="{Binding ChipsTip}" Visibility="{Binding ChipsVisibility}" />
+        </DataTemplate>
+        <DataTemplate x:Key="MatchesCell">
+            <TextBlock Text="{Binding Matches}" ToolTip="{Binding MatchesTip}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </DataTemplate>
+        <DataTemplate x:Key="FileNameCell">
+            <TextBlock Text="{Binding Name}" ToolTip="{Binding Path}" FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,7,0,7" />
+        </DataTemplate>
+        <DataTemplate x:Key="FileButtonsCell">
+            <StackPanel Orientation="Horizontal">
+                <Button Style="{StaticResource RowIconButton}" Content="&#xE8A7;" Foreground="{DynamicResource Accent}"
+                        ToolTip="{Binding OpenTip}" AutomationProperties.Name="{Binding OpenTip}" Click="Open_Click" />
+                <Button Style="{StaticResource RowIconButton}" Content="&#xE838;" Foreground="{DynamicResource Folder}"
+                        ToolTip="{Binding FolderTip}" AutomationProperties.Name="{Binding FolderTip}" Click="Folder_Click" />
+                <Button x:Name="Delete" Style="{StaticResource RowIconButton}" Content="&#xE74D;" Foreground="{DynamicResource Bad}"
+                        ToolTip="{Binding DeleteTip}" AutomationProperties.Name="{Binding DeleteTip}" Click="Delete_Click" />
+            </StackPanel>
+            <DataTemplate.Triggers>
                 <!-- the files of SupraWeed are never deleted: a lock instead of the bin -->
                 <DataTrigger Binding="{Binding Protected}" Value="True">
                     <Setter TargetName="Delete" Property="Content" Value="&#xE72E;" />
@@ -89,8 +94,7 @@
                     <Setter TargetName="Delete" Property="Cursor" Value="Arrow" />
                 </DataTrigger>
             </DataTemplate.Triggers>
-        </DataTemplate>
-    </UserControl.Resources>
+        </DataTemplate>    </UserControl.Resources>
 
     <DockPanel>
         <!-- one row: run, «scan documents», «disable OneDrive» (for the OneDrive check), the status, the layout switch -->
@@ -124,27 +128,16 @@
         <!-- the checks and the details: one under the other or side by side (ApplyLayout), the edge between them can be dragged -->
         <Grid x:Name="Split">
             <Border x:Name="ChecksFrame" Style="{StaticResource TableFrame}">
-                <Grid Grid.IsSharedSizeScope="True">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition />
-                    </Grid.RowDefinitions>
-                    <Border Style="{StaticResource TableHeader}">
-                        <Grid Height="34">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="34" />
-                                <ColumnDefinition Width="Auto" SharedSizeGroup="CheckName" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock x:Name="CheckHeader" Grid.Column="1" VerticalAlignment="Center" Margin="2,0,16,0" />
-                            <TextBlock x:Name="ResultHeader" Grid.Column="2" VerticalAlignment="Center" />
-                        </Grid>
-                    </Border>
-                    <ListBox x:Name="Checks" Grid.Row="1" Style="{StaticResource BareListBox}" ItemContainerStyle="{StaticResource TableRow}"
-                             ItemTemplate="{StaticResource CheckTemplate}" SelectionChanged="Checks_SelectionChanged" />
-                </Grid>
+                <ListView x:Name="Checks" Style="{StaticResource GridTable}" SelectionMode="Single" SelectionChanged="Checks_SelectionChanged">
+                    <ListView.View>
+                        <GridView ColumnHeaderContainerStyle="{StaticResource GridTableHeader}">
+                            <GridViewColumn Width="34" CellTemplate="{StaticResource CheckIconCell}" />
+                            <GridViewColumn x:Name="CheckColumn" CellTemplate="{StaticResource CheckNameCell}" />
+                            <GridViewColumn x:Name="ResultColumn" local:TableColumns.Fill="1" CellTemplate="{StaticResource CheckResultCell}" />
+                        </GridView>
+                    </ListView.View>
+                </ListView>
             </Border>
-
             <GridSplitter x:Name="Splitter" Background="Transparent" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Focusable="False" />
 
             <Border x:Name="DetailsFrame" Style="{StaticResource TableFrame}">
@@ -162,36 +155,30 @@
                                  ItemTemplate="{StaticResource LineTemplate}" />
                     </Grid>
                     <!-- found files -->
-                    <Grid x:Name="FileDetails" Grid.IsSharedSizeScope="True" Visibility="Collapsed">
+                    <Grid x:Name="FileDetails" Visibility="Collapsed">
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
                             <RowDefinition />
+                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
-                        <Border Style="{StaticResource TableHeader}">
-                            <Grid Height="34">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="34" />
-                                    <ColumnDefinition Width="Auto" SharedSizeGroup="Type" />
-                                    <ColumnDefinition Width="Auto" SharedSizeGroup="Tags" />
-                                    <ColumnDefinition Width="Auto" SharedSizeGroup="Matches" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock x:Name="TypeHeader" Grid.Column="1" VerticalAlignment="Center" Margin="2,0,10,0" />
-                                <TextBlock x:Name="TagsHeader" Grid.Column="2" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                <TextBlock x:Name="MatchesHeader" Grid.Column="3" VerticalAlignment="Center" Margin="0,0,12,0" />
-                                <TextBlock x:Name="FileHeader" Grid.Column="4" VerticalAlignment="Center" />
-                            </Grid>
-                        </Border>
+                        <ListView x:Name="Files" Style="{StaticResource GridTable}" SelectionMode="Single"
+                                  MouseDoubleClick="Files_MouseDoubleClick" KeyDown="Files_KeyDown">
+                            <ListView.View>
+                                <GridView ColumnHeaderContainerStyle="{StaticResource GridTableHeader}">
+                                    <GridViewColumn Width="34" CellTemplate="{StaticResource FileIconCell}" />
+                                    <GridViewColumn x:Name="TypeColumn" CellTemplate="{StaticResource FileTypeCell}" />
+                                    <GridViewColumn x:Name="TagsColumn" CellTemplate="{StaticResource TagsCell}" />
+                                    <GridViewColumn x:Name="MatchesColumn" CellTemplate="{StaticResource MatchesCell}" />
+                                    <GridViewColumn x:Name="FileColumn" local:TableColumns.Fill="1" CellTemplate="{StaticResource FileNameCell}" />
+                                    <GridViewColumn CellTemplate="{StaticResource FileButtonsCell}" />
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
                         <!-- «delete all found: bin · 3, downloads · 2 …»: only the tags that have files -->
-                        <Border x:Name="BulkBar" Grid.Row="1" BorderBrush="{DynamicResource Divider}" BorderThickness="0,0,0,1"
+                        <Border x:Name="BulkBar" Grid.Row="1" BorderBrush="{DynamicResource Divider}" BorderThickness="0,1,0,0"
                                 Padding="10,8,6,4" Visibility="Collapsed">
                             <WrapPanel x:Name="BulkButtons" />
                         </Border>
-                        <ListBox x:Name="Files" Grid.Row="2" Style="{StaticResource BareListBox}" ItemContainerStyle="{StaticResource TableRow}"
-                                 ItemTemplate="{StaticResource FileTemplate}" MouseDoubleClick="Files_MouseDoubleClick" KeyDown="Files_KeyDown" />
-                    </Grid>
-                </Grid>
+                    </Grid>                </Grid>
             </Border>
         </Grid>
     </DockPanel>

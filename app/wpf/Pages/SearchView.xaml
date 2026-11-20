@@ -4,35 +4,14 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:CompInfo.Wpf">
     <UserControl.Resources>
-        <!-- a found file: Windows icon, type, where (chips) and matches, name, fragment; open, folder -->
-        <DataTemplate x:Key="HitTemplate">
-            <Grid MinHeight="36">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="34" />
-                    <ColumnDefinition Width="Auto" SharedSizeGroup="Type" />
-                    <ColumnDefinition Width="200" />
-                    <ColumnDefinition Width="2*" />
-                    <ColumnDefinition Width="3*" />
-                    <ColumnDefinition Width="68" />
-                </Grid.ColumnDefinitions>
-                <Image Source="{Binding Icon}" Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="{Binding Path}" />
-                <TextBlock x:Name="Type" Grid.Column="1" Text="{Binding Type}" FontSize="12" FontWeight="SemiBold" MinWidth="44"
-                           VerticalAlignment="Center" Margin="2,0,10,0" Foreground="{DynamicResource Muted}" />
-                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0" ToolTip="{Binding Tip}">
-                    <ContentPresenter Content="{Binding Chips}" />
-                    <TextBlock Text="{Binding Count}" VerticalAlignment="Center" Margin="2,0,0,0" />
-                </StackPanel>
-                <TextBlock Grid.Column="3" Text="{Binding Name}" ToolTip="{Binding Path}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
-                           VerticalAlignment="Center" Margin="0,0,10,0" />
-                <TextBlock Grid.Column="4" Text="{Binding Fragment}" ToolTip="{Binding Tip}" Foreground="{DynamicResource Muted}"
-                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="0,0,8,0" />
-                <StackPanel Grid.Column="5" Orientation="Horizontal" Margin="0,0,4,0">
-                    <Button Style="{StaticResource RowIconButton}" Content="&#xE8A7;" Foreground="{DynamicResource Accent}"
-                            ToolTip="{Binding OpenTip}" AutomationProperties.Name="{Binding OpenTip}" Click="Open_Click" />
-                    <Button Style="{StaticResource RowIconButton}" Content="&#xE838;" Foreground="{DynamicResource Folder}"
-                            ToolTip="{Binding FolderTip}" AutomationProperties.Name="{Binding FolderTip}" Click="Folder_Click" />
-                </StackPanel>
-            </Grid>
+        <!-- a found file, column by column: Windows icon, type, where (chips) and matches, name, fragment; open, folder -->
+        <DataTemplate x:Key="IconCell">
+            <Image Source="{Binding Icon}" Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="{Binding Path}"
+                   Margin="0,10" />
+        </DataTemplate>
+        <DataTemplate x:Key="TypeCell">
+            <TextBlock x:Name="Type" Text="{Binding Type}" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"
+                       Foreground="{DynamicResource Muted}" />
             <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding Type}" Value="WORD">
                     <Setter TargetName="Type" Property="Foreground" Value="{DynamicResource Accent}" />
@@ -44,6 +23,27 @@
                     <Setter TargetName="Type" Property="Foreground" Value="{DynamicResource Warn}" />
                 </DataTrigger>
             </DataTemplate.Triggers>
+        </DataTemplate>
+        <DataTemplate x:Key="WhereCell">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" ToolTip="{Binding Tip}">
+                <ContentPresenter Content="{Binding Chips}" />
+                <TextBlock Text="{Binding Count}" VerticalAlignment="Center" Margin="2,0,0,0" />
+            </StackPanel>
+        </DataTemplate>
+        <DataTemplate x:Key="NameCell">
+            <TextBlock Text="{Binding Name}" ToolTip="{Binding Path}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+        </DataTemplate>
+        <DataTemplate x:Key="FragmentCell">
+            <TextBlock Text="{Binding Fragment}" ToolTip="{Binding Tip}" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis"
+                       VerticalAlignment="Center" />
+        </DataTemplate>
+        <DataTemplate x:Key="ButtonsCell">
+            <StackPanel Orientation="Horizontal">
+                <Button Style="{StaticResource RowIconButton}" Content="&#xE8A7;" Foreground="{DynamicResource Accent}"
+                        ToolTip="{Binding OpenTip}" AutomationProperties.Name="{Binding OpenTip}" Click="Open_Click" />
+                <Button Style="{StaticResource RowIconButton}" Content="&#xE838;" Foreground="{DynamicResource Folder}"
+                        ToolTip="{Binding FolderTip}" AutomationProperties.Name="{Binding FolderTip}" Click="Folder_Click" />
+            </StackPanel>
         </DataTemplate>
     </UserControl.Resources>
 
@@ -66,31 +66,18 @@
         <local:StatusLine x:Name="Status" DockPanel.Dock="Top" Margin="0,0,0,10" />
 
         <Border Style="{StaticResource TableFrame}">
-            <Grid Grid.IsSharedSizeScope="True">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition />
-                </Grid.RowDefinitions>
-                <Border Style="{StaticResource TableHeader}">
-                    <Grid Height="34">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="34" />
-                            <ColumnDefinition Width="Auto" SharedSizeGroup="Type" />
-                            <ColumnDefinition Width="200" />
-                            <ColumnDefinition Width="2*" />
-                            <ColumnDefinition Width="3*" />
-                            <ColumnDefinition Width="68" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock x:Name="TypeHeader" Grid.Column="1" VerticalAlignment="Center" Margin="2,0,10,0" MinWidth="44" />
-                        <TextBlock x:Name="WhereHeader" Grid.Column="2" VerticalAlignment="Center" />
-                        <TextBlock x:Name="FileHeader" Grid.Column="3" VerticalAlignment="Center" />
-                        <TextBlock x:Name="FragmentHeader" Grid.Column="4" VerticalAlignment="Center" />
-                    </Grid>
-                </Border>
-                <ListBox x:Name="Hits" Grid.Row="1" Style="{StaticResource BareListBox}" ItemContainerStyle="{StaticResource TableRow}"
-                         ItemTemplate="{StaticResource HitTemplate}" VirtualizingPanel.IsVirtualizing="True"
-                         MouseDoubleClick="Hits_MouseDoubleClick" KeyDown="Hits_KeyDown" />
-            </Grid>
-        </Border>
-    </DockPanel>
+            <ListView x:Name="Hits" Style="{StaticResource GridTable}" VirtualizingPanel.IsVirtualizing="True"
+                      MouseDoubleClick="Hits_MouseDoubleClick" KeyDown="Hits_KeyDown">
+                <ListView.View>
+                    <GridView ColumnHeaderContainerStyle="{StaticResource GridTableHeader}">
+                        <GridViewColumn Width="34" CellTemplate="{StaticResource IconCell}" />
+                        <GridViewColumn x:Name="TypeColumn" CellTemplate="{StaticResource TypeCell}" />
+                        <GridViewColumn x:Name="WhereColumn" Width="200" CellTemplate="{StaticResource WhereCell}" />
+                        <GridViewColumn x:Name="FileColumn" local:TableColumns.Fill="2" CellTemplate="{StaticResource NameCell}" />
+                        <GridViewColumn x:Name="FragmentColumn" local:TableColumns.Fill="3" CellTemplate="{StaticResource FragmentCell}" />
+                        <GridViewColumn Width="76" CellTemplate="{StaticResource ButtonsCell}" />
+                    </GridView>
+                </ListView.View>
+            </ListView>
+        </Border>    </DockPanel>
 </UserControl>

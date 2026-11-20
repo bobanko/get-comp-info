@@ -34,10 +34,10 @@ namespace CompInfo.Wpf
         {
             InitializeComponent();
             Table.ItemsSource = rows;
-            DiskHeader.Text = L.T("Диск");
-            NameHeader.Text = L.T("Название");
-            SizeHeader.Text = L.T("Объём");
-            SerialHeader.Text = L.T("Серийный номер");
+            DiskColumn.Header = L.T("Диск");
+            NameColumn.Header = L.T("Название");
+            SizeColumn.Header = L.T("Объём");
+            SerialColumn.Header = L.T("Серийный номер");
             EmptyText.Text = L.T("Подключите флешку");
             Glyph.Label(RefreshButton, Glyph.Refresh, L.T("Обновить"));
             RefreshButton.ToolTip = L.T("Обновить") + "   (F5)";

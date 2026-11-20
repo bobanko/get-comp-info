@@ -4,45 +4,20 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:CompInfo.Wpf">
     <UserControl.Resources>
-        <!-- the widths of the columns, fitted to the window by the code (FitColumns) -->
-        <local:ColumnWidths x:Key="Widths" />
-        <!-- a record: name (semibold; yellow when not by the rules, red when repeated), IP and serial (mono; red when
-             repeated), user, collected (green and bold during 7 days), pills of the cloud, ESET and inventory, the comment;
-             this computer on the soft green -->
-        <DataTemplate x:Key="DeviceTemplate">
-            <Grid x:Name="Row" MinHeight="34" Background="Transparent">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="{Binding W0, Source={StaticResource Widths}}" />
-                    <ColumnDefinition Width="{Binding W1, Source={StaticResource Widths}}" />
-                    <ColumnDefinition Width="{Binding W2, Source={StaticResource Widths}}" />
-                    <ColumnDefinition Width="{Binding W3, Source={StaticResource Widths}}" />
-                    <ColumnDefinition Width="{Binding W4, Source={StaticResource Widths}}" />
-                    <ColumnDefinition Width="{Binding W5, Source={StaticResource Widths}}" />
-                    <ColumnDefinition Width="{Binding W6, Source={StaticResource Widths}}" />
-                    <ColumnDefinition Width="{Binding W7, Source={StaticResource Widths}}" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <TextBlock x:Name="Name" local:Marked.Text="{Binding Name}" ToolTip="{Binding NameTip}" FontWeight="SemiBold"
-                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="12,0,12,0" />
-                <TextBlock x:Name="Ip" Grid.Column="1" local:Marked.Text="{Binding Ip}" ToolTip="{Binding IpTip}" FontFamily="{StaticResource MonoFont}"
-                           FontSize="13" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="0,0,12,0" />
-                <TextBlock x:Name="Serial" Grid.Column="2" local:Marked.Text="{Binding Serial}" ToolTip="{Binding SerialTip}" FontFamily="{StaticResource MonoFont}"
-                           FontSize="13" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="0,0,12,0" />
-                <TextBlock Grid.Column="3" local:Marked.Text="{Binding User}" TextTrimming="CharacterEllipsis"
-                           VerticalAlignment="Center" Margin="0,0,12,0" />
-                <TextBlock x:Name="Collected" Grid.Column="4" Text="{Binding Collected}" ToolTip="{Binding CollectedTip}" VerticalAlignment="Center" Margin="0,0,12,0" />
-                <Border Grid.Column="5" Style="{StaticResource Pill}" Tag="{Binding CloudKind}" Margin="0,0,10,0">
-                    <TextBlock Text="{Binding CloudText}" />
-                </Border>
-                <Border Grid.Column="6" Style="{StaticResource Pill}" Tag="{Binding EsetKind}" Margin="0,0,10,0">
-                    <TextBlock Text="{Binding EsetText}" />
-                </Border>
-                <Border Grid.Column="7" Style="{StaticResource Pill}" Tag="{Binding InventoryKind}" ToolTip="{Binding InventoryTip}" Margin="0,0,10,0">
-                    <TextBlock Text="{Binding InventoryText}" />
-                </Border>
-                <TextBlock Grid.Column="8" local:Marked.Text="{Binding Comment}" ToolTip="{Binding CommentTip}" Foreground="{DynamicResource Muted}"
-                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="0,0,8,0" />
-            </Grid>
+        <!-- a record, cell by cell (Cell0…Cell8, the columns of DeviceList.Columns): name (semibold; yellow when not by the rules,
+             red when repeated), IP and serial (mono; red when repeated), user, collected (green and bold during 7 days),
+             pills of the cloud, ESET and inventory, the comment; this computer on the soft green (DeviceRowItem) -->
+        <Style x:Key="DeviceRowItem" TargetType="ListViewItem" BasedOn="{StaticResource GridTableRow}">
+            <Setter Property="MinHeight" Value="34" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Mine}" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource GoodBack}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <DataTemplate x:Key="Cell0">
+            <TextBlock x:Name="Name" local:Marked.Text="{Binding Name}" ToolTip="{Binding NameTip}" FontWeight="SemiBold"
+                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="6,0,0,0" />
             <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding NameState}" Value="Warn">
                     <Setter TargetName="Name" Property="Foreground" Value="{DynamicResource Warn}" />
@@ -50,22 +25,57 @@
                 <DataTrigger Binding="{Binding NameState}" Value="Bad">
                     <Setter TargetName="Name" Property="Foreground" Value="{DynamicResource Bad}" />
                 </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+        <DataTemplate x:Key="Cell1">
+            <TextBlock x:Name="Ip" local:Marked.Text="{Binding Ip}" ToolTip="{Binding IpTip}" FontFamily="{StaticResource MonoFont}"
+                       FontSize="13" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+            <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding IpRepeated}" Value="True">
                     <Setter TargetName="Ip" Property="Foreground" Value="{DynamicResource Bad}" />
                 </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+        <DataTemplate x:Key="Cell2">
+            <TextBlock x:Name="Serial" local:Marked.Text="{Binding Serial}" ToolTip="{Binding SerialTip}" FontFamily="{StaticResource MonoFont}"
+                       FontSize="13" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+            <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding SerialRepeated}" Value="True">
                     <Setter TargetName="Serial" Property="Foreground" Value="{DynamicResource Bad}" />
                 </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+        <DataTemplate x:Key="Cell3">
+            <TextBlock local:Marked.Text="{Binding User}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+        </DataTemplate>
+        <DataTemplate x:Key="Cell4">
+            <TextBlock x:Name="Collected" Text="{Binding Collected}" ToolTip="{Binding CollectedTip}" VerticalAlignment="Center" />
+            <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding Recent}" Value="True">
                     <Setter TargetName="Collected" Property="Foreground" Value="{DynamicResource Good}" />
                     <Setter TargetName="Collected" Property="FontWeight" Value="Bold" />
                 </DataTrigger>
-                <DataTrigger Binding="{Binding Mine}" Value="True">
-                    <Setter TargetName="Row" Property="Background" Value="{DynamicResource GoodBack}" />
-                </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
-    </UserControl.Resources>
+        <DataTemplate x:Key="Cell5">
+            <Border Style="{StaticResource Pill}" Tag="{Binding CloudKind}">
+                <TextBlock Text="{Binding CloudText}" />
+            </Border>
+        </DataTemplate>
+        <DataTemplate x:Key="Cell6">
+            <Border Style="{StaticResource Pill}" Tag="{Binding EsetKind}">
+                <TextBlock Text="{Binding EsetText}" />
+            </Border>
+        </DataTemplate>
+        <DataTemplate x:Key="Cell7">
+            <Border Style="{StaticResource Pill}" Tag="{Binding InventoryKind}" ToolTip="{Binding InventoryTip}">
+                <TextBlock Text="{Binding InventoryText}" />
+            </Border>
+        </DataTemplate>
+        <DataTemplate x:Key="Cell8">
+            <TextBlock local:Marked.Text="{Binding Comment}" ToolTip="{Binding CommentTip}" Foreground="{DynamicResource Muted}"
+                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+        </DataTemplate>    </UserControl.Resources>
 
     <DockPanel>
         <!-- search, the three filters of the web device list, «Обновить», «Экспорт в CSV» -->
@@ -84,18 +94,8 @@
         </StackPanel>
 
         <Border Style="{StaticResource TableFrame}">
-            <Grid Grid.IsSharedSizeScope="True">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition />
-                </Grid.RowDefinitions>
-                <Border Style="{StaticResource TableHeader}">
-                    <Grid x:Name="Header" Height="34" />
-                </Border>
-                <ListBox x:Name="Table" Grid.Row="1" Style="{StaticResource BareListBox}" ItemContainerStyle="{StaticResource TableRow}"
-                         ItemTemplate="{StaticResource DeviceTemplate}" VirtualizingPanel.IsVirtualizing="False"
-                         MouseDoubleClick="Table_MouseDoubleClick" KeyDown="Table_KeyDown" />
-            </Grid>
-        </Border>
-    </DockPanel>
+            <!-- the columns: BuildColumns (titles with the sort arrow; ESET and the comment are not sortable) -->
+            <ListView x:Name="Table" Style="{StaticResource GridTable}" ItemContainerStyle="{StaticResource DeviceRowItem}" SelectionMode="Single"
+                      VirtualizingPanel.IsVirtualizing="False" MouseDoubleClick="Table_MouseDoubleClick" KeyDown="Table_KeyDown" />
+        </Border>    </DockPanel>
 </UserControl>

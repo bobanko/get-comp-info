@@ -14,6 +14,7 @@ namespace CompInfo.Wpf
     {
         readonly DeviceList list = new DeviceList();
         readonly TextBlock[] arrows = new TextBlock[9];
+        readonly GridViewColumn[] columns = new GridViewColumn[9];
         List<RecordFile> shown = new List<RecordFile>();
         List<string> words = new List<string>();
         CurrentComputer me;
@@ -34,21 +35,21 @@ namespace CompInfo.Wpf
             Glyph.Label(ExportButton, Glyph.Export, L.T("Экспорт в CSV"));
             ExportButton.ToolTip = L.T("Экспорт в CSV") + "   (Ctrl+E)";
             Legend.Text = L.T("Подсвечен этот компьютер. Красным — повторы имени, IP или серийного номера, жёлтым — имя не по правилам, зелёным — собрано за 7 дней.");
-            BuildHeader();
+            BuildColumns();
             Table.SizeChanged += delegate { FitColumns(); };
             ready = true;
         }
 
-        // Column titles: a click sorts by the column (again — the other way); ESET and the comment are not sortable.
-        void BuildHeader()
+        // The columns of the table (cells Cell0…Cell8 of the XAML). A click on a title sorts by the column (again — the other
+        // way); ESET and the comment are not sortable. The user widens, narrows and moves the columns (TableColumns).
+        void BuildColumns()
         {
             string[] titles = DeviceList.Columns;
-            var widths = (ColumnWidths)Resources["Widths"];
+            var header = new Style(typeof(GridViewColumnHeader), (Style)FindResource("GridTableHeader"));
+            header.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty, HorizontalAlignment.Stretch));
+            var view = new GridView { ColumnHeaderContainerStyle = header };
             for (int i = 0; i < titles.Length; i++)
             {
-                var column = new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) };
-                if (i < DeviceList.CommentColumn) column.SetBinding(ColumnDefinition.WidthProperty, new System.Windows.Data.Binding("W" + i) { Source = widths });
-                Header.ColumnDefinitions.Add(column);
                 // the title is cut with "…" when the column is narrower; the arrow of the sort order after it
                 var title = new Grid();
                 title.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -58,20 +59,22 @@ namespace CompInfo.Wpf
                 arrows[i].Margin = new Thickness(5, 2, 0, 0);
                 Grid.SetColumn(arrows[i], 1);
                 title.Children.Add(arrows[i]);
-                var b = new Button { Content = title, HorizontalContentAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(i == 0 ? 8 : -4, 0, i < 5 ? 8 : 6, 0), IsEnabled = DeviceList.Sortable(i) };
-                b.SetResourceReference(StyleProperty, "HeaderButton");
-                System.Windows.Automation.AutomationProperties.SetName(b, titles[i]);
-                int index = i;
-                b.Click += delegate
-                {
-                    if (sortColumn == index) descending = !descending; else { sortColumn = index; descending = false; }
-                    Fill();
-                };
-                Grid.SetColumn(b, i);
-                Header.Children.Add(b);
+                System.Windows.Automation.AutomationProperties.SetName(title, titles[i]);
+                // a width from the start: these widths are fitted by FitColumns, not measured by the GridView (TableColumns Auto)
+                columns[i] = new GridViewColumn { Header = title, CellTemplate = (DataTemplate)Resources["Cell" + i], Width = 80 };
+                if (i == DeviceList.CommentColumn) TableColumns.SetFill(columns[i], 1);
+                view.Columns.Add(columns[i]);
             }
+            Table.View = view;
+            Table.AddHandler(GridViewColumnHeader.ClickEvent, new RoutedEventHandler((s, e) =>
+            {
+                var h = e.OriginalSource as GridViewColumnHeader;
+                int index = h == null || h.Column == null ? -1 : Array.IndexOf(columns, h.Column);
+                if (index < 0 || !DeviceList.Sortable(index)) return;
+                if (sortColumn == index) descending = !descending; else { sortColumn = index; descending = false; }
+                Fill();
+            }));
         }
-
         public void Opened()
         {
             Reload();
@@ -138,9 +141,10 @@ namespace CompInfo.Wpf
 
         // Short values are shown in full and the comment takes the rest; in a narrow window the serial number, the user,
         // ESET, the cloud and the name give way in this order (as FitColumns of the WinForms page); the IP stays whole.
+        // A column the user dragged keeps his width.
         void FitColumns()
         {
-            double available = Table.ActualWidth - 12;
+            double available = Table.ActualWidth - 14;
             if (available <= 0) return;
             var normal = new Typeface(FontFamily, FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
             var semibold = new Typeface(FontFamily, FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
@@ -153,25 +157,28 @@ namespace CompInfo.Wpf
             var wanted = new double[8];
             // the values decide; the titles get what is left (they are cut with "…" otherwise)
             var header = new double[8];
-            for (int i = 0; i < 8; i++) { header[i] = width(titles[i], semibold, FontSize) + (i == 0 ? 28 : 22) + 14; wanted[i] = 40; }
+            for (int i = 0; i < 8; i++) { header[i] = width(titles[i], semibold, FontSize) + 12 + 14 + 4; wanted[i] = 40; }
             foreach (object o in Table.Items)
             {
                 var r = (DeviceRow)o;
-                wanted[0] = Math.Max(wanted[0], width(r.Name.Text, semibold, FontSize) + 26);
+                wanted[0] = Math.Max(wanted[0], width(r.Name.Text, semibold, FontSize) + 20);
                 wanted[1] = Math.Max(wanted[1], width(r.Ip.Text, mono, 13) + 14);
                 wanted[2] = Math.Max(wanted[2], width(r.Serial.Text, mono, 13) + 14);
                 wanted[3] = Math.Max(wanted[3], width(r.User.Text, normal, FontSize) + 14);
                 wanted[4] = Math.Max(wanted[4], width(r.Collected, r.Recent ? bold : normal, FontSize) + 14);
-                wanted[5] = Math.Max(wanted[5], width(r.CloudText, normal, 12) + 28);
-                wanted[6] = Math.Max(wanted[6], width(r.EsetText, normal, 12) + 28);
-                wanted[7] = Math.Max(wanted[7], width(r.InventoryText, normal, 12) + 28);
+                wanted[5] = Math.Max(wanted[5], width(r.CloudText, normal, 12) + 30);
+                wanted[6] = Math.Max(wanted[6], width(r.EsetText, normal, 12) + 30);
+                wanted[7] = Math.Max(wanted[7], width(r.InventoryText, normal, 12) + 30);
             }
+            bool[] user = new bool[8];
+            for (int i = 0; i < 8; i++) if (user[i] = TableColumns.IsUserWidth(Table, columns[i])) wanted[i] = columns[i].Width;
             double deficit = -available + 72;
             foreach (double w in wanted) deficit += w;
             foreach (double[] shrink in new[] { new[] { 2, 90.0 }, new[] { 3, 72.0 }, new[] { 6, 90.0 }, new[] { 5, 90.0 }, new[] { 0, 108.0 } })
             {
                 if (deficit <= 0) break;
                 int c = (int)shrink[0];
+                if (user[c]) continue;
                 double cut = Math.Min(deficit, Math.Max(0, wanted[c] - shrink[1]));
                 wanted[c] -= cut;
                 deficit -= cut;
@@ -181,13 +188,14 @@ namespace CompInfo.Wpf
             foreach (double w in wanted) spare -= w;
             for (int i = 0; i < 8 && spare > 0; i++)
             {
+                if (user[i]) continue;
                 double grow = Math.Min(spare, Math.Max(0, header[i] - wanted[i]));
                 wanted[i] += grow;
                 spare -= grow;
             }
-            ((ColumnWidths)Resources["Widths"]).Set(wanted);
+            TableColumns.Fitting(Table, () => { for (int i = 0; i < 8; i++) if (!user[i]) columns[i].Width = Math.Max(0, Math.Round(wanted[i])); });
+            TableColumns.Refit(Table);   // the comment takes the rest
         }
-
         void Select(int index)
         {
             if (index < 0 || index >= shown.Count) return;
@@ -242,31 +250,6 @@ namespace CompInfo.Wpf
             }
             catch (Exception e) { Dialog.Show(owner, L.T("Экспорт не выполнен: ") + e.Message); }
         }
-    }
-
-    // The widths of the table columns 0…7 (the comment takes the rest), shared by the header and every row.
-    public class ColumnWidths : System.ComponentModel.INotifyPropertyChanged
-    {
-        readonly GridLength[] widths = new GridLength[8];
-
-        public ColumnWidths() { for (int i = 0; i < widths.Length; i++) widths[i] = GridLength.Auto; }
-
-        public GridLength W0 { get { return widths[0]; } }
-        public GridLength W1 { get { return widths[1]; } }
-        public GridLength W2 { get { return widths[2]; } }
-        public GridLength W3 { get { return widths[3]; } }
-        public GridLength W4 { get { return widths[4]; } }
-        public GridLength W5 { get { return widths[5]; } }
-        public GridLength W6 { get { return widths[6]; } }
-        public GridLength W7 { get { return widths[7]; } }
-
-        public void Set(double[] values)
-        {
-            for (int i = 0; i < widths.Length; i++) widths[i] = new GridLength(Math.Max(0, Math.Round(values[i])));
-            if (PropertyChanged != null) PropertyChanged(this, new System.ComponentModel.PropertyChangedEventArgs(""));
-        }
-
-        public event System.ComponentModel.PropertyChangedEventHandler PropertyChanged;
     }
 
     // One record in the table, with the marks of the web table.

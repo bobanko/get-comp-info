@@ -4,7 +4,8 @@
      everything uses them through DynamicResource, so a theme change repaints open windows at once.
      No texts here: they are set from the code through L.T (the translation check fails on a Cyrillic letter in XAML). -->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:local="clr-namespace:CompInfo.Wpf">
         <!-- the light set; WpfTheme.Apply replaces them before the first window -->
         <SolidColorBrush x:Key="WindowBack" Color="#F5F6F8" />
         <SolidColorBrush x:Key="Surface" Color="#FFFFFF" />
@@ -761,6 +762,120 @@
                         <ScrollViewer Focusable="False" Padding="{TemplateBinding Padding}">
                             <ItemsPresenter />
                         </ScrollViewer>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- A table whose columns the user widens or narrows (the edge in the header) and drags to another place, as in
+             SupraWeed (user's choice 21.11.2026): a ListView with a GridView in a TableFrame. The header band lies under
+             the transparent column headers, so its corners stay rounded. TableColumns (Shared\Table.cs) fits the widths. -->
+        <Style x:Key="GridTableHeader" TargetType="GridViewColumnHeader">
+            <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Height" Value="34" />
+            <!-- as the cells: GridViewRowPresenter keeps 6 px on both sides of a cell -->
+            <Setter Property="Padding" Value="6,0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="GridViewColumnHeader">
+                        <Grid>
+                            <Border x:Name="Box" Background="Transparent" Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center">
+                                    <ContentPresenter.Resources>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                                        </Style>
+                                    </ContentPresenter.Resources>
+                                </ContentPresenter>
+                            </Border>
+                            <!-- the edge to drag: the column gets wider or narrower (a thin line shows it under the mouse) -->
+                            <Thumb x:Name="PART_HeaderGripper" HorizontalAlignment="Right" Width="9" Margin="0,0,-4,0" Cursor="SizeWE">
+                                <Thumb.Template>
+                                    <ControlTemplate TargetType="Thumb">
+                                        <Border Background="Transparent">
+                                            <Border x:Name="Edge" Width="1" Margin="0,8" Background="{DynamicResource Border}" />
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Edge" Property="Background" Value="{DynamicResource Accent}" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Thumb.Template>
+                            </Thumb>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Box" Property="Background" Value="{DynamicResource SubtleHover}" />
+                            </Trigger>
+                            <!-- the empty rest of the header row: no edge, no hover -->
+                            <Trigger Property="Role" Value="Padding">
+                                <Setter TargetName="PART_HeaderGripper" Property="Visibility" Value="Collapsed" />
+                                <Setter TargetName="Box" Property="Background" Value="Transparent" />
+                                <Setter Property="Cursor" Value="Arrow" />
+                            </Trigger>
+                            <!-- the copy that follows the mouse while a column is dragged to another place -->
+                            <Trigger Property="Role" Value="Floating">
+                                <Setter TargetName="Box" Property="Background" Value="{DynamicResource AccentSoft}" />
+                                <Setter TargetName="PART_HeaderGripper" Property="Visibility" Value="Collapsed" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- a row: the divider under it, a subtle fill under the mouse, the chosen one on the soft accent with a bar on the left;
+             Background is free for a row of its own colour (this computer in the device database) -->
+        <Style x:Key="GridTableRow" TargetType="ListViewItem">
+            <Setter Property="Foreground" Value="{DynamicResource Text}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListViewItem">
+                        <Border x:Name="Line" BorderBrush="{DynamicResource Divider}" BorderThickness="0,0,0,1" Background="{TemplateBinding Background}">
+                            <Grid>
+                                <Border x:Name="Hover" Background="Transparent" />
+                                <Border x:Name="Pill" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left"
+                                        Margin="2,0,0,0" Background="{DynamicResource Accent}" Visibility="Collapsed" />
+                                <GridViewRowPresenter VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Hover" Property="Background" Value="{DynamicResource SubtleHover}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Hover" Property="Background" Value="{DynamicResource AccentSoft}" />
+                                <Setter TargetName="Pill" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="GridTable" TargetType="ListView">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{DynamicResource Text}" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="ItemContainerStyle" Value="{StaticResource GridTableRow}" />
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+            <Setter Property="local:TableColumns.Fit" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListView">
+                        <Grid>
+                            <Border Height="34" VerticalAlignment="Top" Background="{DynamicResource HeaderBack}" CornerRadius="5,5,0,0"
+                                    BorderBrush="{DynamicResource Border}" BorderThickness="0,0,0,1" />
+                            <ScrollViewer Style="{DynamicResource {x:Static GridView.GridViewScrollViewerStyleKey}}" Focusable="False">
+                                <ItemsPresenter />
+                            </ScrollViewer>
+                        </Grid>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>

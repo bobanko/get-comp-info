@@ -73,10 +73,10 @@ namespace CompInfo.Wpf
             System.Windows.Automation.AutomationProperties.SetName(Contents, L.T("в тексте документов"));
             Recycle.Content = Glyph.WithText(Glyph.Delete, L.T("в корзине"));
             System.Windows.Automation.AutomationProperties.SetName(Recycle, L.T("в корзине"));
-            TypeHeader.Text = L.T("Тип");
-            WhereHeader.Text = L.T("Где · совпадений");
-            FileHeader.Text = L.T("Файл");
-            FragmentHeader.Text = L.T("Фрагмент");
+            TypeColumn.Header = L.T("Тип");
+            WhereColumn.Header = L.T("Где · совпадений");
+            FileColumn.Header = L.T("Файл");
+            FragmentColumn.Header = L.T("Фрагмент");
             Status.Show(Severity.Info, Glyph.Info, L.T("Введите фразу и нажмите «Найти». Регистр и переносы строк не учитываются."));
             UpdateButtons();
         }
@@ -97,6 +97,19 @@ namespace CompInfo.Wpf
         }
 
         public void DevicesChanged() { if (!running && !Where.IsDropDownOpen) FillPlaces(); }
+
+        // Screenshots (comp-info --screenshot search): found files made up, nothing is searched.
+        public void Demo()
+        {
+            Phrase.Text = "звіт 2026";
+            Func<string, string, string, int, string, SearchHit> hit = (path, type, note, count, fragment) =>
+                new SearchHit { Path = path, DisplayPath = path, Type = type, Note = note, Count = count, Fragment = fragment, ToolTip = path };
+            hits.Add(new HitRow(hit(@"C:\Users\Office\Documents\Звіт 2026.docx", "WORD", "3", 3, "… квартальний звіт 2026 року для відділу …")));
+            hits.Add(new HitRow(hit(@"C:\Users\Office\Downloads\план-звіт 2026.xlsx", "EXCEL", L.T("#даунлоадс") + " · 1", 1, "звіт 2026: план закупівель")));
+            hits.Add(new HitRow(hit(@"E:\Архів\звіт_2026.pdf", "PDF", "1", 1, "")));
+            hits.Add(new HitRow(hit(@"C:\$Recycle.Bin\звіт 2026 (копія).docx", "WORD", L.T("#корзина") + " · 2", 2, "… звіт 2026 (чернетка) …")));
+            Status.Show(Severity.Success, Glyph.Check, L.T("Найдено: ") + hits.Count);
+        }
 
         void UpdateButtons()
         {
