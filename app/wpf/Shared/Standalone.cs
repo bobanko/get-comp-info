@@ -11,7 +11,7 @@ using System.Windows.Threading;
 
 namespace CompInfo.Wpf
 {
-    // The window of a standalone program (youSBee now, SUSpector later), as StandaloneForm of the WinForms Standalone.cs:
+    // The window of a standalone program (youSBee, SUSpector):
     // the name and one line about it on the left, the buttons in the top right corner (the last one «О программе»),
     // their right edge at the right edge of the page; the page fills the rest.
     public class StandaloneWindow : Window

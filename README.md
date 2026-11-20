@@ -1,8 +1,8 @@
 # CHAGEAR Toolbox
 
 Small Windows utilities for IT technicians who prepare office computers and hand them out to staff,
-plus two standalone programs for everyday users. The windowed programs are plain C# / WinForms built with the
-compiler that ships with Windows (.NET Framework 4.8). They need no installation and run from a folder or a USB flash drive.
+plus two standalone programs for everyday users. The windowed programs are C# / WPF on .NET Framework 4.8, which is part
+of Windows, without third-party packages. They need no installation and run from a folder or a USB flash drive.
 
 | Program | What it does | Download |
 |---|---|---|
@@ -19,7 +19,8 @@ tools\build.BAT                  rem all three programs, then the checks in app\
 tools\build.BAT suspector        rem or: toolbox, suspector, yousbee
 ```
 
-Nothing has to be installed: `build.BAT` uses `csc.exe` from .NET Framework 4.x, which is part of Windows.
+Building needs the .NET SDK (found in PATH, Program Files or `%LOCALAPPDATA%\Microsoft\dotnet`); the checks in
+`app\tests` are built with `csc.exe` of .NET Framework 4.x, which is part of Windows. Each program is one exe file.
 The PowerShell tests are in `tests\*.tests.ps1`; the cloud part (`cloud\`, a Cloudflare Worker) has its own
 `npm test`.
 

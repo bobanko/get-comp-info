@@ -9,8 +9,7 @@ namespace CompInfo.Wpf
 {
     // Light and dark theme of the WPF programs: the brushes of Styles.xaml are replaced at the application level,
     // so open windows repaint at once (DynamicResource), nothing is built again.
-    // The palette is the one of the web interface (cloud/public/app.css) and of the WinForms Theme.Apply:
-    // a change there is a change here too.
+    // The palette is the one of the web interface (cloud/public/app.css): a change there is a change here too.
     public static class WpfTheme
     {
         // key, light, dark

@@ -19,6 +19,8 @@ namespace CompInfo.Wpf
             AppDomain.CurrentDomain.UnhandledException += (s, x) => Dispatcher.Invoke(new Action(() => Crash(x.ExceptionObject as Exception)));
             // TLS 1.2 is not always on by default in .NET Framework.
             System.Net.ServicePointManager.SecurityProtocol |= System.Net.SecurityProtocolType.Tls12;
+            // the files the previous update left (as comp-info.exe on WinForms did)
+            ProgramUpdate.RemoveLeftovers();
 
             // comp-info.ini of this copy (Settings of Lang.cs), shared with comp-info.exe.
             WpfTheme.Start(StandaloneStart.Option(args, "--theme", 1) ?? Settings.Get("theme", "system"));

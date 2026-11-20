@@ -1,5 +1,5 @@
-<!-- «USB-накопители» on WPF: youSBee now, the WPF toolbox later. The logic is UsbList (app\src\UsbList.cs),
-     shared with the WinForms page; the texts come from UsbRow / the code (L.T). -->
+<!-- «USB-накопители»: youSBee and the section of the toolbox. The logic is UsbList (app\src\UsbList.cs),
+     tested in app	ests; the texts come from UsbRow / the code (L.T). -->
 <UserControl x:Class="CompInfo.Wpf.UsbView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"

@@ -1,10 +1,11 @@
 @echo off
-rem Builds the programs with the C# compiler that is part of Windows (.NET Framework 4.x, nothing to install),
-rem then runs the checks of app\tests. Each program has its own version:
+rem Builds the programs (WPF on .NET Framework 4.8, WINDOWS_APP.md) with the .NET SDK, then the checks of app\tests
+rem with the C# compiler that is part of Windows. Each program has its own version:
 rem   comp-info.exe - the toolbox; version in console-ui.ps1, shared with the console version (scripts and BAT)
 rem   SUSpector.exe - standalone security check for users; version in app\SUSpector.version
 rem   youSBee.exe   - standalone USB serial numbers; version in app\youSBee.version
 rem Usage: tools\build.BAT [toolbox] [suspector] [yousbee]   - no arguments builds all three. The checks always run.
+rem The programs need nothing on the computers they run on; the computer that builds them needs the .NET SDK.
 setlocal
 cd /d "%~dp0.."
 set "CSC=%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
@@ -44,42 +45,15 @@ call :version obj\Version.cs "CHAGEAR Toolbox" %VER%
 call :version obj\SuspectorVersion.cs "SUSpector" %SUSVER%
 call :version obj\YouSBeeVersion.cs "youSBee" %YSBVER%
 
+rem The core (C# 5, no window code): built into the programs by their projects in app\wpf and into the checks here.
 set "REFS=/r:System.Management.dll /r:System.Web.Extensions.dll /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll /r:System.DirectoryServices.AccountManagement.dll"
-set "CORE=obj\Version.cs app\src\Json.cs app\src\Store.cs app\src\LooseSearch.cs app\src\Identity.cs app\src\Machine.cs app\src\Network.cs app\src\Export.cs app\src\Collector.cs app\src\Cloud.cs app\src\Shell.cs app\src\SystemChanges.cs app\src\Security.cs app\src\DocumentSearch.cs app\src\UsbList.cs app\src\SecurityFiles.cs app\src\DeviceList.cs app\src\ComputerForms.cs app\src\Lang.cs app\src\Strings.cs"
-set "UI=app\src\Theme.cs app\src\Ui.cs app\src\MainForm.cs app\src\CollectPage.cs app\src\DatabasePage.cs app\src\ToolPages.cs app\src\UsbPage.cs app\src\FileChips.cs app\src\SecurityPage.cs app\src\SearchPage.cs app\src\CloudPages.cs app\src\SystemPages.cs app\src\AboutPage.cs app\src\Program.cs"
-set "SUSPECTOR_CORE=obj\SuspectorVersion.cs app\src\Json.cs app\src\Store.cs app\src\Identity.cs app\src\Machine.cs app\src\Network.cs app\src\Shell.cs app\src\SystemChanges.cs app\src\Security.cs app\src\SuspectorUpdate.cs app\src\IniSettings.cs app\src\SecurityFiles.cs app\src\Lang.cs app\src\Strings.cs"
-set "SUSPECTOR_UI=app\src\Theme.cs app\src\Ui.cs app\src\Standalone.cs app\src\FileChips.cs app\src\SecurityPage.cs app\src\SuspectorUpdateDialog.cs app\src\Suspector.cs"
-set "YOUSBEE_CORE=obj\YouSBeeVersion.cs app\src\Json.cs app\src\Store.cs app\src\Identity.cs app\src\Machine.cs app\src\Network.cs app\src\Shell.cs app\src\IniSettings.cs app\src\UsbList.cs app\src\Lang.cs app\src\Strings.cs"
-set "YOUSBEE_UI=app\src\Theme.cs app\src\Ui.cs app\src\Standalone.cs app\src\UsbPage.cs app\src\YouSBee.cs"
-set "WINFORMS=/r:System.Windows.Forms.dll /r:System.Drawing.dll"
+set "CORE=obj\Version.cs app\src\Json.cs app\src\Store.cs app\src\LooseSearch.cs app\src\Identity.cs app\src\Machine.cs app\src\Network.cs app\src\Export.cs app\src\Collector.cs app\src\Cloud.cs app\src\Shell.cs app\src\SystemChanges.cs app\src\Security.cs app\src\DocumentSearch.cs app\src\UsbList.cs app\src\SecurityFiles.cs app\src\DeviceList.cs app\src\ComputerForms.cs app\src\IniSettings.cs app\src\Lang.cs app\src\Strings.cs"
 
-if not defined BUILD_TOOLBOX goto suspector
-call :free comp-info || exit /b 1
-"%CSC%" /nologo /optimize+ /codepage:65001 /target:winexe /out:comp-info.exe /win32manifest:app\app.manifest /win32icon:app\app.ico /resource:app\trigger-words.txt,CompInfo.trigger-words.txt /resource:app\brand.png,CompInfo.brand.png /resource:app\face.png,CompInfo.face.png /resource:app\face-ru.png,CompInfo.face-ru.png ^
-  %REFS% %WINFORMS% %CORE% %UI%
-if errorlevel 1 exit /b 1
-echo Built comp-info.exe %VER%
-call :wpf comp-info %VER% || exit /b 1
+call :dotnet || exit /b 1
+if defined BUILD_TOOLBOX call :wpf comp-info %VER% || exit /b 1
+if defined BUILD_SUSPECTOR call :wpf SUSpector %SUSVER% || exit /b 1
+if defined BUILD_YOUSBEE call :wpf youSBee %YSBVER% || exit /b 1
 
-:suspector
-if not defined BUILD_SUSPECTOR goto yousbee
-call :free SUSpector || exit /b 1
-"%CSC%" /nologo /optimize+ /codepage:65001 /target:winexe /main:CompInfo.SuspectorProgram /out:SUSpector.exe /win32manifest:app\app.manifest /win32icon:app\suspector.ico /resource:app\suspector.png,CompInfo.suspector.png /resource:app\trigger-words.txt,CompInfo.trigger-words.txt ^
-  %REFS% %WINFORMS% %SUSPECTOR_CORE% %SUSPECTOR_UI%
-if errorlevel 1 exit /b 1
-echo Built SUSpector.exe %SUSVER%
-call :wpf SUSpector %SUSVER% || exit /b 1
-
-:yousbee
-if not defined BUILD_YOUSBEE goto checks
-call :free youSBee || exit /b 1
-"%CSC%" /nologo /optimize+ /codepage:65001 /target:winexe /main:CompInfo.YouSBeeProgram /out:youSBee.exe /win32manifest:app\app.manifest /win32icon:app\yousbee.ico /resource:app\yousbee.png,CompInfo.yousbee.png ^
-  %REFS% %WINFORMS% %YOUSBEE_CORE% %YOUSBEE_UI%
-if errorlevel 1 exit /b 1
-echo Built youSBee.exe %YSBVER%
-call :wpf youSBee %YSBVER% || exit /b 1
-
-:checks
 "%CSC%" /nologo /optimize+ /codepage:65001 /target:exe /out:obj\tests.exe /resource:app\trigger-words.txt,CompInfo.trigger-words.txt %REFS% %CORE% app\src\SuspectorUpdate.cs app\tests\Tests.cs app\tests\FakeCloud.cs
 if errorlevel 1 exit /b 1
 obj\tests.exe app\tests
@@ -99,15 +73,15 @@ if exist %1.exe (
 )
 exit /b 0
 
-rem The WPF version of a program (app\wpf\<name>, WPF_MIGRATION.md), built next to the WinForms one as <name>-wpf.exe
-rem while the move goes on: name, version. It needs the .NET SDK; without one it is skipped and the rest is built as before.
+rem One program: app\wpf\<name>\<name>.csproj, built to obj\wpf\<name>-out and copied to the root as <name>.exe.
+rem The <name>-wpf.exe of the time of the move to WPF is deleted.
 :wpf
-call :dotnet || exit /b 0
-call :free %1-wpf || exit /b 1
+call :free %1 || exit /b 1
 "%DOTNET%" build app\wpf\%1\%1.csproj -c Release -o obj\wpf\%1-out -nologo -v q -clp:NoSummary
 if errorlevel 1 exit /b 1
-copy /y obj\wpf\%1-out\%1.exe %1-wpf.exe >nul || exit /b 1
-echo Built %1-wpf.exe %2
+copy /y obj\wpf\%1-out\%1.exe %1.exe >nul || exit /b 1
+if exist %1-wpf.exe del /q %1-wpf.exe >nul 2>&1
+echo Built %1.exe %2
 exit /b 0
 
 rem Finds dotnet.exe of the .NET SDK: in PATH, installed for all users, or per user (dotnet-install.ps1).
@@ -119,7 +93,7 @@ for /f "delims=" %%i in ('where dotnet 2^>nul') do if not defined DOTNET set "DO
 if not defined DOTNET if exist "%ProgramFiles%\dotnet\dotnet.exe" set "DOTNET=%ProgramFiles%\dotnet\dotnet.exe"
 if not defined DOTNET if exist "%LOCALAPPDATA%\Microsoft\dotnet\dotnet.exe" set "DOTNET=%LOCALAPPDATA%\Microsoft\dotnet\dotnet.exe"
 if defined DOTNET exit /b 0
-echo .NET SDK not found: youSBee-wpf.exe is not built (https://dotnet.microsoft.com/download).
+echo .NET SDK not found: it is needed to build the programs (https://dotnet.microsoft.com/download).
 exit /b 1
 
 rem Version information of one program: file, title (in quotes), version.

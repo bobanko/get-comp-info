@@ -5,7 +5,7 @@ using System.Text;
 
 namespace CompInfo
 {
-    // «База устройств» without window code (DatabasePage on WinForms, DatabaseView on WPF): the records of this copy,
+    // «База устройств» without window code (DatabaseView of appwpfPages and the tests): the records of this copy,
     // repeated values across the whole base by the keys of the web interface (logic.js), the naming policy,
     // the filters and the sort order of the table.
     public class DeviceList

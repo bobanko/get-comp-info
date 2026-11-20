@@ -570,10 +570,10 @@ namespace CompInfo
             string expected = File.ReadAllText(Path.GetFullPath(Path.Combine(here, @"..\app\SUSpector.version"))).Trim();
             Check(version.FileVersion == expected && version.ProductName == "SUSpector", "SUSpector version and product metadata: " + version.FileVersion + " / " + expected);
             System.Reflection.Assembly assembly = System.Reflection.Assembly.LoadFrom(path);
-            Check(assembly.GetType("CompInfo.SuspectorProgram", false) != null && assembly.GetType("CompInfo.SecurityPage", false) != null,
+            Check(assembly.GetType("CompInfo.Wpf.SuspectorWindow", false) != null && assembly.GetType("CompInfo.Wpf.SecurityView", false) != null,
                 "SUSpector contains the security application");
-            Check(assembly.GetType("CompInfo.MainForm", false) == null && assembly.GetType("CompInfo.DatabasePage", false) == null &&
-                assembly.GetType("CompInfo.SyncPage", false) == null && assembly.GetType("CompInfo.CloudClient", false) == null,
+            Check(assembly.GetType("CompInfo.Wpf.ToolboxWindow", false) == null && assembly.GetType("CompInfo.Wpf.DatabaseView", false) == null &&
+                assembly.GetType("CompInfo.Wpf.SyncView", false) == null && assembly.GetType("CompInfo.CloudClient", false) == null,
                 "SUSpector excludes the toolbox, device database and cloud UI");
         }
 

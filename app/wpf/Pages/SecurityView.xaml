@@ -1,4 +1,4 @@
-<!-- «Кибербезопасность» on WPF: SUSpector now, the WPF toolbox later (SecurityPage.cs on WinForms).
+<!-- «Кибербезопасность»: SUSpector and the section of the toolbox (SecurityPage.cs on WinForms before).
      The checks are SecurityAudit (app\src\Security.cs), the found files SecurityFiles (app\src\SecurityFiles.cs).
      No texts here: they come from the code (L.T). -->
 <UserControl x:Class="CompInfo.Wpf.SecurityView"

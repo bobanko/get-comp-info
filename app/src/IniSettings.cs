@@ -5,7 +5,7 @@ using System.Text;
 
 namespace CompInfo
 {
-    // Shared by the standalone programs (SUSpector, youSBee) on WinForms and on WPF: no window code here.
+    // Shared by the standalone programs (SUSpector, youSBee): no window code here.
     // UI preferences of a standalone program, kept next to the executable.
     public class IniSettings
     {
