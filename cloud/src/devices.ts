@@ -54,7 +54,60 @@ export interface HistoryEntry {
 export type WriteResult =
   | { status: 'ok'; device: Device; changed: boolean }
   | { status: 'conflict'; current: Device }
-  | { status: 'deleted'; current: Device };
+  | { status: 'deleted'; current: Device }
+  // A new record of a computer that already has a live record under another id.
+  | { status: 'duplicate'; existing: Device };
+
+// ---------- One computer, one record ----------
+// The same rules as Identity.Find of the program (app/src/Identity.cs): a valid SMBIOS UUID decides when both records
+// have one; otherwise the same usable serial number or the same Windows installation.
+
+const SERIAL_PLACEHOLDERS = ['to be filled by o.e.m.', 'default string', 'system serial number', 'none', 'unknown', '0'];
+const UUID = /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/;
+
+export function normalizeUuid(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const uuid = value.trim().replace(/^\{(.*)\}$/, '$1').toUpperCase();
+  if (!UUID.test(uuid) || /^0{8}-0{4}-0{4}-0{4}-0{12}$/.test(uuid) || /^F{8}-F{4}-F{4}-F{4}-F{12}$/.test(uuid)) return null;
+  return uuid;
+}
+
+function usableSerial(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const serial = value.trim().toLowerCase();
+  return serial && !SERIAL_PLACEHOLDERS.includes(serial) ? serial : null;
+}
+
+export function sameComputer(a: Record<string, unknown>, b: Record<string, unknown>): boolean {
+  const uuidA = normalizeUuid(a.smbiosUuid);
+  const uuidB = normalizeUuid(b.smbiosUuid);
+  if (uuidA && uuidB) return uuidA === uuidB;
+  const serialA = usableSerial(a.serial);
+  if (serialA && serialA === usableSerial(b.serial)) return true;
+  const windowsA = normalizeUuid(a.windowsMachineGuid);
+  return windowsA !== null && windowsA === normalizeUuid(b.windowsMachineGuid);
+}
+
+// A live record of the same computer under another id, or null.
+export async function findSameComputer(db: D1Database, id: string, data: Record<string, unknown>): Promise<Device | null> {
+  const uuid = normalizeUuid(data.smbiosUuid);
+  const serial = usableSerial(data.serial);
+  const windows = normalizeUuid(data.windowsMachineGuid);
+  if (!uuid && !serial && !windows) return null;
+  const { results } = await db
+    .prepare(
+      `${DEVICE_SELECT} WHERE d.deleted_at IS NULL AND d.id <> ?1 AND (
+         upper(json_extract(d.data, '$.smbiosUuid')) = ?2 OR lower(trim(json_extract(d.data, '$.serial'))) = ?3 OR
+         upper(json_extract(d.data, '$.windowsMachineGuid')) = ?4) ORDER BY d.id`,
+    )
+    .bind(id, uuid, serial, windows)
+    .all<DeviceRow>();
+  for (const row of results) {
+    const device = toDevice(row);
+    if (sameComputer(data, device.data)) return device;
+  }
+  return null;
+}
 
 export function toDevice(row: DeviceRow): Device {
   return {
@@ -231,16 +284,22 @@ function keepWebFields(current: Record<string, unknown>, incoming: Record<string
 }
 
 // Console upload. baseRevision is the cloud revision the local copy was based on (null for a new record).
+// duplicateCheck: a new record of a computer that already has a live record under another id is refused
+// (programs from 21.11.2026 ask for it; older ones do not know the answer).
 export async function putDevice(
   db: D1Database,
   id: string,
   baseRevision: number | null,
   incoming: Record<string, unknown>,
-  options: { restore: boolean; user: User; source: Source; apiKey?: ApiKeyInfo },
+  options: { restore: boolean; duplicateCheck?: boolean; user: User; source: Source; apiKey?: ApiKeyInfo },
 ): Promise<WriteResult> {
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const row = await getDeviceRow(db, id);
     let action: Action = 'create';
+    if (!row && options.duplicateCheck) {
+      const existing = await findSameComputer(db, id, incoming);
+      if (existing) return { status: 'duplicate', existing };
+    }
     if (row) {
       const current = toDevice(row);
       incoming = keepWebFields(current.data, incoming);

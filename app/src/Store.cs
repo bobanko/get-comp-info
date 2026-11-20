@@ -168,21 +168,7 @@ namespace CompInfo
                 int c = Fmt.Moment(records[b].Text("collectedAt")).CompareTo(Fmt.Moment(records[a].Text("collectedAt")));
                 return c != 0 ? c : File.GetLastWriteTimeUtc(order[b]).CompareTo(File.GetLastWriteTimeUtc(order[a]));
             });
-            JsonObject result = records[index[0]];
-            DateTime first = DateTime.MaxValue;
-            string created = null;
-            foreach (JsonObject r in records)
-            {
-                DateTime d = Fmt.Moment(r.Text("createdAt"));
-                if (d != DateTime.MinValue && d < first) { first = d; created = r.Text("createdAt"); }
-            }
-            if (created != null) result["createdAt"] = created;
-            List<string> kept = new List<string> { "comment" };
-            kept.AddRange(WebFields);
-            foreach (string name in kept)
-                if (string.IsNullOrEmpty(result.Text(name)))
-                    foreach (int i in index)
-                        if (!string.IsNullOrEmpty(records[i].Text(name))) { result[name] = records[i][name]; break; }
+            JsonObject result = Combine(index.ConvertAll(i => records[i]));
 
             string keep = order[index[0]];
             foreach (string p in order)
@@ -193,6 +179,28 @@ namespace CompInfo
             Files.WriteJson(keep, result);
             foreach (string p in order) if (p != keep) File.Delete(p);
             return keep;
+        }
+
+        // Versions of one computer, newest first, as one record: the newest one with the earliest createdAt and the comment
+        // and web marks of the newest version that has them. The first object is changed and returned.
+        public static JsonObject Combine(IList<JsonObject> newestFirst)
+        {
+            JsonObject result = newestFirst[0];
+            DateTime first = DateTime.MaxValue;
+            string created = null;
+            foreach (JsonObject r in newestFirst)
+            {
+                DateTime d = Fmt.Moment(r.Text("createdAt"));
+                if (d != DateTime.MinValue && d < first) { first = d; created = r.Text("createdAt"); }
+            }
+            if (created != null) result["createdAt"] = created;
+            List<string> kept = new List<string> { "comment" };
+            kept.AddRange(WebFields);
+            foreach (string name in kept)
+                if (string.IsNullOrEmpty(result.Text(name)))
+                    foreach (JsonObject r in newestFirst)
+                        if (!string.IsNullOrEmpty(r.Text(name))) { result[name] = r[name]; break; }
+            return result;
         }
 
         // The card of a record in the web interface: the site of the cloud API of cloud-config.json.

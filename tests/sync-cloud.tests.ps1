@@ -96,6 +96,19 @@ function Invoke-CloudRequest {
             return New-Response 400 @{ error = @{ code = 'id_mismatch'; message = 'computerId не совпадает.' } }
         }
         $current = $script:server.Devices[$id]
+        if (-not $current -and $request.duplicateCheck) {
+            # sameComputer of cloud/src/devices.ts, by UUID or, without one, by a usable serial
+            foreach ($otherId in @($script:server.Devices.Keys)) {
+                $other = $script:server.Devices[$otherId]
+                if ($other.deleted) { continue }
+                $otherData = $other.data | ConvertFrom-Json
+                $same = if ($data.smbiosUuid -and $otherData.smbiosUuid) { $data.smbiosUuid -eq $otherData.smbiosUuid }
+                    else { $data.serial -and $data.serial -notin @('To be filled by O.E.M.', 'Default string', 'System Serial Number', 'None', 'Unknown', '0') -and $data.serial -eq $otherData.serial }
+                if ($same) {
+                    return New-Response 409 @{ error = @{ code = 'duplicate'; message = 'Дубликат.' }; existing = (Get-ServerDevice $otherId) }
+                }
+            }
+        }
         if ($current) {
             if ($current.deleted) {
                 if (-not $request.restore) { return New-Response 410 @{ error = @{ code = 'deleted'; message = 'Удалена.' }; current = (Get-ServerDevice $id) } }
@@ -270,6 +283,18 @@ try {
     $counts = Sync $flash @(1)
     Assert-True ($script:offered['Восстановить запись в облаке'] -eq 1 -and $counts.Deleted -eq 1 -and -not (Test-Path (Join-Path $flash 'data\DEL-9.json'))) 'The newer deletion is offered first'
 
+    # ---------- A new record of a computer the cloud has under an old id: continuing it leaves one record ----------
+    Write-ServerDevice 'LEG-7' ('{"computerId":"LEG-7","hostname":"PC-7","serial":"SER-7","comment":"из веба","createdAt":"2026-11-01T09:00:00Z","collectedAt":"2026-11-17T09:45:00Z"}' | ConvertFrom-Json) $false 'editor@example.com'
+    Write-Record $pc 'UUID-7.json' '{"computerId":"UUID-7","hostname":"PC-7 new","serial":"SER-7","comment":"","createdAt":"2026-11-21T00:10:00Z","collectedAt":"2026-11-21T00:10:00Z"}'
+    $counts = Sync $pc @(0)
+    $kept = Read-Record $pc 'LEG-7.json'
+    Assert-True ($counts.Bound -eq 1 -and -not (Test-Path (Join-Path $pc 'data\UUID-7.json')) -and -not $script:server.Devices.ContainsKey('UUID-7')) 'The cloud record must be continued, not doubled'
+    Assert-True ($kept.computerId -eq 'LEG-7' -and $kept.hostname -eq 'PC-7 new' -and $kept.comment -eq 'из веба' -and $kept.createdAt -eq '2026-11-01T09:00:00Z') "One record with the newer collection and the web comment: $($kept | ConvertTo-Json -Compress)"
+    Assert-True ((($script:server.Devices['LEG-7'].data | ConvertFrom-Json).hostname) -eq 'PC-7 new') 'The continued record must reach the cloud'
+    Write-Record $pc 'UUID-8.json' '{"computerId":"UUID-8","hostname":"PC-7 twin","serial":"SER-7"}'
+    $counts = Sync $pc @(1)
+    Assert-True ($counts.PushedNew -eq 1 -and $script:server.Devices.ContainsKey('UUID-8')) 'A separate record on the user''s word'
+
     # ---------- A locally deleted file comes back ----------
     Remove-Item -LiteralPath (Join-Path $pc 'data\UUID-1.json')
     $counts = Sync $pc
@@ -287,7 +312,7 @@ try {
     $kept = Read-Record $pc 'UUID-1.json'
     Assert-True ($kept.hostname -eq 'PC-1 copy' -and $null -eq $kept.PSObject.Properties['addedToExternalDatabase']) 'The newest collection is kept in the file of the id'
     Assert-True (($script:server.Devices['UUID-1'].data | ConvertFrom-Json).hostname -eq 'PC-1 copy') 'The merged record is sent'
-    $backups = @(Get-ChildItem (Join-Path $pc 'data\.duplicates') -Directory)
+    $backups = @(Get-ChildItem (Join-Path $pc 'data\.duplicates') -Directory | Where-Object { Test-Path (Join-Path $_.FullName 'copy-of-uuid.json') })
     Assert-True ($backups.Count -eq 1 -and @(Get-ChildItem $backups[0].FullName -File).Count -eq 2) 'Both old files are kept in data\.duplicates'
     Remove-Item -LiteralPath (Join-Path $pc 'data\broken.json')
 
@@ -328,7 +353,8 @@ try {
     $script:CloudPageSize = 2
     $fresh = New-ProgramCopy 'fresh'
     $counts = Sync $fresh
-    Assert-True ($counts.ReceivedNew -eq 3) 'Paged download must fetch every record'
+    $live = @($script:server.Devices.Values | Where-Object { -not $_.deleted }).Count
+    Assert-True ($live -ge 3 -and $counts.ReceivedNew -eq $live) "Paged download must fetch every record ($($counts.ReceivedNew) of $live)"
     $script:CloudPageSize = 200
 
     # ---------- Personal key from the console ----------
@@ -337,7 +363,7 @@ try {
     Set-TypedKeys @('wrong-key', 'good-key')
     $counts = Sync $typed @(0)
     Assert-True ((Get-CloudKeyFromFile $typed) -eq 'good-key') 'Accepted key must be saved on request'
-    Assert-True ($counts.ReceivedNew -eq 3) 'Sync must continue after the key is accepted'
+    Assert-True ($counts.ReceivedNew -eq $live) 'Sync must continue after the key is accepted'
     Remove-Item -LiteralPath (Join-Path $typed 'cloud-key.txt')
     Set-TypedKeys @('good-key')
     [void](Sync $typed @(1))

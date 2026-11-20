@@ -98,6 +98,28 @@ function Set-SyncRecordField {
     $Record | Add-Member -NotePropertyName $Name -NotePropertyValue $Value
 }
 
+# Versions of one computer, newest first, as one record (Records.Combine in Store.cs): the newest one with the earliest
+# createdAt and the comment and web marks of the newest version that has them. The first object is changed and returned.
+function Join-SyncVersions {
+    param([object[]]$NewestFirst)
+    $result = $NewestFirst[0]
+    $first = [datetime]::MaxValue
+    $created = $null
+    foreach ($record in $NewestFirst) {
+        $date = Get-SyncMoment $record.createdAt
+        if ($date -ne [datetime]::MinValue -and $date -lt $first) { $first = $date; $created = $record.createdAt }
+    }
+    if ($null -ne $created) { Set-SyncRecordField $result 'createdAt' $created }
+    foreach ($name in @('comment', 'inventoried')) {
+        if ([string]::IsNullOrEmpty([string]$result.$name)) {
+            foreach ($record in $NewestFirst) {
+                if (-not [string]::IsNullOrEmpty([string]$record.$name)) { Set-SyncRecordField $result $name $record.$name; break }
+            }
+        }
+    }
+    return $result
+}
+
 # Several files of one record (Records.MergeDuplicates in Store.cs): one file stays — the file named after the id when
 # it is among them — with the newest collection, the earliest createdAt and the comment and web marks of the newest
 # version that has them. All of them are copied to data\.duplicates\<time>\ first. Returns the kept path.
@@ -108,21 +130,7 @@ function Merge-DuplicateRecordFiles {
         [pscustomobject]@{ Path = $path; Record = $record; Collected = (Get-SyncMoment $record.collectedAt); Changed = (Get-SyncFileTime $path) }
     })
     $ordered = @($items | Sort-Object -Property @{ Expression = 'Collected'; Descending = $true }, @{ Expression = 'Changed'; Descending = $true })
-    $result = $ordered[0].Record
-    $first = [datetime]::MaxValue
-    $created = $null
-    foreach ($item in $items) {
-        $date = Get-SyncMoment $item.Record.createdAt
-        if ($date -ne [datetime]::MinValue -and $date -lt $first) { $first = $date; $created = $item.Record.createdAt }
-    }
-    if ($null -ne $created) { Set-SyncRecordField $result 'createdAt' $created }
-    foreach ($name in @('comment', 'inventoried')) {
-        if ([string]::IsNullOrEmpty([string]$result.$name)) {
-            foreach ($item in $ordered) {
-                if (-not [string]::IsNullOrEmpty([string]$item.Record.$name)) { Set-SyncRecordField $result $name $item.Record.$name; break }
-            }
-        }
-    }
+    $result = Join-SyncVersions @($ordered | ForEach-Object { $_.Record })
     $keep = $ordered[0].Path
     $named = ($Id -replace '[<>:"/\\|?*\x00-\x1f]', '_') + '.json'
     foreach ($path in $Paths) { if ((Split-Path -Leaf $path) -eq $named) { $keep = $path } }

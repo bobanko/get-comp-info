@@ -328,7 +328,7 @@ function Connect-Cloud {
 function New-CloudSyncCounts {
     return [pscustomobject]@{
         PushedNew = 0; PushedUpdated = 0; PushedSame = 0
-        ReceivedNew = 0; ReceivedUpdated = 0; Deleted = 0; Deferred = 0; Merged = 0
+        ReceivedNew = 0; ReceivedUpdated = 0; Deleted = 0; Deferred = 0; Merged = 0; Bound = 0
         Errors = New-Object 'System.Collections.Generic.List[string]'
         NewVersion = $null
         NetworkProfiles = $null
@@ -375,6 +375,50 @@ function Get-LocalCloudRecords {
     return [pscustomobject]@{ ById = $byId; Skipped = $duplicates }
 }
 
+function Get-SyncRecordLabel {
+    param([string]$Id, $Data)
+    $hostname = if ($Data.hostname) { [string]$Data.hostname } else { '?' }
+    $moment = Get-SyncMoment $Data.collectedAt
+    $collected = if ($moment -ne [datetime]::MinValue) { ", собрана $($moment.ToLocalTime().ToString('yyyy-MM-dd HH:mm'))" } else { '' }
+    return "$Id ($hostname$collected)"
+}
+
+# The local record continues the cloud record of the same computer (the user's answer to a duplicate; Bind in Cloud.cs):
+# one record under the cloud id (Join-SyncVersions of both versions, newest first), in the file of that id. The old file
+# is copied to data\.duplicates first. Returns the record to send on top of the cloud revision.
+function Join-CloudRecord {
+    param($Context, $Item, $Record, $Existing)
+    $id = [string]$Existing.id
+    $cloudData = $Existing.data
+    $dataPath = Split-Path -Parent $Item.Path
+    $there = $Context.Local[$id]
+    $target = if ($null -ne $there) { $there.Path } else { Join-Path $dataPath (Get-SafeRecordFileName $id) }
+    $cloudNewer = Test-CloudVersionNewer $Record $Item.Path $cloudData $Existing.updatedAt
+    $mine = $Record | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+    $theirs = $cloudData | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+    $versions = if ($cloudNewer) { @($theirs, $mine) } else { @($mine, $theirs) }
+    if ($null -ne $there -and $there.Path -ne $Item.Path) { $versions += , ($there.Record | ConvertTo-Json -Depth 100 | ConvertFrom-Json) }
+    $merged = Join-SyncVersions $versions
+    Set-SyncRecordField $merged 'computerId' $id
+    Set-SyncRecordField $merged 'computerIdSource' $(if ($cloudData.computerIdSource) { [string]$cloudData.computerIdSource } else { 'legacyId' })
+
+    $backup = Join-Path (Join-Path $dataPath '.duplicates') (Get-Date -Format 'yyyyMMdd-HHmmss')
+    New-Item -ItemType Directory -Path $backup -Force | Out-Null
+    Copy-Item -LiteralPath $Item.Path -Destination (Join-Path $backup $Item.File) -Force
+    if ((Test-Path -LiteralPath $target) -and $target -ne $Item.Path) {
+        Copy-Item -LiteralPath $target -Destination (Join-Path $backup (Split-Path -Leaf $target)) -Force
+    }
+    Write-SyncJson $target $merged
+    if ($target -ne $Item.Path) { Remove-Item -LiteralPath $Item.Path -Force }
+    $Context.Local.Remove($Item.Id)
+    $Context.State.Records.Remove($Item.Id)
+    $Context.State.Records[$id] = @{ file = (Split-Path -Leaf $target); revision = [int]$Existing.revision; hash = (Get-RecordHash $cloudData) }
+    $saved = Read-SyncRecord $target
+    $bound = @{ Id = $id; Path = $target; File = (Split-Path -Leaf $target); Record = $saved; Hash = (Get-RecordHash $saved) }
+    $Context.Local[$id] = $bound
+    return $bound
+}
+
 function Set-LocalCloudRecord {
     param($Context, [string]$Id, [string]$Path, $Record, [int]$Revision)
     Write-SyncJson $Path $Record
@@ -414,9 +458,11 @@ function Send-CloudRecord {
     $baseRevision = if ($null -ne $entry) { $entry.revision } else { $null }
     $record = $Item.Record
     $restore = $false
+    # A new record of a computer that the cloud already has under another id is refused (409 duplicate).
+    $duplicateCheck = $true
     while ($true) {
         $response = Invoke-CloudRequest 'PUT' (Get-DeviceUrl $Context $Item.Id) $Context.Key @{
-            baseRevision = $baseRevision; data = $record; restore = $restore
+            baseRevision = $baseRevision; data = $record; restore = $restore; duplicateCheck = $duplicateCheck
         }
         switch ($response.Status) {
             200 {
@@ -428,6 +474,21 @@ function Send-CloudRecord {
                 return
             }
             409 {
+                if ($response.Body.error.code -eq 'duplicate' -and $null -ne $response.Body.existing) {
+                    $existing = $response.Body.existing
+                    $lines = @(
+                        "В облаке уже есть запись этого компьютера: $(Get-SyncRecordLabel $existing.id $existing.data), изменил(а) $($existing.updatedBy), $($existing.updatedAt).",
+                        "Эта запись: $(Get-SyncRecordLabel $Item.Id $record).",
+                        '',
+                        '«Продолжить запись из облака» объединит их в одну: останется более новый сбор, комментарий не потеряется, второй записи в облаке не будет.'
+                    )
+                    $choice = Select-SyncAction (Get-CloudRecordTitle $Item) $lines @('Продолжить запись из облака', 'Отправить отдельной записью', 'Отложить')
+                    if ($choice -eq 1) { $duplicateCheck = $false; continue }
+                    if ($choice -ne 0) { $Context.Counts.Deferred++; return }
+                    $Context.Counts.Bound++
+                    Send-CloudRecord $Context (Join-CloudRecord $Context $Item $record $existing)
+                    return
+                }
                 $current = $response.Body.current
                 $title = "$(Get-CloudRecordTitle $Item) | в облаке изменил(а) $($current.updatedBy), $($current.updatedAt)"
                 $cloudNewer = Test-CloudVersionNewer $record $Item.Path $current.data $current.updatedAt
@@ -594,6 +655,7 @@ function Show-CloudSyncSummary {
         @('Конфликтов отложено', $Counts.Deferred)
     )
     if ($Counts.Merged -gt 0) { $rows += , @('Лишних файлов записи убрано', $Counts.Merged) }
+    if ($Counts.Bound -gt 0) { $rows += , @('Продолжено записей облака', $Counts.Bound) }
     foreach ($row in $rows) {
         $color = if ($row[0] -eq 'Конфликтов отложено' -and $row[1] -gt 0) { 'Yellow' } elseif ($row[1] -gt 0) { 'Cyan' } else { 'DarkGray' }
         Write-Host ('{0,-28} {1}' -f $row[0], $row[1]) -ForegroundColor $color

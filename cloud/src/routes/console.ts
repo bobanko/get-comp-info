@@ -34,9 +34,13 @@ consoleApi.put('/devices/:id', async (c) => {
   if (body.restore !== undefined && typeof body.restore !== 'boolean') {
     fail(400, 'invalid_restore', 'restore must be true or false.');
   }
+  if (body.duplicateCheck !== undefined && typeof body.duplicateCheck !== 'boolean') {
+    fail(400, 'invalid_duplicate_check', 'duplicateCheck must be true or false.');
+  }
   const data = normalizeData(id, body.data);
   const result = await putDevice(c.env.DB, id, baseRevision as number | null, data, {
     restore: body.restore === true,
+    duplicateCheck: body.duplicateCheck === true,
     user: c.get('user'),
     source: 'console',
     apiKey: c.get('apiKey'),
@@ -82,6 +86,11 @@ export function writeResponse(c: Context<AppEnv>, result: WriteResult): Response
       return c.json(
         { error: { code: 'deleted', message: 'The record was deleted in the cloud.' }, current: result.current },
         410,
+      );
+    case 'duplicate':
+      return c.json(
+        { error: { code: 'duplicate', message: 'This computer already has another record in the cloud.' }, existing: result.existing },
+        409,
       );
   }
 }

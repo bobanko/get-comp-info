@@ -941,6 +941,36 @@ namespace CompInfo
                     Check(c.Merged == 1 && c.Errors.Count == 0 && !File.Exists(Path.Combine(data, "dup.json")) &&
                         Files.ReadRecord(Path.Combine(data, "A.json")).Text("hostname") == "copy" && cloud.Devices["A"].Data.Text("hostname") == "copy",
                         "one record in two files merged and sent: " + string.Join("; ", c.Errors));
+
+                    // A new record of a computer the cloud has under an old id (a copy without that record): the user continues it.
+                    JsonObject legacy = Rec("PF58Y8F9", "pc-d", "заметка из веба");
+                    legacy["serial"] = "PF58Y8F9"; legacy["createdAt"] = "2026-11-01T09:00:00Z"; legacy["collectedAt"] = "2026-11-17T09:45:00Z";
+                    cloud.Put("PF58Y8F9", legacy, false);
+                    JsonObject fresh = Rec("UUID-D", "pc-d-new", "");
+                    fresh["serial"] = "PF58Y8F9"; fresh["createdAt"] = "2026-11-21T00:10:00Z"; fresh["collectedAt"] = "2026-11-21T00:10:00Z";
+                    Files.WriteJson(Path.Combine(data, "UUID-D.json"), fresh);
+                    ui.SameComputerAnswer = 2;
+                    c = new CloudSync(root, client, ui).Run();
+                    Check(ui.SameComputerAsked == 1 && c.Deferred == 1 && !cloud.Devices.ContainsKey("UUID-D") && File.Exists(Path.Combine(data, "UUID-D.json")),
+                        "a second record of one computer is not created without the user");
+                    Check(ui.LastDetails.Contains("PF58Y8F9 (pc-d") && ui.LastDetails.Contains("UUID-D (pc-d-new"), "both records are named: " + ui.LastDetails);
+                    // Meanwhile the download brought the cloud record here too: continuing it leaves one file.
+                    Check(File.Exists(Path.Combine(data, "PF58Y8F9.json")), "the cloud record is downloaded as usual");
+                    ui.SameComputerAnswer = 0;
+                    c = new CloudSync(root, client, ui).Run();
+                    JsonObject bound = File.Exists(Path.Combine(data, "PF58Y8F9.json")) ? Files.ReadRecord(Path.Combine(data, "PF58Y8F9.json")) : new JsonObject();
+                    Check(c.Bound == 1 && !File.Exists(Path.Combine(data, "UUID-D.json")) && !cloud.Devices.ContainsKey("UUID-D"), "the cloud record is continued: " + string.Join("; ", c.Errors));
+                    Check(bound.Text("computerId") == "PF58Y8F9" && bound.Text("hostname") == "pc-d-new" && bound.Text("comment") == "заметка из веба" &&
+                        bound.Text("createdAt") == "2026-11-01T09:00:00Z", "one record: the newer collection, the web comment, the first creation: " + Json.Compact(bound));
+                    Check(cloud.Devices["PF58Y8F9"].Data.Text("hostname") == "pc-d-new", "the continued record reaches the cloud");
+
+                    // Kept apart on purpose: a separate record.
+                    JsonObject twin = Rec("UUID-E", "pc-e", "");
+                    twin["serial"] = "PF58Y8F9";
+                    Files.WriteJson(Path.Combine(data, "UUID-E.json"), twin);
+                    ui.SameComputerAnswer = 1;
+                    c = new CloudSync(root, client, ui).Run();
+                    Check(c.PushedNew == 1 && cloud.Devices.ContainsKey("UUID-E"), "a separate record on the user's word");
                 }
                 finally { Directory.Delete(root, true); }
             }

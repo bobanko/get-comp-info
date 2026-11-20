@@ -134,6 +134,7 @@ namespace CompInfo.Wpf
             AddCount(L.T("Удалено по облаку"), c.Deleted, false);
             AddCount(L.T("Конфликтов отложено"), c.Deferred, true);
             if (c.Merged > 0) AddCount(L.T("Лишних файлов одной записи убрано"), c.Merged, false);
+            if (c.Bound > 0) AddCount(L.T("Продолжено записей из облака"), c.Bound, false);
             string profiles = c.NetworkProfiles == "updated" ? L.T("обновлены") : c.NetworkProfiles == "unchanged" ? L.T("без изменений") :
                 c.NetworkProfiles == "missing" ? L.T("в облаке не заданы") : L.T("не загружены");
             AddLine(L.T("Профили сети"), profiles, "Text", c.NetworkProfiles == "updated" ? "Accent" : "Muted");
@@ -202,6 +203,17 @@ namespace CompInfo.Wpf
             });
             result = chosen;
             return action;
+        }
+
+        // 0 continue the cloud record (the main button), 1 a separate record, 2 defer
+        public int SameComputer(string title, string details)
+        {
+            return owner.Dispatcher.Invoke(() =>
+            {
+                int a = Dialog.Choose(owner, L.T("Этот компьютер уже есть в облаке"), title + "\n\n" + details, Severity.Warning,
+                    L.T("Продолжить запись из облака"), L.T("Отдельная запись"), L.T("Отложить"));
+                return a < 0 ? 2 : a;
+            });
         }
 
         // 0 restore in the cloud, 1 delete the local record, 2 defer. The newer side is the main button (Enter).

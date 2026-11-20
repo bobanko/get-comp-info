@@ -164,6 +164,24 @@ namespace CompInfo
                     Device d;
                     Devices.TryGetValue(id, out d);
                     JsonObject result = new JsonObject();
+                    if (d == null && request["duplicateCheck"] is bool && (bool)request["duplicateCheck"])
+                    {
+                        // sameComputer of cloud/src/devices.ts, by UUID or, without one, by serial
+                        foreach (Device other in Devices.Values)
+                        {
+                            if (other.Deleted || other.Data == null) continue;
+                            string ua = data.Text("smbiosUuid"), ub = other.Data.Text("smbiosUuid");
+                            bool same = !string.IsNullOrEmpty(ua) && !string.IsNullOrEmpty(ub)
+                                ? string.Equals(ua, ub, StringComparison.OrdinalIgnoreCase)
+                                : !string.IsNullOrEmpty(data.Text("serial")) && string.Equals(data.Text("serial"), other.Data.Text("serial"), StringComparison.OrdinalIgnoreCase);
+                            if (!same) continue;
+                            status = 409;
+                            JsonObject e = Error("This computer already has another record in the cloud.");
+                            ((JsonObject)e["error"])["code"] = "duplicate";
+                            e["existing"] = DeviceJson(other, true);
+                            return e;
+                        }
+                    }
                     if (d == null)
                     {
                         d = Put(id, data, false);
@@ -211,6 +229,9 @@ namespace CompInfo
             result = ConflictAnswer == "cloud" ? cloud : ConflictAnswer == "local" ? local : RecordDiff.Merge(local, cloud, CloudFields);
             return ConflictAnswer;
         }
+
+        public int SameComputerAnswer = 2, SameComputerAsked;
+        public int SameComputer(string title, string details) { SameComputerAsked++; LastDetails = details; return SameComputerAnswer; }
 
         public int DeletedInCloud(string title, string details, bool deletionNewer)
         {

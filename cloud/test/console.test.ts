@@ -8,6 +8,7 @@ import {
   unique,
   webRequest,
 } from './helpers';
+import { normalizeUuid, sameComputer } from '../src/devices';
 
 describe('console authentication', () => {
   it('rejects requests without a key or with an unknown key', async () => {
@@ -223,5 +224,49 @@ describe('console download', () => {
     const { key } = await harvesterKey();
     expect((await consoleRequest(key, 'GET', '/devices?since=-1')).status).toBe(400);
     expect((await consoleRequest(key, 'GET', '/devices?limit=abc')).status).toBe(400);
+  });
+});
+
+describe('one computer, one record', () => {
+  it('knows one computer by its UUID, or by serial or Windows installation when a UUID is missing', () => {
+    const uuid = '03341FE8-9B79-4CC9-8CBD-A82BDD18C277';
+    expect(sameComputer({ smbiosUuid: uuid }, { smbiosUuid: `{${uuid.toLowerCase()}}` })).toBe(true);
+    // two valid UUIDs decide alone: the same serial on another board is another computer
+    expect(sameComputer({ smbiosUuid: uuid, serial: 'SN1' }, { smbiosUuid: 'A3341FE8-9B79-4CC9-8CBD-A82BDD18C277', serial: 'SN1' })).toBe(false);
+    expect(sameComputer({ smbiosUuid: uuid, serial: 'SN1' }, { serial: ' sn1 ' })).toBe(true);
+    expect(sameComputer({ smbiosUuid: 'FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF', serial: 'SN1' }, { serial: 'SN1' })).toBe(true);
+    expect(sameComputer({ serial: 'Default string' }, { serial: 'default string' })).toBe(false);
+    expect(sameComputer({ windowsMachineGuid: uuid }, { windowsMachineGuid: uuid.toLowerCase() })).toBe(true);
+    expect(normalizeUuid('00000000-0000-0000-0000-000000000000')).toBeNull();
+  });
+
+  it('refuses a new record of a computer that has a live record under another id, when the program asks', async () => {
+    const { key } = await harvesterKey();
+    const admin = await addUser('admin');
+    const uuid = crypto.randomUUID().toUpperCase();
+    const old = unique('legacy');
+    await consoleRequest(key, 'PUT', `/devices/${old}`, { baseRevision: null, data: deviceData(old, { smbiosUuid: uuid }) });
+
+    const fresh = unique('dev');
+    const data = deviceData(fresh, { smbiosUuid: uuid.toLowerCase() });
+    const refused = await consoleRequest(key, 'PUT', `/devices/${fresh}`, { baseRevision: null, data, duplicateCheck: true });
+    expect(refused.status).toBe(409);
+    expect(refused.body.error.code).toBe('duplicate');
+    expect(refused.body.existing).toMatchObject({ id: old, revision: 1, data: { smbiosUuid: uuid } });
+    expect((await consoleRequest(key, 'PUT', `/devices/${fresh}`, { baseRevision: null, data, duplicateCheck: 'yes' })).status).toBe(400);
+
+    // Older programs do not ask, and the user may keep the second record on purpose.
+    const separate = await consoleRequest(key, 'PUT', `/devices/${fresh}`, { baseRevision: null, data });
+    expect(separate.status).toBe(200);
+    // Only new records are checked.
+    const update = await consoleRequest(key, 'PUT', `/devices/${fresh}`, { baseRevision: 1, data: { ...data, comment: 'x' }, duplicateCheck: true });
+    expect(update.status).toBe(200);
+
+    // A deleted record does not count.
+    await webRequest(admin, 'DELETE', `/devices/${old}`);
+    await webRequest(admin, 'DELETE', `/devices/${fresh}`);
+    const third = unique('dev');
+    const accepted = await consoleRequest(key, 'PUT', `/devices/${third}`, { baseRevision: null, data: deviceData(third, { smbiosUuid: uuid }), duplicateCheck: true });
+    expect(accepted.status).toBe(200);
   });
 });

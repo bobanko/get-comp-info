@@ -276,6 +276,8 @@ namespace CompInfo
         // The record was deleted in the cloud but changed here: 0 restore, 1 delete locally, 2 defer.
         // deletionNewer: the deletion came after the last local change, so «delete locally» is offered first.
         int DeletedInCloud(string title, string details, bool deletionNewer);
+        // The cloud has another record of this computer: 0 continue it (one record), 1 send a separate record, 2 defer.
+        int SameComputer(string title, string details);
     }
 
     // Which version of a record is newer. Without the dates the local version wins, as before.
@@ -310,6 +312,8 @@ namespace CompInfo
         public int PushedNew, PushedUpdated, PushedSame, ReceivedNew, ReceivedUpdated, Deleted, Deferred;
         // Extra files of a record that were merged into one (Records.MergeDuplicates).
         public int Merged;
+        // Local records that continued the cloud record of the same computer instead of making a second one.
+        public int Bound;
         public List<string> Errors = new List<string>();
         public string NetworkProfiles;
         public string NewVersion;
@@ -481,13 +485,15 @@ namespace CompInfo
             CloudState.Entry entry;
             object baseRevision = state.Records.TryGetValue(item.Id, out entry) ? (object)entry.Revision : null;
             JsonObject record = item.Record;
-            bool restore = false;
+            bool restore = false, duplicateCheck = true;
             while (true)
             {
                 JsonObject body = new JsonObject();
                 body["baseRevision"] = baseRevision;
                 body["data"] = record;
                 body["restore"] = restore;
+                // A new record of a computer that the cloud already has under another id is refused (409 duplicate).
+                body["duplicateCheck"] = duplicateCheck;
                 CloudClient.Response r = client.Request("PUT", DeviceUrl(item.Id), body);
                 JsonObject o = r.Object ?? new JsonObject();
                 if (r.Status == 200)
@@ -498,6 +504,22 @@ namespace CompInfo
                     if (!(o["changed"] is bool && (bool)o["changed"])) Counts.PushedSame++;
                     else if (revision == 1) Counts.PushedNew++;
                     else Counts.PushedUpdated++;
+                    return;
+                }
+                JsonObject error = o["error"] as JsonObject;
+                if (r.Status == 409 && error != null && error.Text("code") == "duplicate" && o["existing"] is JsonObject)
+                {
+                    JsonObject existing = (JsonObject)o["existing"];
+                    string existingId = existing.Text("id");
+                    string details = L.T("В облаке уже есть запись этого компьютера: ") + Describe(existingId, existing["data"] as JsonObject) +
+                        L.T(", изменил(а) ") + existing.Text("updatedBy") + ", " + Fmt.Date(existing.Text("updatedAt")) + ".\n" +
+                        L.T("Эта запись: ") + Describe(item.Id, record) + ".\n\n" +
+                        L.T("«Продолжить запись из облака» объединит их в одну: останется более новый сбор, комментарий не потеряется, второй записи в облаке не будет.");
+                    int choice = ui.SameComputer(Title(item), details);
+                    if (choice == 1) { duplicateCheck = false; continue; }
+                    if (choice != 0) { Counts.Deferred++; return; }
+                    Counts.Bound++;
+                    SendRecord(Bind(item, record, existingId, existing));
                     return;
                 }
                 if (r.Status == 409)
@@ -542,6 +564,53 @@ namespace CompInfo
                 }
                 throw new IOException(item.File + ": " + r.ErrorMessage);
             }
+        }
+
+        static string Describe(string id, JsonObject data)
+        {
+            data = data ?? new JsonObject();
+            string collected = Fmt.Date(data.Text("collectedAt"));
+            return id + " (" + (data.Text("hostname") ?? "?") + (collected.Length > 0 ? L.T(", собрана ") + collected : "") + ")";
+        }
+
+        // The local record continues the cloud record of the same computer (the user's answer to a duplicate): one record
+        // under the cloud id (Records.Combine of both versions, newest first), in the file of that id. The old file is
+        // copied to data\.duplicates first. Returns the record to send on top of the cloud revision.
+        Item Bind(Item item, JsonObject record, string id, JsonObject existing)
+        {
+            JsonObject cloudData = existing["data"] as JsonObject ?? new JsonObject();
+            string target = Path.Combine(dataPath, Records.SafeFileName(id));
+            Item there;
+            if (local.TryGetValue(id, out there)) target = there.Path;
+            bool cloudNewer = Recency.CloudNewer(record, item.Path, cloudData, existing.Text("updatedAt"));
+            List<JsonObject> versions = cloudNewer
+                ? new List<JsonObject> { cloudData.Clone(), record.Clone() }
+                : new List<JsonObject> { record.Clone(), cloudData.Clone() };
+            if (there != null && there != item) versions.Add(there.Record.Clone());
+            JsonObject merged = Records.Combine(versions);
+            merged["computerId"] = id;
+            merged["computerIdSource"] = cloudData.Text("computerIdSource") ?? "legacyId";
+
+            string backup = Path.Combine(dataPath, ".duplicates", DateTime.Now.ToString("yyyyMMdd-HHmmss"));
+            Directory.CreateDirectory(backup);
+            File.Copy(item.Path, Path.Combine(backup, item.File), true);
+            if (File.Exists(target) && !string.Equals(item.Path, target, StringComparison.OrdinalIgnoreCase))
+                File.Copy(target, Path.Combine(backup, Path.GetFileName(target)), true);
+            Files.WriteJson(target, merged);
+            if (!string.Equals(item.Path, target, StringComparison.OrdinalIgnoreCase)) File.Delete(item.Path);
+            local.Remove(item.Id);
+            state.Records.Remove(item.Id);
+
+            CloudState.Entry entry = new CloudState.Entry();
+            entry.File = Path.GetFileName(target);
+            entry.Revision = Int(existing["revision"]);
+            entry.Hash = Json.Hash(cloudData);
+            state.Records[id] = entry;
+            JsonObject saved = Files.ReadRecord(target);
+            Item bound = new Item();
+            bound.Id = id; bound.Path = target; bound.File = Path.GetFileName(target); bound.Record = saved; bound.Hash = Json.Hash(saved);
+            local[id] = bound;
+            return bound;
         }
 
         // Downloads cloud changes since the saved cursor. Locally changed records that were not sent stay as they are.
