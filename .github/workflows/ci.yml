@@ -24,11 +24,20 @@ jobs:
 
       - name: Run tests (Windows PowerShell 5.1)
         shell: pwsh
+        # All of them, even after a failure; the end of a failed test's output becomes an annotation of the run,
+        # which GitHub shows without signing in (the log itself needs it).
         run: |
+          $failed = @()
           foreach ($test in Get-ChildItem tests -Filter '*.tests.ps1') {
-            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $test.FullName
-            if ($LASTEXITCODE -ne 0) { throw "$($test.Name) failed" }
+            $output = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $test.FullName 2>&1 | Out-String
+            Write-Host $output
+            if ($LASTEXITCODE -ne 0) {
+              $failed += $test.Name
+              $tail = (($output -split "`r?`n") | Where-Object { $_.Trim() } | Select-Object -Last 8) -join "`n"
+              Write-Host ("::error title=$($test.Name) failed::" + ($tail -replace '%', '%25' -replace "`r", '' -replace "`n", '%0A'))
+            }
           }
+          if ($failed) { throw "Failed: $($failed -join ', ')" }
 
       - name: Build the programs and run their checks
         shell: cmd
