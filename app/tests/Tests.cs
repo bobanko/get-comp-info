@@ -639,6 +639,10 @@ namespace CompInfo
                 File.WriteAllBytes(Path.Combine(dir, "f.doc"), doc);
                 File.WriteAllText(Path.Combine(dir, "Секретный план.pdf"), "%PDF-1.4");
                 File.WriteAllText(Path.Combine(dir, "other.txt"), "секретный, но не план");
+                // settings of programs and files below AppData are matched by name only
+                File.WriteAllText(Path.Combine(dir, "settings.json"), "{\"note\":\"секретный план\"}");
+                Directory.CreateDirectory(Path.Combine(dir, "user", "AppData"));
+                File.WriteAllText(Path.Combine(dir, "user", "AppData", "cache.txt"), "секретный план");
 
                 Check(DocumentSearch.RtfText(File.ReadAllText(Path.Combine(dir, "e.rtf"))).Contains("Секретный план"), "RTF code page letters and \\u with fallback");
                 string fragment;
@@ -657,7 +661,8 @@ namespace CompInfo
                 Check(!hits.ContainsKey("other.txt") && !hits.ContainsKey("styles-only.docx"), "no match without the phrase or only in styles: " + string.Join(",", streamed));
                 Check(hits.ContainsKey("a.docx") && hits["a.docx"].Count == 2 && hits["a.docx"].Fragment.Contains("Это секретный план"), "words split into runs are found");
                 Check(hits.ContainsKey("Секретный план.pdf") && hits["Секретный план.pdf"].InName && hits["Секретный план.pdf"].Count == 0 && hits["Секретный план.pdf"].Type == "PDF", "PDF by name");
-                Check(streamed.Count == r.Hits.Count && r.MatchCount == r.Hits.Count && r.Files == 9 && !r.Cancelled, "results stream as found: " + r.Files);
+                Check(streamed.Count == r.Hits.Count && r.MatchCount == r.Hits.Count && r.Files == 11 && !r.Cancelled, "results stream as found: " + r.Files);
+                Check(!hits.ContainsKey("settings.json") && !hits.ContainsKey("cache.txt"), "program settings and AppData are not read: " + string.Join(",", streamed));
 
                 options.Contents = false;
                 r = DocumentSearch.Run(options, System.Threading.CancellationToken.None, null, null);

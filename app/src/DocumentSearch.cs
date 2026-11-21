@@ -44,12 +44,15 @@ namespace CompInfo
     public static class DocumentSearch
     {
         public const int MaxHits = 500;
-        const long MaxDocumentBytes = 50L * 1024 * 1024, MaxBinaryBytes = 20L * 1024 * 1024, MaxTextBytes = 20L * 1024 * 1024;
+        const long MaxDocumentBytes = 50L * 1024 * 1024, MaxBinaryBytes = 20L * 1024 * 1024, MaxTextBytes = 20L * 1024 * 1024,
+            MaxPlainBytes = 5L * 1024 * 1024;
 
         static readonly HashSet<string> OpenXml = Set(".docx", ".docm", ".dotx", ".dotm", ".xlsx", ".xlsm", ".xltx", ".xltm", ".pptx", ".pptm", ".potx", ".potm", ".ppsx", ".ppsm");
         static readonly HashSet<string> OpenDocument = Set(".odt", ".ods", ".odp", ".ott", ".ots", ".otp");
         static readonly HashSet<string> Binary = Set(".doc", ".dot", ".xls", ".xlt", ".ppt", ".pot", ".pps");
-        static readonly HashSet<string> Plain = Set(".txt", ".csv", ".log", ".md", ".xml", ".json", ".htm", ".html", ".ini", ".cfg");
+        // Only the plain text people write; .log .xml .json .html .ini .cfg are mostly settings and caches of programs
+        // (tens of thousands in a profile) and are matched by name only (user's choice 21.11.2026: the search was slow).
+        static readonly HashSet<string> Plain = Set(".txt", ".csv", ".md");
         static readonly HashSet<string> Rtf = Set(".rtf");
 
         static HashSet<string> Set(params string[] values) { return new HashSet<string>(values, StringComparer.OrdinalIgnoreCase); }
@@ -113,6 +116,7 @@ namespace CompInfo
         {
             public string Path, DisplayPath, DeletedAt;
             public bool Recycle;
+            public bool NamesOnly;   // below AppData, node_modules or .git: the name is matched, the text is not read
         }
 
         static void Report(Action<SearchProgress> progress, bool collecting, int found, int done, int total, int matches)
@@ -126,18 +130,24 @@ namespace CompInfo
         static readonly HashSet<string> SkipTopFolders = Set("windows", "program files", "program files (x86)", "programdata",
             "$recycle.bin", "system volume information", "recovery", "perflogs", "msocache", "config.msi");
 
+        // Folders of programs, not of documents: below them files are matched by name only. A folder the user picked
+        // himself is read whole, even inside AppData.
+        static readonly HashSet<string> NamesOnlyFolders = Set("appdata", "node_modules", ".git");
+
         static void Walk(string root, string phrase, SearchOptions options, SearchResult result, List<Candidate> documents,
             CancellationToken cancel, Action<SearchProgress> progress, Action<SearchHit> found)
         {
             string top = System.IO.Path.GetFullPath(root).TrimEnd('\\');
             // Skipping system folders only makes sense at the root of a disk, not inside a folder the user picked.
             bool disk = System.IO.Path.GetPathRoot(top).TrimEnd('\\').Equals(top, StringComparison.OrdinalIgnoreCase);
-            Stack<string> pending = new Stack<string>();
-            pending.Push(root);
+            // a folder and whether its files are matched by name only (below AppData and the like)
+            Stack<KeyValuePair<string, bool>> pending = new Stack<KeyValuePair<string, bool>>();
+            pending.Push(new KeyValuePair<string, bool>(root, false));
             while (pending.Count > 0)
             {
                 cancel.ThrowIfCancellationRequested();
-                string directory = pending.Pop();
+                KeyValuePair<string, bool> next = pending.Pop();
+                string directory = next.Key;
                 try
                 {
                     foreach (string file in Directory.GetFiles(directory))
@@ -145,6 +155,7 @@ namespace CompInfo
                         result.Files++;
                         Candidate c = new Candidate();
                         c.Path = c.DisplayPath = file;
+                        c.NamesOnly = next.Value;
                         Consider(c, phrase, options, result, documents, found);
                         if (result.Files % 200 == 0) Report(progress, true, result.Files, 0, 0, result.MatchCount);
                     }
@@ -153,7 +164,7 @@ namespace CompInfo
                         DirectoryInfo info = new DirectoryInfo(child);
                         if ((info.Attributes & FileAttributes.ReparsePoint) != 0) continue;
                         if (disk && string.Equals(directory.TrimEnd('\\'), top, StringComparison.OrdinalIgnoreCase) && SkipTopFolders.Contains(info.Name)) continue;
-                        pending.Push(child);
+                        pending.Push(new KeyValuePair<string, bool>(child, next.Value || NamesOnlyFolders.Contains(info.Name)));
                     }
                 }
                 catch (UnauthorizedAccessException) { result.SkippedFolders++; }
@@ -184,7 +195,7 @@ namespace CompInfo
         // Documents are read after the walk (with a real progress bar); anything else is matched by name at once.
         static void Consider(Candidate c, string phrase, SearchOptions options, SearchResult result, List<Candidate> documents, Action<SearchHit> found)
         {
-            if (options.Contents && ReadsContents(c.DisplayPath)) documents.Add(c);
+            if (options.Contents && !c.NamesOnly && ReadsContents(c.DisplayPath)) documents.Add(c);
             else Inspect(c, phrase, false, result, found);
         }
 
@@ -275,7 +286,7 @@ namespace CompInfo
                 return length > MaxDocumentBytes ? null : ZipText(path, delegate (string n) { return n == "content.xml"; });
             if (Binary.Contains(extension)) return length > MaxBinaryBytes ? null : BinaryText(File.ReadAllBytes(path));
             if (Rtf.Contains(extension)) return length > MaxTextBytes ? null : RtfText(DecodeText(File.ReadAllBytes(path)));
-            if (Plain.Contains(extension)) return length > MaxTextBytes ? null : DecodeText(File.ReadAllBytes(path));
+            if (Plain.Contains(extension)) return length > MaxPlainBytes ? null : DecodeText(File.ReadAllBytes(path));
             return null;
         }
 
