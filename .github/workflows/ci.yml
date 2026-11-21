@@ -1,0 +1,62 @@
+# Checks every push to main and every pull request with the same tests the release runs (release.yml), so a broken
+# commit shows up before a version tag is pushed, not halfway through publishing. Publishes nothing.
+name: Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  programs:
+    name: Programs and console (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run tests (Windows PowerShell 5.1)
+        shell: pwsh
+        run: |
+          foreach ($test in Get-ChildItem tests -Filter '*.tests.ps1') {
+            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $test.FullName
+            if ($LASTEXITCODE -ne 0) { throw "$($test.Name) failed" }
+          }
+
+      - name: Build the programs and run their checks
+        shell: cmd
+        run: tools\build.BAT
+
+      # The three exe of this commit, to try a build without building it yourself. Not signed, kept for two weeks.
+      - name: Keep the programs
+        uses: actions/upload-artifact@v4
+        with:
+          name: programs-${{ github.sha }}
+          path: bin/*.exe
+          retention-days: 14
+
+  cloud:
+    name: Cloud (Worker and web interface)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cloud
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: cloud/package-lock.json
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test

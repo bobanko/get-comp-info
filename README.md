@@ -29,7 +29,9 @@ The PowerShell tests are in `tests\*.tests.ps1`; the cloud part (`cloud\`, a Clo
 Each program has its own version (`YYYY.MM.DD.N`). Pushing a tag builds and publishes a release with
 [GitHub Actions](.github/workflows/release.yml): `v<version>` for the toolbox, `suspector-v<version>` for SUSpector.
 The workflow runs the tests, builds the programs from this repository and uploads the package to the cloud,
-which the programs' built-in updaters download from.
+which the programs' built-in updaters download from. `yousbee-v<version>` builds youSBee and publishes it as a
+GitHub Release ([release-yousbee.yml](.github/workflows/release-yousbee.yml)), which chagear.top serves.
+Every push to `main` and every pull request runs the same checks ([ci.yml](.github/workflows/ci.yml)).
 
 ## Repository layout
 

@@ -14,7 +14,7 @@
 |---|---|---|
 | Тулбокс: `comp-info.exe` и консольная версия (скрипты, BAT) | `$script:toolboxVersion` в `console-ui.ps1` | тег `vВЕРСИЯ` → облако, `/api/release` |
 | `SUSpector.exe` | `app/SUSpector.version` | тег `suspector-vВЕРСИЯ` → облако, `/api/suspector-release` (публичный архив только с SUSpector, см. [SUSPECTOR.md](SUSPECTOR.md)) |
-| `youSBee.exe` | `app/youSBee.version` | без облака: сайт chagear.top кладёт собранный exe в `/download/`, как HashPot (см. [YOUSBEE.md](YOUSBEE.md)) |
+| `youSBee.exe` | `app/youSBee.version` | тег `yousbee-vВЕРСИЯ` → GitHub Release, без облака: сайт chagear.top берёт exe оттуда в `/download/` (см. [YOUSBEE.md](YOUSBEE.md)) |
 
 Версию поднимает `tools\update-version.BAT [toolbox|suspector|yousbee]` (по умолчанию тулбокс), собирает
 `tools\build.BAT [toolbox] [suspector] [yousbee]` (без аргументов — все три, проверки `app\tests` идут всегда).
@@ -23,6 +23,12 @@
 тег `suspector-vВЕРСИЯ` и push: GitHub Actions по такому тегу собирает и публикует только SUSpector.
 «Что нового» SUSpector пишется вручную, а не из журнала коммитов: его файлы общие с тулбоксом и youSBee,
 и журнал перечислял бы чужие изменения. Без раздела для выпускаемой версии сборка архива останавливается.
+youSBee — `update-version.BAT yousbee`, коммит, тег `yousbee-vВЕРСИЯ` и push, затем публикация сайта.
+
+Каждый push в `main` и каждый pull request проверяет [ci.yml](.github/workflows/ci.yml): тесты PowerShell, сборка
+трёх программ с проверками `app\tests`, `npm run typecheck` и `npm test` облака. Ставить тег выпуска стоит на коммит,
+у которого эти проверки зелёные: при выпуске Actions прогоняет те же тесты, и упавшая на них версия не публикуется.
+Собранные exe каждой проверки лежат две недели в артефакте `programs-<коммит>` запуска (не подписаны).
 
 ```text
 Разработчик                GitHub Actions                       Cloudflare                     Флешка / компьютер

@@ -34,7 +34,13 @@ youSBee.exe --theme light --language uk --screenshot yousbee.png 1500
 
 ## Распространение
 
-Как HashPot: страница https://chagear.top/yousbee/ и ссылка https://chagear.top/download/youSBee.exe. Сборка сайта
-(`chagear-site`, `npm run deploy`) копирует собранный `bin\youSBee.exe` и берёт версию из `app/youSBee.version`.
-Новая версия: `update-version.BAT yousbee`, `build.BAT yousbee`, коммит, затем заново опубликовать сайт.
-Кнопки «Обновление» в программе нет.
+Страница https://chagear.top/yousbee/ и ссылка https://chagear.top/download/youSBee.exe. Облака у youSBee нет:
+по тегу `yousbee-vВЕРСИЯ` GitHub Actions ([release-yousbee.yml](.github/workflows/release-yousbee.yml)) проверяет, что
+тег совпадает с `app/youSBee.version`, собирает youSBee с проверками `app\tests` и выкладывает `youSBee.exe` в GitHub
+Release с этим тегом. Сборка сайта (`chagear-site`, `npm run deploy`) скачивает exe из этого выпуска, а не с диска,
+поэтому пользователи получают только то, что собрано на сервере GitHub из репозитория (это нужно и для подписи,
+[CODE_SIGNING.md](CODE_SIGNING.md)).
+
+Новая версия: `update-version.BAT yousbee`, коммит, тег `yousbee-vВЕРСИЯ`, push (`git push --atomic origin main
+yousbee-vВЕРСИЯ`). Когда Actions опубликует выпуск (пара минут), заново опубликовать сайт. Кнопки «Обновление» в
+программе нет.

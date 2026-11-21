@@ -1,0 +1,43 @@
+# Publishes youSBee when a tag yousbee-v<version> is pushed (YOUSBEE.md). youSBee has no cloud and no updater: the exe
+# built here goes to a GitHub Release of this repository, and the site chagear.top (chagear-site, npm run deploy)
+# downloads it from there for chagear.top/download/youSBee.exe. So users get only what Actions built from a tag,
+# which code signing also requires (CODE_SIGNING.md).
+name: Release youSBee
+
+on:
+  push:
+    tags: ['yousbee-v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the version
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME.Substring('yousbee-v'.Length)
+          $file = (Get-Content app/youSBee.version -TotalCount 1).Trim()
+          if ($version -notmatch '^\d{4}\.\d{2}\.\d{2}\.\d+$') { throw "The tag $env:GITHUB_REF_NAME is not yousbee-vYYYY.MM.DD.N" }
+          if ($version -ne $file) { throw "The tag $env:GITHUB_REF_NAME does not match app/youSBee.version ($file)" }
+
+      - name: Build youSBee and run the checks
+        shell: cmd
+        run: tools\build.BAT yousbee
+
+      - name: Publish the GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = $env:GITHUB_REF_NAME.Substring('yousbee-v'.Length)
+          $built = (Get-Item bin/youSBee.exe).VersionInfo.ProductVersion
+          if ($built -ne $version) { throw "bin/youSBee.exe has version $built, expected $version" }
+          $sha = (Get-FileHash bin/youSBee.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          $notes = "youSBee $version — серійні номери USB-флешок і дисків.`n`nСторінка програми: https://chagear.top/yousbee/`n`nSHA-256 ``youSBee.exe``: ``$sha``"
+          gh release create $env:GITHUB_REF_NAME bin/youSBee.exe --title "youSBee $version" --notes $notes
+          if ($LASTEXITCODE -ne 0) { throw 'gh release create failed' }
