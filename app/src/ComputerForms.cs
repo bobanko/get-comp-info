@@ -61,30 +61,19 @@ namespace CompInfo
     }
 
 
-    // Domain account remembered in comp-info.ini when the user asks for it. The password is only masked (base64):
-    // a flash drive goes from computer to computer, so Windows encryption tied to one user or PC cannot be used.
+    // The name of the domain account, remembered in comp-info.ini. Passwords are never kept: they are typed into the dialog
+    // of Windows each time (CredentialPrompt). A password kept by an older version (only masked) is wiped at once
+    // (user's choice 21.11.2026: a flash drive goes from computer to computer and can be lost).
     public static class DomainAccount
     {
-        // The remembered account; remember is whether one is kept.
-        public static void Load(out string user, out string password, out bool remember)
+        public static string Load()
         {
-            user = Settings.Get("domainUser", "");
-            string saved = Settings.Get("domainPassword", "");
-            remember = user.Length > 0;
-            password = "";
-            if (saved.StartsWith("b64:"))
-            {
-                try { password = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(saved.Substring(4))); } catch (Exception) { }
-            }
+            if (Settings.Get("domainPassword", "").Length > 0) Settings.Set("domainPassword", "");
+            return Settings.Get("domainUser", "");
         }
 
-        public static void Save(string user, string password, bool remember)
-        {
-            Settings.Set("domainUser", remember ? user : "");
-            Settings.Set("domainPassword", remember && !string.IsNullOrEmpty(password) ? "b64:" + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(password)) : "");
-        }
+        public static void Save(string user) { Settings.Set("domainUser", (user ?? "").Trim()); }
     }
-
     // The record of this computer in the local database, saved right after a change of name, domain or address.
     public static class RecordUpdate
     {

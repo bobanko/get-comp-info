@@ -117,7 +117,7 @@ namespace CompInfo
                 sb.Append("; theme: system, light, dark. language: system, uk, en, ru.\r\n");
                 sb.Append("; colorblind: on, off (a click on the coloured title switches it).\r\n");
                 sb.Append("; securityLayout: bottom, right (where the file table of the security check is).\r\n");
-                sb.Append("; domainUser, domainPassword: domain account remembered by the «Домен» section (the password is only masked).\r\n");
+                sb.Append("; domainUser: the name of the domain account of the «Домен» section (passwords are never kept).\r\n");
                 sb.Append("[settings]\r\n");
                 List<string> names = new List<string>(values.Keys);
                 names.Sort(StringComparer.OrdinalIgnoreCase);

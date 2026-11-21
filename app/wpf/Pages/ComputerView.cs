@@ -40,9 +40,11 @@ namespace CompInfo.Wpf
         readonly Button nextFree = new Button { Margin = new Thickness(0, 0, 10, 0) }, syncNow = new Button { Margin = new Thickness(0, 0, 10, 0) };
         // Leaving: adapters with a static address go back to DHCP.
         readonly CheckBox dhcpOnLeave = new CheckBox { IsChecked = true };
-        readonly TextBox localUser = new TextBox { Width = 220 }, domainUser = new TextBox { Width = 220 };
-        readonly PasswordBox localPassword = new PasswordBox { Width = 220 }, domainPassword = new PasswordBox { Width = 220 };
-        readonly CheckBox remember = new CheckBox();
+        // The accounts: buttons with their names that open the dialog of Windows for the password (CredentialPrompt).
+        readonly AccountChoice localAccount = new AccountChoice(L.T("Локальный администратор"),
+            L.T("Локальный администратор этого компьютера: после вывода из домена войти можно будет только под ним."));
+        readonly AccountChoice domainAccount = new AccountChoice(L.T("Доменная учётная запись"),
+            L.T("Учётная запись домена с правом вводить компьютеры в домен и переименовывать их. Пароль нигде не сохраняется."));
         readonly Button apply = new Button { HorizontalAlignment = HorizontalAlignment.Left };
         readonly StatusLine status = new StatusLine { Margin = new Thickness(0, 10, 0, 0) };
         ComputerState current;
@@ -116,8 +118,7 @@ namespace CompInfo.Wpf
             profilesNote.SetResourceReference(TextBlock.ForegroundProperty, "Warn");
             dhcpOnLeave.Content = L.T("Переключить сеть на DHCP");
             dhcpOnLeave.Click += delegate { if (!filling) UpdatePreview(); };
-            localUser.Tag = L.T(".\\имя");
-            domainUser.Tag = L.T("имя или ДОМЕН\\имя");
+            domainAccount.UserChanged = user => DomainAccount.Save(user);
 
             form.Add(L.T("Назначение сети"), networkRow);
             form.Add(L.T("Имя"), renameOnLeave);
@@ -129,22 +130,16 @@ namespace CompInfo.Wpf
             form.Add(L.T("Корпус"), office);
             form.Add(L.T("Сегмент"), segment);
             form.Add(L.T("IP-адрес"), ipRow);
-            form.Add(L.T("Локальный администратор"), localUser);
-            form.Add(L.T("Его пароль"), localPassword);
+            form.Add(L.T("Локальный администратор"), localAccount);
             form.Add(L.T("Сеть"), dhcpOnLeave);
-            form.Add(L.T("Доменная учётная запись"), domainUser);
-            form.Add(L.T("Пароль"), domainPassword);
-            remember.Content = L.T("Запомнить в comp-info.ini");
-            remember.ToolTip = L.T("Пароль хранится рядом с программой лишь замаскированным, это не шифрование: тот, кто получит флешку, получит и эту учётную запись.");
-            form.Add("", remember);
-            foreach (PasswordBox p in new[] { localPassword, domainPassword }) System.Windows.Automation.AutomationProperties.SetName(p, L.T("Пароль"));
+            form.Add(L.T("Доменная учётная запись"), domainAccount);
             editor.Children.Add(form);
 
             apply.SetResourceReference(StyleProperty, "AccentButton");
             apply.Margin = new Thickness(0, 10, 0, 0);
             apply.Click += delegate { Apply(false); };
             editor.Children.Add(apply);
-            var hint = new TextBlock { Text = Brand.Keep(L.T("Пароль локального администратора не сохраняется. Доменный — только если отмечено «Запомнить»: тогда он лежит в comp-info.ini лишь замаскированным, и флешку с ним нужно беречь. Транслитерация выполняется автоматически: «отдел 5» → OTDEL-5.")),
+            var hint = new TextBlock { Text = Brand.Keep(L.T("Пароли вводятся в окне Windows и нигде не сохраняются, запоминается только имя доменной учётной записи. Транслитерация выполняется автоматически: «отдел 5» → OTDEL-5.")),
                 TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0) };
             hint.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
             editor.Children.Add(hint);
@@ -260,14 +255,10 @@ namespace CompInfo.Wpf
             operation = domainMode ? (s.PartOfDomain ? "Leave" : "Join") : "Rename";
             designationEdited = false;
             filling = true;
-            localPassword.Password = "";
-            // Remembered domain account (comp-info.ini), if the user chose to keep it.
-            string savedUser, savedPassword;
-            bool keep;
-            DomainAccount.Load(out savedUser, out savedPassword, out keep);
-            remember.IsChecked = keep;
-            if (domainUser.Text.Length == 0) domainUser.Text = savedUser;
-            domainPassword.Password = savedPassword;
+            localAccount.ClearPassword();
+            // the remembered name of the domain account (comp-info.ini); a password kept by an older version is wiped
+            string savedUser = DomainAccount.Load();
+            if (domainAccount.User.Length == 0) domainAccount.Set(savedUser, null);
             if (operation == "Rename") { internet.IsChecked = !s.PartOfDomain && !s.Name.StartsWith(policy.DomainPrefix + "-"); domainNet.IsChecked = internet.IsChecked != true; }
             else { domainNet.IsChecked = operation == "Join"; internet.IsChecked = operation != "Join"; }
             renameOnLeave.IsChecked = dhcpOnLeave.IsChecked = true;
@@ -286,7 +277,7 @@ namespace CompInfo.Wpf
             designationEdited = false;
             UpdatePreview();
             if (designation.IsVisible && operation != "Leave") designation.Focus();
-            else if (operation == "Leave") { if (localUser.Text.Length > 0) localPassword.Focus(); else localUser.Focus(); }
+            else if (operation == "Leave") localAccount.FocusButton();
         }
 
         void SuggestDesignation(string ip)
@@ -315,13 +306,10 @@ namespace CompInfo.Wpf
             bool keepNetwork = lan && Office == null;
             form.Show(segment, lan && !keepNetwork);
             form.Show(ipRow, lan && !keepNetwork);
-            form.Show(localUser, leave);
-            form.Show(localPassword, leave);
+            form.Show(localAccount, leave);
             form.Show(dhcpOnLeave, leave && staticAdapters.Count > 0);
             bool needsDomain = join || (operation == "Rename" && current != null && current.PartOfDomain);
-            form.Show(domainUser, needsDomain);
-            form.Show(domainPassword, needsDomain);
-            form.Show(remember, needsDomain);
+            form.Show(domainAccount, needsDomain);
             UpdatePreview();
         }
 
@@ -346,7 +334,7 @@ namespace CompInfo.Wpf
                 if (hasStatic) staticIps.Add(states[i].Ip);
             }
             dhcpOnLeave.Content = L.T("Переключить на DHCP: ") + string.Join(", ", names);
-            if (localUser.Text.Trim().Length == 0) localUser.Text = admin;
+            if (localAccount.User.Length == 0) localAccount.Set(admin, null);
             UpdateRows();
         }
 
@@ -603,11 +591,11 @@ namespace CompInfo.Wpf
             o["internet"] = internet.IsChecked == true;
             o["renameOnLeave"] = renameOnLeave.IsChecked == true;
             o["dhcpOnLeave"] = dhcpOnLeave.IsChecked == true;
-            o["localUser"] = localUser.Text;
-            o["localPassword"] = localPassword.Password;
-            o["domainUser"] = domainUser.Text;
-            o["domainPassword"] = domainPassword.Password;
-            o["remember"] = remember.IsChecked == true;
+            // the passwords go over the local pipe to the copy with administrator rights only, never to a file
+            o["localUser"] = localAccount.User;
+            o["localPassword"] = localAccount.Password;
+            o["domainUser"] = domainAccount.User;
+            o["domainPassword"] = domainAccount.Password;
             Adapter a = SelectedAdapter;
             o["adapter"] = a != null ? a.Guid : null;
             o["office"] = Office != null ? Office.Name : office.SelectedItem != null ? KeepNetwork : null;
@@ -624,11 +612,8 @@ namespace CompInfo.Wpf
             if (o["renameOnLeave"] is bool) renameOnLeave.IsChecked = (bool)o["renameOnLeave"];
             if (o["dhcpOnLeave"] is bool) dhcpOnLeave.IsChecked = (bool)o["dhcpOnLeave"];
             designation.Text = o.Text("designation") ?? "";
-            localUser.Text = o.Text("localUser") ?? "";
-            localPassword.Password = o.Text("localPassword") ?? "";
-            domainUser.Text = o.Text("domainUser") ?? "";
-            domainPassword.Password = o.Text("domainPassword") ?? "";
-            if (o["remember"] is bool) remember.IsChecked = (bool)o["remember"];
+            localAccount.Set(o.Text("localUser"), o.Text("localPassword"));
+            domainAccount.Set(o.Text("domainUser"), o.Text("domainPassword"));
             filling = false;
             designationEdited = true;
             if (operation == "Join" && !profiles.Missing)
@@ -659,19 +644,22 @@ namespace CompInfo.Wpf
         {
             ComputerState s = current;
             Window owner = Window.GetWindow(this);
+            bool needsDomain = operation == "Join" || (operation == "Rename" && s.PartOfDomain);
+            // a password not typed yet: the dialog of Windows now
+            if (operation == "Leave" && (!localAccount.HasPassword || localAccount.User.Length == 0) && !localAccount.Ask()) return;
+            if (needsDomain && (!domainAccount.HasPassword || domainAccount.User.Length == 0) && !domainAccount.Ask()) return;
+            if (operation == "Leave" && localAccount.User.Length == 0) { status.Show(Severity.Error, Glyph.Warning, L.T("Укажите локального администратора: доменные профили не преобразуются в локальные.")); return; }
+            if (needsDomain && domainAccount.User.Length == 0) { status.Show(Severity.Error, Glyph.Warning, L.T("Укажите доменную учётную запись с правом выполнения операции.")); return; }
+            if (needsDomain) DomainAccount.Save(domainAccount.User);
             var r = new ComputerChange.Request
             {
                 Operation = operation,
                 Name = operation == "Leave" && renameOnLeave.IsChecked != true ? s.Name : FullName,
-                LocalUser = localUser.Text.Trim(), LocalPassword = localPassword.Password,
-                DomainUser = domainUser.Text.Trim(), DomainPassword = domainPassword.Password,
+                LocalUser = localAccount.User, LocalPassword = localAccount.Password ?? "",
+                DomainUser = domainAccount.User, DomainPassword = domainAccount.Password ?? "",
                 Network = NetworkPlan(),
             };
             if (operation == "Leave" && dhcpOnLeave.IsChecked == true) r.DhcpAdapters = new List<Adapter>(staticAdapters);
-            bool needsDomain = operation == "Join" || (operation == "Rename" && s.PartOfDomain);
-            if (needsDomain) DomainAccount.Save(r.DomainUser, r.DomainPassword, remember.IsChecked == true);
-            if (operation == "Leave" && r.LocalUser.Length == 0) { status.Show(Severity.Error, Glyph.Warning, L.T("Укажите локального администратора: доменные профили не преобразуются в локальные.")); return; }
-            if (needsDomain && r.DomainUser.Length == 0) { status.Show(Severity.Error, Glyph.Warning, L.T("Укажите доменную учётную запись с правом выполнения операции.")); return; }
             string targetDomain = operation == "Join" ? policy.DomainName : operation == "Leave" ? policy.WorkgroupName : s.Domain;
             if (!confirmed)
             {
@@ -744,7 +732,8 @@ namespace CompInfo.Wpf
             finally
             {
                 r.LocalPassword = r.DomainPassword = null;
-                localPassword.Password = "";
+                localAccount.ClearPassword();
+                domainAccount.ClearPassword();
                 running = false;
                 syncNow.IsEnabled = true;
                 if (refresh) Refresh(false); else UpdatePreview();
