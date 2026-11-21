@@ -322,25 +322,32 @@ namespace CompInfo.Wpf
         }
 
         // «CHAGEAR ⚙ ТУЛБОКС» in rainbow letters, like the console header, and the version under it.
-        // A click switches the colour-blind mode (black and white) and builds the window again.
+        // A click switches the colour-blind mode (grey letters and gear): the colours flow over, letter by letter,
+        // without building the window again (user's choice 21.11.2026).
+        readonly List<TextBlock> brandLetters = new List<TextBlock>();
+        Image greyGear;
+        FrameworkElement brandBox;
+
         FrameworkElement Brand()
         {
             var letters = new StackPanel { Orientation = Orientation.Horizontal };
-            int color = 0;
             string word = "CHAGEAR " + L.T("ТУЛБОКС");
+            brandLetters.Clear();
             foreach (char ch in word)
             {
                 if (ch == ' ')
                 {
-                    // the gear of the console header, between the two words: here the program icon
-                    var gear = new Image { Source = Gear(ColorBlind), Width = 28, Height = 28, Margin = new Thickness(3, 0, 3, 0), VerticalAlignment = VerticalAlignment.Center };
-                    RenderOptions.SetBitmapScalingMode(gear, BitmapScalingMode.HighQuality);
-                    letters.Children.Add(gear);
+                    // the gear of the console header, between the two words: here the program icon; its grey copy on top
+                    var gears = new Grid { Width = 28, Height = 28, Margin = new Thickness(3, 0, 3, 0), VerticalAlignment = VerticalAlignment.Center };
+                    var gear = new Image { Source = Gear(false) };
+                    greyGear = new Image { Source = Gear(true), Opacity = ColorBlind ? 1 : 0 };
+                    foreach (Image i in new[] { gear, greyGear }) { RenderOptions.SetBitmapScalingMode(i, BitmapScalingMode.HighQuality); gears.Children.Add(i); }
+                    letters.Children.Add(gears);
                     continue;
                 }
                 var t = new TextBlock { Text = ch.ToString(), FontFamily = new FontFamily("Segoe UI Black"), FontSize = 14.667, VerticalAlignment = VerticalAlignment.Center };
-                t.SetResourceReference(TextBlock.ForegroundProperty, ColorBlind ? "Text" : "Rainbow" + (color % 6));
-                color++;
+                t.SetResourceReference(TextBlock.ForegroundProperty, LetterKey(brandLetters.Count));
+                brandLetters.Add(t);
                 letters.Children.Add(t);
             }
             var version = new TextBlock { Text = L.T("версия") + " " + AppVersion.Text + (PowerShell.IsAdministrator() ? " · " + L.T("админ") : ""), Margin = new Thickness(0, 2, 0, 0) };
@@ -348,17 +355,52 @@ namespace CompInfo.Wpf
             var brand = new StackPanel { Margin = new Thickness(6, 0, 0, 14), Background = Brushes.Transparent, Cursor = Cursors.Hand };
             brand.Children.Add(letters);
             brand.Children.Add(version);
-            brand.ToolTip = L.T("Папка программы:") + " " + AppPaths.Root + "\n" +
-                (ColorBlind ? L.T("Нажмите, чтобы выключить режим для дальтоников") : L.T("Нажмите, чтобы включить режим для дальтоников"));
+            brandBox = brand;
+            BrandTip();
             brand.MouseLeftButtonUp += delegate
             {
                 ColorBlind = !ColorBlind;
                 Settings.Set("colorblind", ColorBlind ? "on" : "off");
-                Rebuild();
+                SwitchBrandColours();
             };
             return brand;
         }
 
+        static string LetterKey(int index) { return ColorBlind ? "Text" : "Rainbow" + (index % 6); }
+
+        void BrandTip()
+        {
+            brandBox.ToolTip = L.T("Папка программы:") + " " + AppPaths.Root + "\n" +
+                (ColorBlind ? L.T("Нажмите, чтобы выключить режим для дальтоников") : L.T("Нажмите, чтобы включить режим для дальтоников"));
+        }
+
+        // Each letter goes to its new colour a little after the one before it, the gear fades into grey or back.
+        // At the end the letters follow the theme again (their colour is a resource of the palette).
+        void SwitchBrandColours()
+        {
+            var ease = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut };
+            for (int i = 0; i < brandLetters.Count; i++)
+            {
+                TextBlock t = brandLetters[i];
+                string key = LetterKey(i);
+                var from = t.Foreground as SolidColorBrush;
+                var to = TryFindResource(key) as SolidColorBrush;
+                if (from == null || to == null) { t.SetResourceReference(TextBlock.ForegroundProperty, key); continue; }
+                var brush = new SolidColorBrush(from.Color);
+                t.Foreground = brush;
+                var colour = new System.Windows.Media.Animation.ColorAnimation(to.Color, TimeSpan.FromMilliseconds(420))
+                {
+                    BeginTime = TimeSpan.FromMilliseconds(35 * i),
+                    EasingFunction = ease,
+                };
+                colour.Completed += delegate { t.SetResourceReference(TextBlock.ForegroundProperty, key); };
+                brush.BeginAnimation(SolidColorBrush.ColorProperty, colour);
+            }
+            if (greyGear != null)
+                greyGear.BeginAnimation(OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(ColorBlind ? 1 : 0, TimeSpan.FromMilliseconds(500))
+                { BeginTime = TimeSpan.FromMilliseconds(35 * 7), EasingFunction = ease });
+            BrandTip();
+        }
         // The gear (app\brand.png); in the colour-blind mode in shades of grey.
         static ImageSource Gear(bool grey)
         {
