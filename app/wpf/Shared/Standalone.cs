@@ -135,9 +135,7 @@ namespace CompInfo.Wpf
             Dialog.AppTitle = name;
             // Until the main window is shown, a message must not become the "main window" and end the program on closing.
             app.ShutdownMode = ShutdownMode.OnExplicitShutdown;
-            app.DispatcherUnhandledException += (s, e) => { e.Handled = true; Crash(e.Exception); };
-            AppDomain.CurrentDomain.UnhandledException += (s, e) =>
-                app.Dispatcher.Invoke(new Action(() => Crash(e.ExceptionObject as Exception)));
+            // unexpected errors: CrashReport.Install, the first thing App.OnStartup of each program does
 
             WpfTheme.Start(Option(args, "--theme", 1) ?? settings.Get("theme", "system"));
             L.Choice = Option(args, "--language", 1) ?? settings.Get("language", "system");
@@ -202,11 +200,6 @@ namespace CompInfo.Wpf
             w.Dispatcher.BeginInvoke(new Action(() => OpenAbout(w)), DispatcherPriority.Loaded);
         }
 
-        static void Crash(Exception error)
-        {
-            Window owner = Application.Current == null ? null : Application.Current.MainWindow;
-            Dialog.Show(owner, L.T("Непредвиденная ошибка:") + "\n\n" + (error == null ? L.T("неизвестно") : error.Message));
-        }
 
         public static string Option(string[] args, string name, int offset)
         {

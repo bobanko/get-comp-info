@@ -17,6 +17,7 @@ namespace CompInfo.Wpf
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
+            CrashReport.Install(this, "SUSpector", "suspector@chagear.top");
             System.Net.ServicePointManager.SecurityProtocol |= System.Net.SecurityProtocolType.Tls12;
             SuspectorUpdate.RemoveLeftovers(Process.GetCurrentProcess().MainModule.FileName);
             SecurityView.TableLayout = StandaloneStart.Option(e.Args, "--layout", 1) ?? Settings.Get("layout", "bottom");

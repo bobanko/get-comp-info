@@ -76,3 +76,7 @@ In detail:
 - **CHAGEAR Toolbox** keeps the collected inventory in its local `data` folder. It sends records to the cloud
   database (the address in `cloud-config.json`) only when the user runs a synchronization or an update check
   with their personal access key.
+- **Crash reports.** After an unexpected error the programs save a text report on the computer (the toolbox in its
+  `diagnostics` folder, SUSpector and youSBee in `%LOCALAPPDATA%\CHAGEAR\crash-reports`). It holds the program
+  version, the Windows and .NET versions and the error with its stack trace; the user and computer names are
+  replaced. The report is never sent: the user may copy it and email it to the developer.

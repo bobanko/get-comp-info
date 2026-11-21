@@ -15,6 +15,7 @@ namespace CompInfo.Wpf
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
+            CrashReport.Install(this, "youSBee", "yousbee@chagear.top");
             StandaloneStart.Run(this, e.Args, "youSBee", Settings, () => new YouSBeeWindow());
         }
     }

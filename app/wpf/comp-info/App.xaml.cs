@@ -15,8 +15,10 @@ namespace CompInfo.Wpf
             // Until the main window is shown, a message must not become the "main window" and end the program on closing.
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
             Dialog.AppTitle = L.T("CHAGEAR Тулбокс");
-            DispatcherUnhandledException += (s, x) => { x.Handled = true; Crash(x.Exception); };
-            AppDomain.CurrentDomain.UnhandledException += (s, x) => Dispatcher.Invoke(new Action(() => Crash(x.ExceptionObject as Exception)));
+            // the reports go to diagnostics\ of this copy (the flash drive), beside the console diagnostics
+            string reports = null;
+            try { reports = System.IO.Path.Combine(AppPaths.Root, "diagnostics"); } catch (Exception) { }
+            CrashReport.Install(this, "CHAGEAR Toolbox", "toolbox@chagear.top", reports);
             // TLS 1.2 is not always on by default in .NET Framework.
             System.Net.ServicePointManager.SecurityProtocol |= System.Net.SecurityProtocolType.Tls12;
             // the files the previous update left (as comp-info.exe on WinForms did)
@@ -118,13 +120,6 @@ namespace CompInfo.Wpf
             w.UpdateLayout();
             StandaloneStart.Save(w, file);
             w.Close();
-        }
-
-        static void Crash(Exception error)
-        {
-            Window owner = Current == null ? null : Current.MainWindow;
-            Dialog.Show(owner, L.T("Непредвиденная ошибка:") + "\n\n" + (error == null ? L.T("неизвестно") : error.Message) +
-                "\n\n" + L.T("Сообщите о ней разработчику. Подробности:") + "\n" + (error == null ? "" : error.GetType().Name));
         }
     }
 }
