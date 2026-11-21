@@ -1,4 +1,5 @@
 import { Hono, type Context } from 'hono';
+import { audit, readJournal } from '../audit';
 import { webAuth } from '../auth';
 import { generateApiKey, sha256Hex } from '../crypto';
 import {
@@ -133,6 +134,7 @@ webApi.post('/keys', async (c) => {
   await c.env.DB.prepare('INSERT INTO api_keys (id, user_email, label, key_hash, created_at) VALUES (?, ?, ?, ?, ?)')
     .bind(row.id, row.user_email, row.label, await sha256Hex(key), row.created_at)
     .run();
+  await audit(c, 'key.create', row.id, { label: row.label, owner: row.user_email });
   // The key itself is returned only once and never stored.
   return c.json({ ...toKey(row), key }, 201);
 });
@@ -153,6 +155,7 @@ webApi.delete('/keys/:id', async (c) => {
     await c.env.DB.prepare('UPDATE api_keys SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL')
       .bind(row.revoked_at, row.id)
       .run();
+    await audit(c, 'key.revoke', row.id, { label: row.label, owner: row.user_email });
   }
   return c.json(toKey(row));
 });
@@ -192,6 +195,7 @@ webApi.post('/users', async (c) => {
     ),
     c.env.DB.prepare('DELETE FROM access_requests WHERE email = ?').bind(row.email),
   ]);
+  await audit(c, 'user.create', row.email, { name: row.name, role: row.role });
   return c.json(toUser(row), 201);
 });
 
@@ -203,6 +207,7 @@ webApi.patch('/users/:email', async (c) => {
   if (!row) {
     fail(404, 'not_found', 'User not found.');
   }
+  const before = { name: row.name, role: row.role, active: row.active === 1 };
   if (body.name !== undefined) {
     row.name = validateName(body.name);
   }
@@ -221,6 +226,13 @@ webApi.patch('/users/:email', async (c) => {
   await c.env.DB.prepare('UPDATE users SET name = ?, role = ?, active = ? WHERE email = ?')
     .bind(row.name, row.role, row.active, email)
     .run();
+  // Only what changed, as [before, after].
+  const after = { name: row.name, role: row.role, active: row.active === 1 };
+  const changes: Record<string, unknown> = {};
+  for (const field of ['name', 'role', 'active'] as const) {
+    if (before[field] !== after[field]) changes[field] = [before[field], after[field]];
+  }
+  if (Object.keys(changes).length > 0) await audit(c, 'user.update', email, changes);
   return c.json(toUser(row));
 });
 
@@ -253,6 +265,7 @@ webApi.delete('/access-requests/:email', async (c) => {
     .bind(nowIso(), c.get('user').email, email)
     .run();
   if (result.meta.changes === 0) fail(404, 'not_found', 'No such access request.');
+  await audit(c, 'access.reject', email);
   return c.json({ email, rejected: true });
 });
 
@@ -314,6 +327,7 @@ webApi.get('/releases', async (c) => {
 webApi.post('/releases/:version/make-current', async (c) => {
   requireRole(c, 'admin');
   if (!(await makeCurrent(c.env.DB, c.req.param('version')))) fail(404, 'not_found', 'No such program version.');
+  await audit(c, 'release.current', c.req.param('version'));
   return c.json({ current: await getCurrentRelease(c.env.DB) });
 });
 
@@ -325,7 +339,15 @@ webApi.get('/suspector-releases', async (c) => {
 webApi.post('/suspector-releases/:version/make-current', async (c) => {
   requireRole(c, 'admin');
   if (!(await makeCurrent(c.env.DB, c.req.param('version'), 'suspector_releases'))) fail(404, 'not_found', 'No such SUSpector version.');
+  await audit(c, 'suspector-release.current', c.req.param('version'));
   return c.json({ current: await getCurrentSuspectorRelease(c.env.DB) });
+});
+
+// ---------- Journal: who did what, newest first ----------
+
+webApi.get('/audit', async (c) => {
+  requireRole(c, 'admin');
+  return c.json(await readJournal(c.env.DB, { category: c.req.query('category'), cursor: c.req.query('cursor') }));
 });
 
 function validateName(value: unknown): string {

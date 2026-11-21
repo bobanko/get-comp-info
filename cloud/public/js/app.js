@@ -4,6 +4,7 @@ import { hasRole, ROLE_LABELS } from './logic.js';
 import { renderDevice } from './pages/device.js';
 import { renderDevices } from './pages/devices.js';
 import { renderDownloads } from './pages/downloads.js';
+import { renderJournal } from './pages/journal.js';
 import { renderKeys } from './pages/keys.js';
 import { renderNetwork } from './pages/network.js';
 import { renderReleases } from './pages/releases.js';
@@ -34,6 +35,7 @@ const PAGES = [
   { hash: '#/users', icon: '👥', label: 'Пользователи', role: 'admin' },
   { hash: '#/network', icon: '🌐', label: 'Сеть', role: 'admin' },
   { hash: '#/releases', icon: '📦', label: 'Версии программ', role: 'admin' },
+  { hash: '#/journal', icon: '📜', label: 'Журнал', role: 'admin' },
 ];
 
 let me = null;
@@ -137,6 +139,8 @@ async function route() {
     renderUsers(context);
   } else if (hash === '#/network' && hasRole(me, 'admin')) {
     renderNetwork(context);
+  } else if (hash === '#/journal' && hasRole(me, 'admin')) {
+    renderJournal(context);
   } else if (hash === '#/releases' && hasRole(me, 'admin')) {
     renderReleases(context);
   } else {

@@ -16,6 +16,8 @@ import {
   ipSortValue,
   isInventoried,
   isRecent,
+  journalActor,
+  journalLine,
   shortAge,
   sortDevices,
 } from '../public/js/logic.js';
@@ -379,5 +381,33 @@ describe('other spellings of ж, х, щ', () => {
     expect(matchRanges('juristka mujichekk', ['мужичек'])).toEqual([[9, 18]]);
     // Many such letters do not explode the number of variants.
     expect(wordKeys('жжжжжжжжжжжж').length).toBeLessThanOrEqual(32);
+  });
+});
+
+describe('journal lines', () => {
+  const base = { at: '2026-11-21T10:00:00.000Z', actor: 'a@example.com', actorName: 'Аня', actorKey: null, source: 'web', details: null };
+
+  it('describes device changes with a link to the card', () => {
+    const line = journalLine({ ...base, kind: 'device', action: 'delete', target: 'X/1', details: { revision: 3, hostname: 'PC-7' } });
+    expect(line).toEqual({ what: 'Запись удалена', object: 'PC-7', href: '#/devices/X%2F1' });
+    expect(journalLine({ ...base, kind: 'device', action: 'create', target: 'X1', details: { revision: 1, hostname: null } }).object).toBe('X1');
+  });
+
+  it('describes keys, users and versions', () => {
+    expect(journalLine({ ...base, kind: 'audit', action: 'key.revoke', target: 'k1', details: { label: 'Флешка', owner: 'b@example.com' } }))
+      .toMatchObject({ what: 'Отозван ключ', object: '«Флешка», b@example.com' });
+    expect(journalLine({ ...base, kind: 'audit', action: 'key.create', target: 'k1', details: { label: 'Флешка', owner: 'a@example.com' } }).object)
+      .toBe('«Флешка»');
+    expect(journalLine({ ...base, kind: 'audit', action: 'user.update', target: 'b@example.com', details: { role: ['viewer', 'editor'], active: [true, false] } }).object)
+      .toBe('b@example.com: роль Просмотр → Редактор, отключён');
+    expect(journalLine({ ...base, kind: 'suspector-release', action: 'publish', target: '2026.11.21.2', actor: 'GitHub Actions', actorName: null }))
+      .toMatchObject({ what: 'Опубликована версия SUSpector', object: '2026.11.21.2' });
+    expect(journalLine({ ...base, kind: 'settings', action: 'update', target: 'network' }).object).toBe('Сеть');
+  });
+
+  it('names the console key before the person', () => {
+    expect(journalActor({ ...base, actorKey: 'Флешка' })).toBe('ключ «Флешка»');
+    expect(journalActor(base)).toBe('Аня');
+    expect(journalActor({ ...base, actor: 'GitHub Actions', actorName: null })).toBe('GitHub Actions');
   });
 });

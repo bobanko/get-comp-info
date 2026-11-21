@@ -335,3 +335,65 @@ export function authorTitle(name, email, key) {
 export function deviceAuthor(device) {
   return authorLabel(device.updatedByName, device.updatedBy, device.updatedByKey);
 }
+
+// ---------- Journal ----------
+
+const NETWORK_SETTINGS_KEY = 'network';
+const ACTIVE_LABELS = { true: 'включён', false: 'отключён' };
+
+// One journal entry as text: what was done and to what, with a link to the device card when there is one.
+export function journalLine(entry) {
+  const d = entry.details ?? {};
+  const object = (text, href = null) => ({ object: text, href });
+  switch (`${entry.kind}:${entry.action}`) {
+    case 'device:create':
+    case 'device:update':
+    case 'device:delete':
+    case 'device:restore': {
+      const name = d.hostname || entry.target;
+      return { what: `Запись ${HISTORY_ACTIONS[entry.action].toLowerCase()}`, ...object(name, '#/devices/' + encodeURIComponent(entry.target)) };
+    }
+    case 'settings:update':
+      return { what: 'Изменены настройки', ...object(entry.target === NETWORK_SETTINGS_KEY ? 'Сеть' : entry.target) };
+    case 'release:publish':
+      return { what: 'Опубликована версия Тулбокса', ...object(entry.target) };
+    case 'suspector-release:publish':
+      return { what: 'Опубликована версия SUSpector', ...object(entry.target) };
+    case 'audit:release.current':
+      return { what: 'Текущая версия Тулбокса', ...object(entry.target) };
+    case 'audit:suspector-release.current':
+      return { what: 'Текущая версия SUSpector', ...object(entry.target) };
+    case 'audit:key.create':
+      return { what: 'Создан ключ', ...object(keyName(d, entry.actor)) };
+    case 'audit:key.revoke':
+      return { what: 'Отозван ключ', ...object(keyName(d, entry.actor)) };
+    case 'audit:user.create':
+      return { what: 'Добавлен пользователь', ...object(`${d.name ?? ''} (${ROLE_LABELS[d.role] ?? d.role}), ${entry.target}`) };
+    case 'audit:user.update':
+      return { what: 'Изменён пользователь', ...object(`${entry.target}: ${userChanges(d)}`) };
+    case 'audit:access.reject':
+      return { what: 'Отклонён запрос доступа', ...object(entry.target) };
+    default:
+      return { what: `${entry.kind} ${entry.action}`, ...object(entry.target) };
+  }
+}
+
+// «Флешка», and whose it is when an admin revoked a key of another user.
+function keyName(details, actor) {
+  const label = `«${details.label ?? ''}»`;
+  return details.owner && details.owner !== actor ? `${label}, ${details.owner}` : label;
+}
+
+// "роль Просмотр → Редактор, отключён"
+function userChanges(details) {
+  const parts = [];
+  if (details.name) parts.push(`имя ${details.name[0]} → ${details.name[1]}`);
+  if (details.role) parts.push(`роль ${ROLE_LABELS[details.role[0]] ?? details.role[0]} → ${ROLE_LABELS[details.role[1]] ?? details.role[1]}`);
+  if (details.active) parts.push(ACTIVE_LABELS[String(details.active[1])]);
+  return parts.join(', ');
+}
+
+// Who did it: the console key, the nickname, or GitHub Actions for published releases.
+export function journalActor(entry) {
+  return authorLabel(entry.actorName, entry.actor, entry.actorKey);
+}
