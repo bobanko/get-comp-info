@@ -106,6 +106,8 @@ namespace CompInfo.Wpf
         }
 
         // The Auto columns measure their content again (a GridView does it only once), then the Fill columns share the rest.
+        // An Auto column is never narrower than its title: the GridView sizes it by the cells only, so a short value under
+        // a longer title (Disk over «E:» in English) cut the title with "…".
         static void AutoSize(ListView list)
         {
             State s = Of(list);
@@ -119,7 +121,27 @@ namespace CompInfo.Wpf
                 }
             });
             list.UpdateLayout();
+            Fitting(list, () =>
+            {
+                foreach (GridViewColumn c in s.Auto)
+                {
+                    if (s.User.Contains(c)) continue;
+                    double title = TitleWidth(list, c);
+                    if (title > c.ActualWidth) c.Width = Math.Ceiling(title);
+                }
+            });
             Refit(list);
+        }
+
+        // The width the title of a column needs: its text in the semibold of GridTableHeader, its padding (6 + 6), a little more.
+        static double TitleWidth(ListView list, GridViewColumn c)
+        {
+            string text = c.Header as string;
+            if (string.IsNullOrEmpty(text)) return 0;
+            var face = new Typeface(list.FontFamily, FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
+            var formatted = new FormattedText(text, System.Globalization.CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, face,
+                list.FontSize, Brushes.Black, VisualTreeHelper.GetDpi(list).PixelsPerDip);
+            return formatted.WidthIncludingTrailingWhitespace + 12 + 4;
         }
 
         // The Fill columns share the width the other columns leave.
