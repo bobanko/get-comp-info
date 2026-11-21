@@ -2,7 +2,7 @@
 # A line with a version starts its section, then one "- " line per change. tools\build-suspector-release.ps1
 # takes the section of the version it builds and stops when there is none: write it when raising the version.
 
-2026.11.21.1
+2026.11.21.2
 - feat: document search (button at the bottom, Ctrl+F) finds a lost work file by its name or text, on all disks or one of them, a flash drive too
 - feat: the check can be stopped (button or Esc); the result line is at the bottom, next to the buttons
 - feat: tables as in SupraWeed: drag the edge of a column to widen it, drag a column to move it; columns that do not fit scroll sideways
