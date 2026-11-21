@@ -144,7 +144,7 @@ namespace CompInfo.Wpf
         // A column the user dragged keeps his width.
         void FitColumns()
         {
-            double available = Table.ActualWidth - 14;
+            double available = Table.ActualWidth - 20;   // as TableColumns: the vertical scroll bar and a little
             if (available <= 0) return;
             var normal = new Typeface(FontFamily, FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
             var semibold = new Typeface(FontFamily, FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
@@ -172,7 +172,7 @@ namespace CompInfo.Wpf
             }
             bool[] user = new bool[8];
             for (int i = 0; i < 8; i++) if (user[i] = TableColumns.IsUserWidth(Table, columns[i])) wanted[i] = columns[i].Width;
-            double deficit = -available + 72;
+            double deficit = -available + TableColumns.MinFill;   // the comment keeps at least this
             foreach (double w in wanted) deficit += w;
             foreach (double[] shrink in new[] { new[] { 2, 90.0 }, new[] { 3, 72.0 }, new[] { 6, 90.0 }, new[] { 5, 90.0 }, new[] { 0, 108.0 } })
             {
@@ -184,7 +184,7 @@ namespace CompInfo.Wpf
                 deficit -= cut;
             }
             // the room left goes to the titles cut with "…", from the left
-            double spare = available - 72;
+            double spare = available - TableColumns.MinFill;
             foreach (double w in wanted) spare -= w;
             for (int i = 0; i < 8 && spare > 0; i++)
             {
