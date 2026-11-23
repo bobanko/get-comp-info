@@ -16,15 +16,24 @@ import {
   FIELD_ORDER,
   fieldChanges,
   fieldLabel,
+  fieldValueText,
+  findPerson,
   formatDate,
   hasRole,
   HISTORY_ACTIONS,
   HISTORY_SOURCES,
   isBlank,
   isRecent,
+  parsePerson,
+  PERSON_FIELDS,
+  personOption,
+  setPeople,
   shortAge,
 } from '../logic.js';
 import { invalidateDevices } from './devices.js';
+
+// The people list of the last loaded card, offered in the person fields of the edit form.
+let people = [];
 
 export async function renderDevice(context, id) {
   const { main } = context;
@@ -33,11 +42,12 @@ export async function renderDevice(context, id) {
   let history;
   try {
     const path = '/devices/' + encodeURIComponent(id);
-    [device, { history }] = await Promise.all([api(path), api(path + '/history')]);
+    [device, { history }, { people }] = await Promise.all([api(path), api(path + '/history'), api('/people')]);
   } catch (error) {
     replace(main, backLink(), errorBox(error, () => renderDevice(context, id)));
     return;
   }
+  setPeople(people);
   draw(context, device, history, { editing: false, selectedRevision: history[0]?.revision });
 }
 
@@ -89,6 +99,16 @@ function valueNode(name, value) {
     return value === true
       ? h('span', { class: 'badge badge-ok' }, INVENTORY_LABELS.yes)
       : h('span', { class: 'badge badge-muted' }, INVENTORY_LABELS.no);
+  }
+  if (PERSON_FIELDS.includes(name)) {
+    if (isBlank(value)) return h('span', { class: 'muted' }, 'не указан');
+    const person = findPerson(value);
+    return h(
+      'a',
+      { href: '#/people/' + value, title: person?.note || undefined },
+      person ? person.name : `#${value}`,
+      h('span', { class: 'muted small' }, person ? ` · #${value}` : ' (нет в списке людей)'),
+    );
   }
   if (/At$/.test(name) && !isBlank(value)) return h('span', { title: displayValue(value) }, formatDate(value));
   if (isBlank(value)) return h('span', { class: 'muted' }, value === undefined ? '—' : 'не указано');
@@ -152,12 +172,35 @@ function editForm(context, device, history, view, redraw) {
         const edited = Object.fromEntries(
           Object.entries(inputs).map(([name, input]) => [name, input.type === 'checkbox' ? input.checked : input.value]),
         );
+        // Person fields: a name from the list, or a new name added to the list on save.
+        const draft = { ...edited };
+        const newPeople = {};
+        for (const name of PERSON_FIELDS) {
+          const parsed = parsePerson(edited[name], people);
+          if (parsed.error) {
+            toast(`${fieldLabel(name)}: ${parsed.error}`, 'error');
+            return;
+          }
+          if (parsed.newName) newPeople[name] = parsed.newName;
+          else edited[name] = parsed.id;
+        }
+        const added = [...new Set(Object.values(newPeople))];
+        if (added.length > 0 && !confirm(`Добавить в список людей: ${added.join(', ')}?`)) return;
+        save.disabled = true;
+        try {
+          const ids = {};
+          for (const name of added) ids[name] = (await api('/people', { method: 'POST', body: { name } })).person.id;
+          for (const [field, name] of Object.entries(newPeople)) edited[field] = ids[name];
+        } catch (error) {
+          save.disabled = false;
+          toast(error.message, 'error');
+          return;
+        }
         const changes = changedFields(device.data, edited);
         if (Object.keys(changes).length === 0) {
           redraw({ editing: false });
           return;
         }
-        save.disabled = true;
         try {
           const result = await api('/devices/' + encodeURIComponent(device.id), {
             method: 'PATCH',
@@ -169,7 +212,7 @@ function editForm(context, device, history, view, redraw) {
         } catch (error) {
           save.disabled = false;
           if (error.code === 'conflict') {
-            redraw({ editing: true, conflict: error.body.current, draft: edited });
+            redraw({ editing: true, conflict: error.body.current, draft });
           } else {
             toast(error.message, 'error');
           }
@@ -187,6 +230,14 @@ function editForm(context, device, history, view, redraw) {
         inputs[name] = input;
         return h('label', { class: 'check' }, input, name === 'inventoried' ? 'Инвентаризировано' : fieldLabel(name));
       }
+      if (PERSON_FIELDS.includes(name)) {
+        const current = device.data[name];
+        const person = isBlank(current) ? null : findPerson(current);
+        const initial = view.draft?.[name] ?? (isBlank(current) ? '' : person ? personOption(person) : `#${current}`);
+        const input = h('input', { name, value: initial, list: 'people-options', autocomplete: 'off', placeholder: 'ПІБ из списка или новый' });
+        inputs[name] = input;
+        return h('label', { class: 'field' }, h('span', {}, fieldLabel(name)), input);
+      }
       const initial = view.draft?.[name] ?? displayValue(device.data[name]);
       const input =
         name === 'comment'
@@ -198,6 +249,11 @@ function editForm(context, device, history, view, redraw) {
   );
   const save = h('button', { class: 'button primary', type: 'submit' }, 'Сохранить');
   form.append(
+    h(
+      'datalist',
+      { id: 'people-options' },
+      people.filter((person) => !person.deleted).map((person) => h('option', { value: personOption(person) })),
+    ),
     h(
       'div',
       { class: 'actions' },
@@ -214,7 +270,7 @@ function conflictNotice(device, current, onReload) {
     'div',
     { class: 'notice notice-error' },
     h('p', {}, `Пока вы редактировали, запись изменил(а) ${deviceAuthor(current)} (${formatDate(current.updatedAt)}). Ваши правки не сохранены.`),
-    changes.length > 0 && h('ul', {}, changes.map((change) => h('li', {}, `${fieldLabel(change.name)}: ${displayValue(change.after) || '—'}`))),
+    changes.length > 0 && h('ul', {}, changes.map((change) => h('li', {}, `${fieldLabel(change.name)}: ${fieldValueText(change.name, change.after) || '—'}`))),
     h('button', { class: 'button', type: 'button', onclick: onReload }, 'Открыть актуальную версию'),
   );
 }
@@ -274,8 +330,8 @@ function diffTable(selected, previous) {
           'tr',
           {},
           h('td', {}, fieldLabel(change.name)),
-          h('td', { class: 'before' }, change.kind === 'added' ? h('span', { class: 'muted' }, '—') : displayValue(change.before)),
-          h('td', { class: 'after' }, change.kind === 'removed' ? h('span', { class: 'muted' }, 'поле удалено') : displayValue(change.after)),
+          h('td', { class: 'before' }, change.kind === 'added' ? h('span', { class: 'muted' }, '—') : fieldValueText(change.name, change.before)),
+          h('td', { class: 'after' }, change.kind === 'removed' ? h('span', { class: 'muted' }, 'поле удалено') : fieldValueText(change.name, change.after)),
         ),
       ),
     ),

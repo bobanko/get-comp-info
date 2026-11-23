@@ -375,9 +375,9 @@ namespace CompInfo
             c.Previous = Json.ParseObject("{\"collectedAt\":\"2020-01-01T00:00:00\"}");
             Check((string)c.Build("", "now")["createdAt"] == "2020-01-01T00:00:00", "legacy createdAt from collectedAt");
             Check(!c.Build("", "now").Has("inventoried"), "no inventory mark unless the web set it");
-            c.Previous = Json.ParseObject("{\"inventoried\":true,\"employee\":\"Іваненко Іван\"}");
+            c.Previous = Json.ParseObject("{\"inventoried\":true,\"userId\":12,\"ownerId\":7}");
             Check(c.Build("", "now")["inventoried"] is bool && (bool)c.Build("", "now")["inventoried"], "the inventory mark from the web is kept");
-            Check(c.Build("", "now").Text("employee") == "Іваненко Іван", "the employee from the web is kept");
+            Check(People.Id(c.Build("", "now")["userId"]) == 12 && People.Id(c.Build("", "now")["ownerId"]) == 7, "the people linked on the web are kept");
 
             // Saved right after a change made by the program: expected name, domain and address.
             c.Previous = Json.ParseObject("{\"username\":\"petrenko\",\"comment\":\"кабинет 5\"}");
@@ -957,6 +957,13 @@ namespace CompInfo
                     ScriptedQuestions ui = new ScriptedQuestions();
                     SyncCounts c = new CloudSync(root, client, ui).Run();
                     Check(c.PushedNew == 2 && c.Errors.Count == 0 && c.NetworkProfiles == "missing", "first sync pushes both: " + c.PushedNew + " " + string.Join("; ", c.Errors));
+                    Check(c.People == "updated" && People.Read(Path.Combine(root, "people.json"))[12] == "Іваненко Іван", "the people list is saved: " + c.People);
+                    Check(new CloudSync(root, client, new ScriptedQuestions()).Run().People == "unchanged", "the same people list is not written again");
+                    People.Load(root);
+                    JsonObject linked = Json.ParseObject("{\"userId\":12,\"ownerId\":99,\"username\":\"TZ\"}");
+                    Check(DeviceList.Person(linked) == "Іваненко Іван" && DeviceList.CardValue(linked, "ownerId").StartsWith("#99") &&
+                        DeviceList.Person(Json.ParseObject("{\"username\":\"TZ\"}")) == "TZ", "people names in the table and the card");
+                    People.Use(new Dictionary<long, string>());
                     Check(cloud.Devices.ContainsKey("O.E.M."), "legacy id with dots reaches the cloud unchanged: " + string.Join(" | ", new List<string>(cloud.Devices.Keys)));
                     Check(!Files.ReadRecord(Path.Combine(data, "A.json")).Has("addedToExternalDatabase"), "deprecated field removed");
                     CloudState state = CloudState.ForDisplay(root);

@@ -1,14 +1,14 @@
 import { canonicalJson } from './crypto';
 import { fail, isPlainObject, nowIso } from './http';
+import { PERSON_FIELDS, validPersonRef } from './people';
 import type { ApiKeyInfo, User } from './types';
 
 // The old manual "added to external database" mark is replaced by the computed cloud status.
 export const DEPRECATED_FIELDS = ['addedToExternalDatabase', 'addedToExternalDatabaseAt'];
 // Set by people in the web interface, not collected by the console (app Records.WebFields).
 // A console upload without them keeps the cloud value: older program versions drop unknown fields.
-// employee: full name of the person the computer is issued to.
-export const WEB_FIELDS = ['inventoried', 'employee'];
-const MAX_EMPLOYEE_LENGTH = 200;
+// userId, ownerId: numbers of people (people.ts) — who works at the computer and who is materially responsible.
+export const WEB_FIELDS = ['inventoried', ...PERSON_FIELDS];
 export const MAX_DATA_BYTES = 64 * 1024;
 const MAX_ID_LENGTH = 200;
 
@@ -148,10 +148,8 @@ export function normalizeData(id: string, data: unknown): Record<string, unknown
   if ('inventoried' in result && typeof result.inventoried !== 'boolean' && result.inventoried !== null) {
     fail(400, 'invalid_inventoried', 'inventoried must be true or false.');
   }
-  if ('employee' in result && result.employee !== null) {
-    if (typeof result.employee !== 'string' || result.employee.length > MAX_EMPLOYEE_LENGTH) {
-      fail(400, 'invalid_employee', `employee must be text up to ${MAX_EMPLOYEE_LENGTH} characters.`);
-    }
+  for (const field of PERSON_FIELDS) {
+    if (field in result && !validPersonRef(result[field])) fail(400, 'invalid_person_ref', `${field} must be a person number or null.`);
   }
   if (new TextEncoder().encode(JSON.stringify(result)).length > MAX_DATA_BYTES) {
     fail(413, 'too_large', 'The device record is larger than 64 KB.');

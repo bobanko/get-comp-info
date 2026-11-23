@@ -29,8 +29,9 @@ export const FIELD_LABELS = {
   domain: 'Домен / рабочая группа',
   manufacturer: 'Производитель',
   model: 'Модель',
-  username: 'Пользователь',
-  employee: 'Сотрудник',
+  userId: 'Пользователь (по факту)',
+  ownerId: 'МОЛ (по ведомости)',
+  username: 'Учётная запись Windows',
   comment: 'Комментарий',
   windows: 'Windows',
   esetInstalled: 'ESET установлен',
@@ -42,13 +43,75 @@ export const FIELD_LABELS = {
 export const FIELD_ORDER = Object.keys(FIELD_LABELS);
 
 // Fields an editor may change in the web interface. Identity and collection dates come from the console.
-export const EDITABLE_FIELDS = ['hostname', 'ip', 'mac', 'serial', 'manufacturer', 'model', 'username', 'employee', 'windows', 'comment', 'inventoried'];
+export const EDITABLE_FIELDS = ['hostname', 'ip', 'mac', 'serial', 'manufacturer', 'model', 'userId', 'ownerId', 'username', 'windows', 'comment', 'inventoried'];
 
 // Yes/no fields: a checkbox in the edit form; a missing value means "no".
 export const BOOLEAN_FIELDS = ['inventoried'];
 
 // Shown in the card even when the record does not have them yet.
-export const ALWAYS_SHOWN_FIELDS = ['employee', 'inventoried'];
+export const ALWAYS_SHOWN_FIELDS = ['userId', 'ownerId', 'inventoried'];
+
+// ---------- People ----------
+// Device fields that hold a person number (src/people.ts); the names come from GET /people.
+export const PERSON_FIELDS = ['userId', 'ownerId'];
+
+let peopleById = new Map();
+
+export function setPeople(list) {
+  peopleById = new Map((list ?? []).map((person) => [person.id, person]));
+  searchCache = new WeakMap();
+}
+
+export function findPerson(id) {
+  return peopleById.get(id) ?? null;
+}
+
+// The name of a linked person, '#12' when the list does not have it, '' when nobody is linked.
+export function personName(id) {
+  if (id === null || id === undefined || id === '') return '';
+  return peopleById.get(id)?.name ?? `#${id}`;
+}
+
+// What the person field of the edit form shows and the datalist offers: «Іваненко Іван · #12».
+export function personOption(person) {
+  return `${person.name} · #${person.id}`;
+}
+
+// The edit form text back to a person: { id } (null = nobody), { newName } to add, or { error }.
+export function parsePerson(text, people) {
+  const value = String(text ?? '').trim().replace(/\s+/g, ' ');
+  if (value === '') return { id: null };
+  const live = (people ?? []).filter((person) => !person.deleted);
+  const number = /#(\d+)$/.exec(value);
+  if (number) {
+    const id = Number(number[1]);
+    return live.some((person) => person.id === id) ? { id } : { error: `Человека #${id} нет в списке.` };
+  }
+  const same = live.filter((person) => person.name.toLowerCase() === value.toLowerCase());
+  if (same.length === 1) return { id: same[0].id };
+  if (same.length > 1) return { error: `Несколько людей «${value}»: выберите нужного из списка, с номером.` };
+  return { newName: value };
+}
+
+// Person number -> { userId: [devices], ownerId: [devices] } of the live devices that link the person.
+export function personLinks(devices) {
+  const links = new Map();
+  for (const device of devices ?? []) {
+    if (device.deleted) continue;
+    for (const field of PERSON_FIELDS) {
+      const id = device.data[field];
+      if (!Number.isInteger(id)) continue;
+      if (!links.has(id)) links.set(id, { userId: [], ownerId: [] });
+      links.get(id)[field].push(device);
+    }
+  }
+  return links;
+}
+
+// A field value as people read it: names for person fields.
+export function fieldValueText(name, value) {
+  return PERSON_FIELDS.includes(name) ? personName(value) : displayValue(value);
+}
 
 // Inventory mark, set by people in the web interface (the console keeps it, never sets it).
 export function isInventoried(device) {
@@ -185,13 +248,15 @@ export function hostnameIssue(hostname) {
 }
 
 // Text and loose key of a device, kept while the device object lives (the list is filtered on every key press).
-const searchCache = new WeakMap();
+// Reset by setPeople: person names are part of the text.
+let searchCache = new WeakMap();
 
 function searchText(device) {
   let cached = searchCache.get(device);
   if (!cached) {
     const values = [device.id, device.updatedBy, device.updatedByName, device.updatedByKey];
     for (const value of Object.values(device.data)) values.push(displayValue(value));
+    for (const field of PERSON_FIELDS) values.push(personName(device.data[field]));
     const text = values.join('\n').toLowerCase();
     cached = { text, key: looseKey(text).key };
     searchCache.set(device, cached);
@@ -229,7 +294,8 @@ export const SORT_KEYS = {
   hostname: (d) => d.data.hostname,
   ip: (d) => ipSortValue(d.data.ip),
   username: (d) => d.data.username,
-  employee: (d) => d.data.employee,
+  userId: (d) => personName(d.data.userId),
+  ownerId: (d) => personName(d.data.ownerId),
   serial: (d) => d.data.serial,
   model: (d) => [d.data.manufacturer, d.data.model].filter((v) => !isBlank(v)).join(' '),
   windows: (d) => d.data.windows,
@@ -291,6 +357,11 @@ export function diffRecords(before, after) {
 export function changedFields(original, edited) {
   const changes = {};
   for (const [name, value] of Object.entries(edited)) {
+    // A person field gives a number or null (parsePerson).
+    if (PERSON_FIELDS.includes(name)) {
+      if ((original[name] ?? null) !== value) changes[name] = value;
+      continue;
+    }
     // A checkbox gives true/false; a missing value counts as false.
     const before = typeof value === 'boolean' ? original[name] === true : displayValue(original[name]);
     if (before !== value) changes[name] = value;
@@ -376,6 +447,16 @@ export function journalLine(entry) {
       return { what: 'Изменён пользователь', ...object(`${entry.target}: ${userChanges(d)}`) };
     case 'audit:access.reject':
       return { what: 'Отклонён запрос доступа', ...object(entry.target) };
+    case 'audit:person.create':
+      return { what: 'Добавлен человек', ...object(`${d.name ?? ''} · #${entry.target}`, '#/people/' + entry.target) };
+    case 'audit:person.update': {
+      const parts = [];
+      if (d.name) parts.push(`${d.name[0]} → ${d.name[1]}`);
+      if (d.note) parts.push(`примечание «${d.note[0]}» → «${d.note[1]}»`);
+      return { what: 'Изменён человек', ...object(`#${entry.target}: ${parts.join(', ')}`, '#/people/' + entry.target) };
+    }
+    case 'audit:person.delete':
+      return { what: 'Удалён человек', ...object(`${d.name ?? ''} · #${entry.target}`) };
     default:
       return { what: `${entry.kind} ${entry.action}`, ...object(entry.target) };
   }

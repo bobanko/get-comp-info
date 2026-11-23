@@ -11,6 +11,7 @@ import {
   ESET_LABELS,
   esetState,
   filterDevices,
+  findPerson,
   formatDate,
   hasRole,
   hostnameIssue,
@@ -19,6 +20,8 @@ import {
   isDuplicate,
   isInventoried,
   isRecent,
+  personName,
+  setPeople,
   sortDevices,
 } from '../logic.js';
 import { queryWords, splitMatches } from '../search-logic.js';
@@ -26,8 +29,9 @@ import { queryWords, splitMatches } from '../search-logic.js';
 const COLUMNS = [
   { key: 'hostname', label: 'Имя компьютера', always: true },
   { key: 'ip', label: 'IP' },
-  { key: 'employee', label: 'Сотрудник' },
-  { key: 'username', label: 'Пользователь' },
+  { key: 'userId', label: 'Пользователь' },
+  { key: 'ownerId', label: 'МОЛ', hidden: true },
+  { key: 'username', label: 'Учётная запись Windows' },
   { key: 'serial', label: 'Серийный номер' },
   { key: 'model', label: 'Модель' },
   { key: 'windows', label: 'Windows', hidden: true },
@@ -69,7 +73,9 @@ export async function renderDevices({ me, main }, { reload = false } = {}) {
     replace(main, h('p', { class: 'muted' }, 'Загрузка устройств…'));
     try {
       const path = state.showDeleted ? '/devices?deleted=1' : '/devices';
-      state.devices = (await api(path)).devices;
+      const [{ devices }, { people }] = await Promise.all([api(path), api('/people')]);
+      setPeople(people);
+      state.devices = devices;
     } catch (error) {
       replace(main, errorBox(error, () => renderDevices({ me, main }, { reload: true })));
       return;
@@ -90,8 +96,9 @@ export async function renderDevices({ me, main }, { reload = false } = {}) {
     const load = ++loads;
     tableHost.classList.add('loading');
     try {
-      const devices = (await api(state.showDeleted ? '/devices?deleted=1' : '/devices')).devices;
+      const [{ devices }, { people }] = await Promise.all([api(state.showDeleted ? '/devices?deleted=1' : '/devices'), api('/people')]);
       if (load !== loads) return;
+      setPeople(people);
       state.devices = devices;
     } catch (error) {
       if (load !== loads) return;
@@ -480,6 +487,11 @@ function cell(key, device, duplicates, now, words = []) {
     }
     case 'serial':
       return h('td', { class: repeated('serial') ? 'mono dup' : 'mono', title: repeated('serial') ? 'Этот серийный номер есть у нескольких устройств' : undefined }, marked(displayValue(data.serial), words));
+    case 'userId':
+    case 'ownerId': {
+      const person = findPerson(data[key]);
+      return h('td', { title: person?.note || undefined }, marked(personName(data[key]), words));
+    }
     case 'model':
       return h('td', {}, marked([data.manufacturer, data.model].filter((v) => !isBlank(v)).join(' '), words));
     case 'eset': {

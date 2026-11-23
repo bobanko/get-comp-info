@@ -148,6 +148,7 @@ namespace CompInfo
             string query = target.Contains("?") ? target.Substring(target.IndexOf('?') + 1) : "";
             if (path == "/api/client/me") { JsonObject me = new JsonObject(); me["name"] = "Тест"; me["email"] = "t@example"; me["role"] = "harvester"; return me; }
             if (path == "/api/client/settings/network" || path == "/api/client/program/latest") { status = 404; return Error("Нет."); }
+            if (path == "/api/client/people") return Json.ParseObject("{\"people\":[{\"id\":12,\"name\":\"Іваненко Іван\",\"note\":\"S1\"}]}");
             lock (Devices)
             {
                 if (path == "/api/client/devices" && method == "GET")

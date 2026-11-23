@@ -18,6 +18,10 @@ import {
   isRecent,
   journalActor,
   journalLine,
+  parsePerson,
+  personLinks,
+  personName,
+  setPeople,
   shortAge,
   sortDevices,
 } from '../public/js/logic.js';
@@ -433,5 +437,51 @@ describe('reserved addresses', () => {
     expect(reservedProblems('10.0.0.256')).toHaveLength(1);
     expect(reservedProblems('10.0.0.5\n10.0.0.5')).toHaveLength(1);
     expect(reservedProblems('10.0.0.5 ' + 'x'.repeat(201))).toHaveLength(1);
+  });
+});
+
+describe('people', () => {
+  const people = [
+    { id: 1, name: 'Іваненко Іван', note: 'S1', deleted: false },
+    { id: 2, name: 'Петренко Петро', note: '', deleted: false },
+    { id: 3, name: 'Петренко Петро', note: 'другий', deleted: false },
+    { id: 4, name: 'Сидоренко Сидір', note: '', deleted: true },
+  ];
+
+  it('are picked by name, by number or added as new', () => {
+    expect(parsePerson('', people)).toEqual({ id: null });
+    expect(parsePerson('  іваненко   іван ', people)).toEqual({ id: 1 });
+    expect(parsePerson('Петренко Петро · #3', people)).toEqual({ id: 3 });
+    expect(parsePerson('Петренко Петро', people).error).toBeTruthy();
+    expect(parsePerson('#4', people).error).toBeTruthy();
+    expect(parsePerson('Сидоренко  Сидір', people)).toEqual({ newName: 'Сидоренко Сидір' });
+  });
+
+  it('are compared, sorted and found by name', () => {
+    expect(changedFields({ userId: 1 }, { userId: 1, ownerId: null })).toEqual({});
+    expect(changedFields({ userId: 1 }, { userId: null, ownerId: 2 })).toEqual({ userId: null, ownerId: 2 });
+
+    setPeople(people);
+    expect(personName(2)).toBe('Петренко Петро');
+    expect(personName(99)).toBe('#99');
+    expect(personName(null)).toBe('');
+    const list = [device('A', { userId: 2 }), device('B', { userId: 1 }), device('C', {})];
+    expect(sortDevices(list, 'userId').map((d: { id: string }) => d.id)).toEqual(['B', 'A', 'C']);
+    expect(filterDevices(list, { query: 'іваненко' }).map((d: { id: string }) => d.id)).toEqual(['B']);
+    setPeople([]);
+    expect(filterDevices(list, { query: 'іваненко' })).toEqual([]);
+  });
+
+  it('know the devices that link them', () => {
+    const links = personLinks([device('A', { userId: 1, ownerId: 2 }), device('B', { ownerId: 2 }), device('C', { userId: 1 }, { deleted: true })]);
+    expect(links.get(1).userId.map((d: { id: string }) => d.id)).toEqual(['A']);
+    expect(links.get(2).ownerId.map((d: { id: string }) => d.id)).toEqual(['A', 'B']);
+    expect(links.has(3)).toBe(false);
+  });
+
+  it('show up in the journal', () => {
+    const entry = { kind: 'audit', category: 'devices', actor: 'a@example.com', actorName: 'Аня', actorKey: null, source: 'web', at: '' };
+    expect(journalLine({ ...entry, action: 'person.create', target: '7', details: { name: 'Іваненко Іван' } })).toMatchObject({ what: 'Добавлен человек', object: 'Іваненко Іван · #7', href: '#/people/7' });
+    expect(journalLine({ ...entry, action: 'person.update', target: '7', details: { note: ['', 'S1'] } }).object).toBe('#7: примечание «» → «S1»');
   });
 });

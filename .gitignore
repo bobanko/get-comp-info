@@ -10,6 +10,7 @@
 /dist/
 /diagnostics/
 /network-profiles.json
+/people.json
 /bin/
 /obj/
 /app-settings.json

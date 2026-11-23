@@ -143,7 +143,7 @@ namespace CompInfo
             new[] { "mac", L.T("MAC-адрес") },
             new[] { "serial", L.T("Серийный номер") },
             new[] { "computer", L.T("Компьютер") },
-            new[] { "username", L.T("Пользователь") },
+            new[] { "username", L.T("Учётная запись Windows") },
             new[] { "comment", L.T("Комментарий") },
             new[] { "windows", "Windows" },
             new[] { "esetInstalled", "ESET" },

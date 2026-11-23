@@ -13,6 +13,7 @@ import {
 } from '../devices';
 import { fail, isPlainObject, nowIso, readJsonObject, requireRole } from '../http';
 import { buildDownload, describeDownloads, getCurrentRelease, getCurrentSuspectorRelease, isDownloadKind, listReleases, makeCurrent } from '../releases';
+import { checkPersonRefs, createPerson, deletePerson, devicesOfPerson, listPeople, parsePersonId, updatePerson, validatePerson } from '../people';
 import { getSetting, getSettingHistory, NETWORK_KEY, putSetting, validateNetworkSettings, type NetworkSettings } from '../settings';
 import { TRIGGER_WORDS_KEY, validateTriggerWords, type TriggerWordsValue } from '../trigger-words';
 import { hasRole, isRole, toUser, type AppEnv, type UserRow } from '../types';
@@ -65,6 +66,7 @@ webApi.patch('/devices/:id', async (c) => {
   if (!isPlainObject(body.changes)) {
     fail(400, 'invalid_changes', 'changes must be a JSON object with the changed fields.');
   }
+  await checkPersonRefs(c.env.DB, body.changes);
   return writeResponse(c, await patchDevice(c.env.DB, id, body.baseRevision as number, body.changes, c.get('user')));
 });
 
@@ -268,6 +270,45 @@ webApi.delete('/access-requests/:email', async (c) => {
   if (result.meta.changes === 0) fail(404, 'not_found', 'No such access request.');
   await audit(c, 'access.reject', email);
   return c.json({ email, rejected: true });
+});
+
+// ---------- People ----------
+// Everyone who sees devices sees the people they are linked to; editors add and change them, admins delete.
+
+webApi.get('/people', async (c) => {
+  const includeDeleted = c.req.query('deleted') === '1';
+  if (includeDeleted) requireRole(c, 'admin');
+  return c.json({ people: await listPeople(c.env.DB, includeDeleted) });
+});
+
+webApi.post('/people', async (c) => {
+  requireRole(c, 'editor');
+  const value = validatePerson(await readJsonObject(c), false) as { name: string; note: string };
+  const person = await createPerson(c.env.DB, value, c.get('user'));
+  await audit(c, 'person.create', String(person.id), { name: person.name, note: person.note });
+  return c.json({ person }, 201);
+});
+
+webApi.patch('/people/:id', async (c) => {
+  requireRole(c, 'editor');
+  const id = parsePersonId(c.req.param('id'));
+  const { before, after } = await updatePerson(c.env.DB, id, validatePerson(await readJsonObject(c), true), c.get('user'));
+  const changes: Record<string, [string, string]> = {};
+  if (before.name !== after.name) changes.name = [before.name, after.name];
+  if (before.note !== after.note) changes.note = [before.note, after.note];
+  if (Object.keys(changes).length > 0) await audit(c, 'person.update', String(id), changes);
+  return c.json({ person: after });
+});
+
+webApi.get('/people/:id/devices', async (c) => {
+  return c.json({ devices: await devicesOfPerson(c.env.DB, parsePersonId(c.req.param('id'))) });
+});
+
+webApi.delete('/people/:id', async (c) => {
+  requireRole(c, 'admin');
+  const person = await deletePerson(c.env.DB, parsePersonId(c.req.param('id')), c.get('user'));
+  await audit(c, 'person.delete', String(person.id), { name: person.name });
+  return c.json({ person });
 });
 
 // ---------- Network settings ----------

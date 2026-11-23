@@ -363,7 +363,8 @@ if ($null -ne $previousComputer) {
     }
     # Set in the web interface, not on the computer: keep it.
     if ($null -ne $previousComputer.inventoried) { $computer.inventoried = $previousComputer.inventoried }
-    if ($null -ne $previousComputer.employee) { $computer.employee = $previousComputer.employee }
+    if ($null -ne $previousComputer.userId) { $computer.userId = $previousComputer.userId }
+    if ($null -ne $previousComputer.ownerId) { $computer.ownerId = $previousComputer.ownerId }
 }
 
 $json = $computer | ConvertTo-Json -Depth 5

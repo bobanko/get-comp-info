@@ -10,6 +10,9 @@ export type AuditAction =
   | 'user.create'
   | 'user.update'
   | 'access.reject'
+  | 'person.create'
+  | 'person.update'
+  | 'person.delete'
   | 'release.current'
   | 'suspector-release.current';
 
@@ -49,7 +52,7 @@ export interface JournalEntry {
 // of the same moment (one console sync writes many) and makes the cursor of the next page exact.
 const JOURNAL = `
   SELECT a.at AS at, 'audit' AS kind, a.id AS seq,
-         CASE WHEN a.action LIKE '%release.current' THEN 'programs' ELSE 'access' END AS category,
+         CASE WHEN a.action LIKE '%release.current' THEN 'programs' WHEN a.action LIKE 'person.%' THEN 'devices' ELSE 'access' END AS category,
          a.action AS action, a.actor AS actor, u.name AS actor_name, NULL AS actor_key, 'web' AS source,
          a.target AS target, a.details AS details
     FROM audit_log a LEFT JOIN users u ON u.email = a.actor

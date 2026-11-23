@@ -443,6 +443,13 @@ table.trigger-words tr.invalid .word-input { border-color: var(--danger); backgr
 .level-select.level-2 { color: var(--warn); font-weight: 600; }
 .level-select.level-1 { color: var(--muted); }
 details.panel summary { font-weight: 600; }
+/* «Люди»: number, name, note, linked devices. */
+table.people td { vertical-align: middle; }
+table.people td:first-child { width: 1%; white-space: nowrap; }
+table.people tr.focused > td { background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface)); }
+table.people td input { width: 100%; }
+table.people td.row-actions { width: 1%; white-space: nowrap; text-align: right; }
+table.people td.row-actions .button { margin-left: 4px; }
 details.panel ul { margin: 8px 0 0; }
 
 @media (max-width: 640px) {

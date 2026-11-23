@@ -194,6 +194,22 @@ namespace CompInfo
             return "updated";
         }
 
+        // Saves the names of the people records link to people.json. Returns updated | unchanged | missing (an older cloud).
+        public string UpdatePeople(string root)
+        {
+            Response r = Request("GET", ApiUrl + "/people", null);
+            if (r.Status == 404) return "missing";
+            if (r.Status != 200) throw new IOException(r.ErrorMessage);
+            string path = Path.Combine(root, "people.json");
+            if (File.Exists(path))
+            {
+                try { if (Json.Hash(Files.ReadRecord(path)) == Json.Hash(r.Body)) return "unchanged"; }
+                catch (Exception) { }
+            }
+            Files.WriteJson(path, r.Body);
+            return "updated";
+        }
+
         // Current release in the cloud, or null when nothing is published.
         public JsonObject LatestRelease()
         {
@@ -213,7 +229,8 @@ namespace CompInfo
             { "hostname", L.T("Имя компьютера") }, { "ip", L.T("IP-адрес") }, { "mac", L.T("MAC-адрес") },
             { "serial", L.T("Серийный номер") }, { "smbiosUuid", "UUID" }, { "manufacturer", L.T("Производитель") },
             { "windowsMachineGuid", L.T("ID установки Windows") }, { "partOfDomain", L.T("Член домена") }, { "domain", L.T("Домен / рабочая группа") },
-            { "model", L.T("Модель") }, { "username", L.T("Пользователь") }, { "employee", L.T("Сотрудник") }, { "comment", L.T("Комментарий") },
+            { "model", L.T("Модель") }, { "username", L.T("Учётная запись Windows") }, { "userId", L.T("Пользователь (по факту)") }, { "ownerId", L.T("МОЛ (по ведомости)") },
+            { "comment", L.T("Комментарий") },
             { "windows", "Windows" }, { "esetInstalled", L.T("ESET установлен") }, { "collectedAt", L.T("Дата сбора") }, { "createdAt", L.T("Дата создания") },
         }; } }
 
@@ -230,6 +247,7 @@ namespace CompInfo
             if (v == null) return "(null)";
             string s = v as string;
             if (s != null) return s.Length == 0 ? L.T("(пустая строка)") : s;
+            if (Array.IndexOf(People.Fields, name) >= 0 && People.Id(v).HasValue) return People.Label(v);
             return Json.Compact(v);
         }
 
@@ -316,6 +334,7 @@ namespace CompInfo
         public int Bound;
         public List<string> Errors = new List<string>();
         public string NetworkProfiles;
+        public string People;
         public string NewVersion;
     }
 
@@ -376,6 +395,8 @@ namespace CompInfo
 
             try { Counts.NetworkProfiles = client.UpdateNetworkProfiles(root); }
             catch (Exception e) { Counts.Errors.Add(L.T("Профили сети не загружены: ") + e.Message); }
+            try { Counts.People = client.UpdatePeople(root); }
+            catch (Exception e) { Counts.Errors.Add(L.T("Список людей не загружен: ") + e.Message); }
 
             // A newer program version is only a hint: failing to check it must not fail the sync.
             try

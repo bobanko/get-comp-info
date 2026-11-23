@@ -7,6 +7,7 @@ import { renderDownloads } from './pages/downloads.js';
 import { renderJournal } from './pages/journal.js';
 import { renderKeys } from './pages/keys.js';
 import { renderNetwork } from './pages/network.js';
+import { renderPeople } from './pages/people.js';
 import { renderReleases } from './pages/releases.js';
 import { renderTriggerWords } from './pages/trigger-words.js';
 import { renderUsers } from './pages/users.js';
@@ -31,6 +32,7 @@ nav.addEventListener('click', (event) => {
 
 const PAGES = [
   { hash: '#/devices', icon: '💻', label: 'Устройства', role: 'viewer' },
+  { hash: '#/people', icon: '🧑', label: 'Люди', role: 'viewer' },
   { hash: '#/keys', icon: '🔑', label: 'Мои ключи', role: 'harvester' },
   { hash: '#/downloads', icon: '📥', label: 'Загрузки', role: 'viewer' },
   { hash: '#/users', icon: '👥', label: 'Пользователи', role: 'admin' },
@@ -131,8 +133,11 @@ async function route() {
     },
   };
   const deviceMatch = /^#\/devices\/(.+)$/.exec(hash);
+  const personMatch = /^#\/people(?:\/(\d+))?$/.exec(hash);
   if (deviceMatch) {
     renderDevice(context, decodeURIComponent(deviceMatch[1]));
+  } else if (personMatch) {
+    renderPeople(context, personMatch[1] ? Number(personMatch[1]) : null);
   } else if (hash === '#/keys' && hasRole(me, 'harvester')) {
     renderKeys(context);
   } else if (hash === '#/downloads') {

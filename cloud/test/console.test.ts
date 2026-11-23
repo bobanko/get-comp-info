@@ -74,20 +74,28 @@ describe('console upload', () => {
     expect(wrong.body.error.code).toBe('invalid_inventoried');
   });
 
-  it('keeps the employee set in the web when the console sends a record without it', async () => {
+  it('keeps the people linked in the web when the console sends a record without them', async () => {
     const { key } = await harvesterKey();
     const id = unique('dev');
     await consoleRequest(key, 'PUT', `/devices/${id}`, { baseRevision: null, data: deviceData(id) });
     const editor = await addUser('editor');
-    const named = await webRequest(editor, 'PATCH', `/devices/${id}`, { baseRevision: 1, changes: { employee: 'Іваненко Іван' } });
-    expect(named.body.device.data.employee).toBe('Іваненко Іван');
+    const user = (await webRequest(editor, 'POST', '/people', { name: 'Іваненко Іван' })).body.person;
+    const owner = (await webRequest(editor, 'POST', '/people', { name: 'Петренко Петро', note: 'МВО' })).body.person;
+    const linked = await webRequest(editor, 'PATCH', `/devices/${id}`, { baseRevision: 1, changes: { userId: user.id, ownerId: owner.id } });
+    expect(linked.body.device.data).toMatchObject({ userId: user.id, ownerId: owner.id });
 
     const upload = await consoleRequest(key, 'PUT', `/devices/${id}`, { baseRevision: 2, data: deviceData(id, { comment: 'new' }) });
-    expect(upload.body.device.data).toMatchObject({ comment: 'new', employee: 'Іваненко Іван' });
+    expect(upload.body.device.data).toMatchObject({ comment: 'new', userId: user.id, ownerId: owner.id });
 
-    const wrong = await consoleRequest(key, 'PUT', `/devices/${id}`, { baseRevision: 3, data: deviceData(id, { employee: 5 }) });
+    const wrong = await consoleRequest(key, 'PUT', `/devices/${id}`, { baseRevision: 3, data: deviceData(id, { userId: 'Іваненко' }) });
     expect(wrong.status).toBe(400);
-    expect(wrong.body.error.code).toBe('invalid_employee');
+    expect(wrong.body.error.code).toBe('invalid_person_ref');
+    const unknown = await webRequest(editor, 'PATCH', `/devices/${id}`, { baseRevision: 3, changes: { ownerId: 999999 } });
+    expect(unknown.status).toBe(400);
+    expect(unknown.body.error.code).toBe('unknown_person');
+
+    const names = await consoleRequest(key, 'GET', '/people');
+    expect(names.body.people).toEqual(expect.arrayContaining([{ id: owner.id, name: 'Петренко Петро', note: 'МВО' }]));
   });
 
   it('remembers which key made the change', async () => {

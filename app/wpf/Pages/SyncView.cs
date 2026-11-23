@@ -138,6 +138,9 @@ namespace CompInfo.Wpf
             string profiles = c.NetworkProfiles == "updated" ? L.T("обновлены") : c.NetworkProfiles == "unchanged" ? L.T("без изменений") :
                 c.NetworkProfiles == "missing" ? L.T("в облаке не заданы") : L.T("не загружены");
             AddLine(L.T("Профили сети"), profiles, "Text", c.NetworkProfiles == "updated" ? "Accent" : "Muted");
+            string people = c.People == "updated" ? L.T("обновлён") : c.People == "unchanged" ? L.T("без изменений") :
+                c.People == "missing" ? L.T("в облаке нет") : L.T("не загружен");
+            AddLine(L.T("Список людей"), people, "Text", c.People == "updated" ? "Accent" : "Muted");
             countsFrame.Visibility = Visibility.Visible;
             if (c.Errors.Count > 0)
             {

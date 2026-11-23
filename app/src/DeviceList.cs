@@ -15,8 +15,8 @@ namespace CompInfo
         public readonly List<string> Warnings = new List<string>();
         Dictionary<string, int> ipCounts = new Dictionary<string, int>(), hostCounts = new Dictionary<string, int>(), serialCounts = new Dictionary<string, int>();
 
-        // Columns of the table: 0 name, 1 IP, 2 serial, 3 employee or user, 4 collected, 5 cloud, 6 ESET, 7 inventory, 8 comment.
-        public static string[] Columns { get { return new[] { L.T("Имя компьютера"), L.T("IP-адрес"), L.T("Серийный номер"), L.T("Сотрудник / пользователь"), L.T("Собрано"), L.T("Облако"), "ESET", L.T("Инвентаризация"), L.T("Комментарий") }; } }
+        // Columns of the table: 0 name, 1 IP, 2 serial, 3 user (person or Windows account), 4 collected, 5 cloud, 6 ESET, 7 inventory, 8 comment.
+        public static string[] Columns { get { return new[] { L.T("Имя компьютера"), L.T("IP-адрес"), L.T("Серийный номер"), L.T("Пользователь"), L.T("Собрано"), L.T("Облако"), "ESET", L.T("Инвентаризация"), L.T("Комментарий") }; } }
         public const int CommentColumn = 8;
         // ESET and the comment are not sortable, as in the console.
         public static bool Sortable(int column) { return column != 6 && column != CommentColumn; }
@@ -28,6 +28,7 @@ namespace CompInfo
         public void Load(string root)
         {
             Warnings.Clear();
+            People.Load(root);
             Cloud = CloudState.ForDisplay(root);
             All = Records.ReadAll(System.IO.Path.Combine(root, "data"), Cloud, Warnings);
             ipCounts = new Dictionary<string, int>();
@@ -115,11 +116,11 @@ namespace CompInfo
         }
 
         // The inventory mark set on the website.
-        // The person column: the employee set on the website, otherwise the Windows user.
+        // The person column: the actual user linked on the website, otherwise the Windows account.
         public static string Person(JsonObject d)
         {
-            string employee = (d.Text("employee") ?? "").Trim();
-            return employee.Length > 0 ? employee : d.Text("username") ?? "";
+            string user = People.Name(d["userId"]);
+            return user.Length > 0 ? user : d.Text("username") ?? "";
         }
 
         public static bool Inventoried(JsonObject d) { return d["inventoried"] is bool && (bool)d["inventoried"]; }
@@ -130,6 +131,7 @@ namespace CompInfo
             if (words.Count == 0) return true;
             StringBuilder text = new StringBuilder(r.Id);
             foreach (string name in r.Data.Names) text.Append('\n').Append(r.Data.Text(name));
+            foreach (string name in People.Fields) text.Append('\n').Append(People.Name(r.Data[name]));
             string haystack = text.ToString();
             string key = LooseSearch.LooseKey(haystack).Text;
             foreach (string word in words)
@@ -213,11 +215,12 @@ namespace CompInfo
         // The fields of the card of a computer, in this order; fields this version does not know follow them.
         public static string[][] CardFields { get { return new[]
         {
-            new[] { "hostname", L.T("Имя компьютера") }, new[] { "employee", L.T("Сотрудник") }, new[] { "computerId", L.T("ID компьютера") }, new[] { "computerIdSource", L.T("Источник ID") },
+            new[] { "hostname", L.T("Имя компьютера") }, new[] { "userId", L.T("Пользователь (по факту)") }, new[] { "ownerId", L.T("МОЛ (по ведомости)") },
+            new[] { "computerId", L.T("ID компьютера") }, new[] { "computerIdSource", L.T("Источник ID") },
             new[] { "serial", L.T("Серийный номер") }, new[] { "smbiosUuid", "UUID" }, new[] { "windowsMachineGuid", L.T("ID установки Windows") },
             new[] { "manufacturer", L.T("Производитель") }, new[] { "model", L.T("Модель") }, new[] { "windows", "Windows" },
             new[] { "partOfDomain", L.T("Член домена") }, new[] { "domain", L.T("Домен / группа") }, new[] { "ip", L.T("IP-адрес") }, new[] { "mac", L.T("MAC-адрес") },
-            new[] { "username", L.T("Пользователь") }, new[] { "esetInstalled", "ESET" }, new[] { "inventoried", L.T("Инвентаризация") },
+            new[] { "username", L.T("Учётная запись Windows") }, new[] { "esetInstalled", "ESET" }, new[] { "inventoried", L.T("Инвентаризация") },
             new[] { "createdAt", L.T("Создана") }, new[] { "collectedAt", L.T("Собрана") },
         }; } }
 
@@ -228,6 +231,7 @@ namespace CompInfo
             if (name == "createdAt" || name == "collectedAt") return Fmt.Date(d.Text(name));
             if (name == "partOfDomain") { object v = d[name]; return v == null ? "" : (v is bool && (bool)v ? L.T("да") : L.T("нет")); }
             if (name == "inventoried") return d[name] is bool && (bool)d[name] ? L.T("да") : L.T("нет") + L.T(" (отметку ставят на сайте)");
+            if (Array.IndexOf(People.Fields, name) >= 0) return People.Label(d[name]);
             return d.Text(name) ?? "";
         }
 
@@ -238,6 +242,67 @@ namespace CompInfo
             data["comment"] = comment;
             Files.WriteJson(r.Path, data);
             return Records.Load(r.Path, cloud);
+        }
+    }
+
+    // People records link by number (cloud people.ts): userId — who works at the computer, ownerId — the person
+    // materially responsible by the issue register. Names come from people.json, saved at every sync.
+    public static class People
+    {
+        public static readonly string[] Fields = { "userId", "ownerId" };
+        static Dictionary<long, string> names = new Dictionary<long, string>();
+
+        public static void Load(string root) { names = Read(System.IO.Path.Combine(root, "people.json")); }
+
+        // Number -> name; empty when the file is missing or broken.
+        public static Dictionary<long, string> Read(string path)
+        {
+            var result = new Dictionary<long, string>();
+            try
+            {
+                if (!System.IO.File.Exists(path)) return result;
+                var list = Files.ReadRecord(path)["people"] as System.Collections.IList;
+                if (list == null) return result;
+                foreach (object item in list)
+                {
+                    JsonObject p = item as JsonObject;
+                    long? id = p == null ? null : Id(p["id"]);
+                    if (id.HasValue) result[id.Value] = p.Text("name") ?? "";
+                }
+            }
+            catch (Exception) { }
+            return result;
+        }
+
+        public static void Use(Dictionary<long, string> list) { names = list; }
+
+        // A person number from a record field, or null.
+        public static long? Id(object value)
+        {
+            if (value is int || value is long || value is decimal || value is double)
+            {
+                double d = Convert.ToDouble(value);
+                if (d >= 1 && d == Math.Floor(d)) return (long)d;
+            }
+            return null;
+        }
+
+        // The name of a linked person, '#12' when the list does not have it, '' when nobody is linked.
+        public static string Name(object value)
+        {
+            long? id = Id(value);
+            if (!id.HasValue) return "";
+            string name;
+            return names.TryGetValue(id.Value, out name) ? name : "#" + id.Value;
+        }
+
+        // «Іваненко Іван (#12)» for the card.
+        public static string Label(object value)
+        {
+            long? id = Id(value);
+            if (!id.HasValue) return "";
+            string name;
+            return names.TryGetValue(id.Value, out name) ? name + " (#" + id.Value + ")" : "#" + id.Value + L.T(" (нет в списке людей, синхронизируйте базу)");
         }
     }
 }

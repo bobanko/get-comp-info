@@ -2,6 +2,7 @@ import { Hono, type Context } from 'hono';
 import { consoleAuth } from '../auth';
 import { listChanges, normalizeData, putDevice, validateDeviceId, type WriteResult } from '../devices';
 import { fail, readJsonObject } from '../http';
+import { listPeople } from '../people';
 import { clientVersion, getReleaseFor, getReleasePackage } from '../releases';
 import { getSetting, NETWORK_KEY, type NetworkSettings } from '../settings';
 import type { AppEnv } from '../types';
@@ -55,6 +56,12 @@ consoleApi.get('/program/latest', async (c) => {
 });
 
 // Network profiles cached by the console for setting up LAN adapters offline.
+// Names of the people device records link (userId, ownerId), cached by comp-info.exe in people.json.
+consoleApi.get('/people', async (c) => {
+  const people = await listPeople(c.env.DB, false);
+  return c.json({ people: people.map((p) => ({ id: p.id, name: p.name, note: p.note })) });
+});
+
 consoleApi.get('/settings/network', async (c) => {
   const record = await getSetting<NetworkSettings>(c.env.DB, NETWORK_KEY);
   if (!record) fail(404, 'no_settings', 'Network settings are not set in the cloud yet.');
