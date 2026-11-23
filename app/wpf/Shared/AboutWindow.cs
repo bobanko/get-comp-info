@@ -26,8 +26,9 @@ namespace CompInfo.Wpf
 
         // name marks its coloured part in square brackets («you[SBee]»), highlightKey is its colour (a WpfTheme key);
         // intro may be null; sections = heading, text, heading, text…; save keeps a choice in the settings (key, value);
-        // icons (optional) — a glyph per section, shown in the colour of the name before its heading, as in HashPot.
-        public AboutContent(ImageSource picture, string name, string highlightKey, string email, string subtitle, string intro,
+        // icons (optional) — a glyph per section, shown in the colour of the name before its heading, as in HashPot;
+        // page — the program's page on the site (chagear.top/<page>/), the folder of chagear-site/public.
+        public AboutContent(ImageSource picture, string name, string highlightKey, string email, string page, string subtitle, string intro,
             string[] sections, Action<string, string> save, Action languageChanged, double textWidth, string[] icons = null)
         {
             this.email = email;
@@ -107,7 +108,9 @@ namespace CompInfo.Wpf
             mailRow.Children.Add(mail);
             mailRow.Children.Add(copied);
             Text.Children.Add(mailRow);
-            AddLink(Glyph.Open, Site, null, delegate { OpenSite(Site); });
+            // the page of this program on the site (chagear.top/suspector), not the main page
+            string link = Site + "/" + page;
+            AddLink(Glyph.Open, link, null, delegate { OpenUrl("https://" + link + "/"); });
         }
 
         // A link row under the contacts: an icon, the link, an optional muted note after it.
@@ -186,7 +189,7 @@ namespace CompInfo.Wpf
     {
         public bool LanguageChanged { get; private set; }
 
-        public AboutWindow(ImageSource picture, string name, string highlightKey, string email, string subtitle,
+        public AboutWindow(ImageSource picture, string name, string highlightKey, string email, string page, string subtitle,
             string[] sections, Action<string, string> save, string intro = null, string[] icons = null)
         {
             Title = L.T("О программе");
@@ -203,7 +206,7 @@ namespace CompInfo.Wpf
             root.RowDefinitions.Add(new RowDefinition());
             root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             Content = root;
-            root.Children.Add(new AboutContent(picture, name, highlightKey, email, subtitle, intro, sections, save,
+            root.Children.Add(new AboutContent(picture, name, highlightKey, email, page, subtitle, intro, sections, save,
                 delegate { LanguageChanged = true; Close(); }, 460, icons));
 
             var close = new Button { Content = L.T("Закрыть"), MinWidth = 110, IsDefault = true, IsCancel = true,

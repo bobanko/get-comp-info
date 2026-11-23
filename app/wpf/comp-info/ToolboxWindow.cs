@@ -436,7 +436,7 @@ namespace CompInfo.Wpf
             int space = name.IndexOf(' ');
             // «CHAGEAR [Тулбокс]»: the word after the brand is coloured, as on chagear.top
             string marked = space < 0 ? name : name.Substring(0, space + 1) + "[" + name.Substring(space + 1) + "]";
-            var about = new AboutContent(new BitmapImage(new Uri("pack://application:,,,/" + picture)), marked, "Toolbox", "toolbox@chagear.top",
+            var about = new AboutContent(new BitmapImage(new Uri("pack://application:,,,/" + picture)), marked, "Toolbox", "toolbox@chagear.top", "toolbox",
                 L.T("Учёт компьютеров при подготовке и выдаче сотрудникам"),
                 L.T("Собирает сведения о компьютере, хранит их на флешке и синхронизирует с облачной базой."),
                 Sections, Settings.Set, delegate { window.Rebuild(); }, 520, Icons)

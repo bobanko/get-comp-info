@@ -70,7 +70,7 @@ namespace CompInfo.Wpf
 
         static AboutWindow AboutDialog()
         {
-            return new AboutWindow(new BitmapImage(new Uri("pack://application:,,,/yousbee.png")), "you[SBee]", "Honey", "yousbee@chagear.top",
+            return new AboutWindow(new BitmapImage(new Uri("pack://application:,,,/yousbee.png")), "you[SBee]", "Honey", "yousbee@chagear.top", "yousbee",
                 L.T("Серийные номера флешек и USB-дисков"), Sections, App.Settings.Set,
                 L.T("Чтобы номер было удобно переписать или вставить в заявку."), Icons);
         }

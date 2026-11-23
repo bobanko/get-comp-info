@@ -79,7 +79,7 @@ namespace CompInfo.Wpf
 
         static AboutWindow AboutDialog()
         {
-            return new AboutWindow(new BitmapImage(new Uri("pack://application:,,,/suspector.png")), "[SUS]pector", "Suspector", "suspector@chagear.top",
+            return new AboutWindow(new BitmapImage(new Uri("pack://application:,,,/suspector.png")), "[SUS]pector", "Suspector", "suspector@chagear.top", "suspector",
                 L.T("Подготовка компьютера к внешней проверке безопасности"), Sections, App.Settings.Set,
                 L.T("Показывает, к чему придерутся на проверке, и помогает это исправить. Без вашей команды ничего не меняет."), Icons);
         }
