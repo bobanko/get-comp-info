@@ -30,6 +30,8 @@ namespace CompInfo
     public class SecurityDetail
     {
         public string Text, Note, FilePath, FileType, ToolTip;
+        // A found document: the highest level of its trigger words (TriggerWords.High…Low), 0 for other lines.
+        public int Level;
 
         public SecurityDetail(string text, string note, string filePath, string fileType)
             : this(text, note, filePath, fileType, "") { }
@@ -61,36 +63,27 @@ namespace CompInfo
     public static class SecurityAudit
     {
         static readonly string[] UnwantedPrograms = { "WinRAR" };
-        // Trigger words of the document check: app\trigger-words.txt, built into the program by tools\build.BAT.
-        static string[] keywords;
-        static string[] DocumentKeywords { get { return keywords ?? (keywords = LoadKeywords()); } }
+        // Trigger words of the document check: the built-in list (app\trigger-words.txt, built into the program by
+        // tools\build.BAT) unless the program sets another one; SUSpector sets the admin's list from the cloud.
+        static TriggerWords words;
+        public static TriggerWords Words
+        {
+            get { return words ?? (words = BuiltInWords()); }
+            set { words = value; }
+        }
 
-        internal static string[] LoadKeywords()
+        public static TriggerWords BuiltInWords()
         {
             using (Stream stream = typeof(SecurityAudit).Assembly.GetManifestResourceStream("CompInfo.trigger-words.txt"))
             {
                 if (stream == null) throw new InvalidOperationException(L.T("В программу не встроен список слов-триггеров."));
                 using (StreamReader reader = new StreamReader(stream, Encoding.UTF8, true))
                 {
-                    string[] words = ParseKeywords(reader.ReadToEnd());
-                    if (words.Length == 0) throw new InvalidOperationException(L.T("Список слов-триггеров пуст."));
-                    return words;
+                    TriggerWords list = TriggerWords.Parse(reader.ReadToEnd());
+                    if (list.Words.Length == 0) throw new InvalidOperationException(L.T("Список слов-триггеров пуст."));
+                    return list;
                 }
             }
-        }
-
-        // One word or phrase per line; empty lines and # comments are skipped, repeats (any case) count once.
-        internal static string[] ParseKeywords(string text)
-        {
-            List<string> words = new List<string>();
-            HashSet<string> seen = new HashSet<string>(StringComparer.CurrentCultureIgnoreCase);
-            foreach (string raw in (text ?? "").Split(new[] { "\r\n", "\n" }, StringSplitOptions.None))
-            {
-                string word = raw.Trim();
-                if (word.Length == 0 || word.StartsWith("#", StringComparison.Ordinal) || !seen.Add(word)) continue;
-                words.Add(word);
-            }
-            return words.ToArray();
         }
         static readonly HashSet<string> OfficeExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -499,6 +492,8 @@ namespace CompInfo
         class DocumentMatch
         {
             public string Path, DisplayPath, Note, Type, ToolTip;
+            // the highest level of the words found, and the sum of level × occurrences that orders the list
+            public int Level, Score, Order;
 
             public DocumentMatch(string path, List<KeywordHit> hits)
                 : this(path, path, hits, false, "") { }
@@ -506,7 +501,12 @@ namespace CompInfo
             public DocumentMatch(string path, string displayPath, List<KeywordHit> hits, bool recycle, string deletedAt)
             {
                 Path = path; DisplayPath = displayPath; Note = MatchNote(displayPath, hits, recycle);
-                ToolTip = MatchToolTip(hits, deletedAt);
+                foreach (KeywordHit hit in hits)
+                {
+                    Level = Math.Max(Level, hit.Level);
+                    Score += hit.Level * hit.Count;
+                }
+                ToolTip = MatchToolTip(hits, Level, deletedAt);
                 Type = DocumentType(displayPath);
             }
         }
@@ -514,9 +514,9 @@ namespace CompInfo
         class KeywordHit
         {
             public string Keyword;
-            public int Count;
+            public int Level, Count;
 
-            public KeywordHit(string keyword, int count) { Keyword = keyword; Count = count; }
+            public KeywordHit(string keyword, int level, int count) { Keyword = keyword; Level = level; Count = count; }
         }
 
         class DocumentCandidate
@@ -576,17 +576,36 @@ namespace CompInfo
             return scan;
         }
 
+        // The list shows at most this many files: the most important ones.
+        const int MatchListLimit = 200;
+
         static SecurityCheck DocumentResult(DocumentScan scan)
         {
             string summary = L.F("Проверено: {0}; помечено как ДСК: {1}", scan.Files, scan.MatchCount);
             if (scan.MatchCount == 0)
                 return New(scan.RecycleError.Length == 0 ? SecurityLevel.Good : SecurityLevel.Warning, summary, "");
+            // highest level first, then the larger score, then the order of the scan
+            scan.Matches.Sort(delegate (DocumentMatch a, DocumentMatch b)
+            {
+                if (a.Level != b.Level) return b.Level.CompareTo(a.Level);
+                if (a.Score != b.Score) return b.Score.CompareTo(a.Score);
+                return a.Order.CompareTo(b.Order);
+            });
+            if (scan.Matches.Count > MatchListLimit)
+            {
+                scan.Matches.RemoveRange(MatchListLimit, scan.Matches.Count - MatchListLimit);
+                scan.MatchLimit = true;
+            }
             List<string> lines = new List<string>();
             foreach (DocumentMatch match in scan.Matches) lines.Add(match.DisplayPath + "  [" + match.Note + "]");
             SecurityCheck check = New(SecurityLevel.Bad, summary, string.Join("\r\n", lines.ToArray()));
             check.Items.Clear();
             foreach (DocumentMatch match in scan.Matches)
-                check.Items.Add(new SecurityDetail(match.DisplayPath, match.Note, match.Path, match.Type, match.ToolTip));
+            {
+                SecurityDetail item = new SecurityDetail(match.DisplayPath, match.Note, match.Path, match.Type, match.ToolTip);
+                item.Level = match.Level;
+                check.Items.Add(item);
+            }
             return check;
         }
 
@@ -662,10 +681,11 @@ namespace CompInfo
                 OpenXmlExtensions.Contains(file.Extension));
             if (hits.Count == 0) return;
             scan.MatchCount++;
-            if (scan.Matches.Count >= 200) { scan.MatchLimit = true; return; }
-            scan.Matches.Add(file.Recycle
+            DocumentMatch match = file.Recycle
                 ? new DocumentMatch(file.Path, file.DisplayPath, hits, true, file.DeletedAt)
-                : new DocumentMatch(file.Path, hits));
+                : new DocumentMatch(file.Path, hits);
+            match.Order = scan.Matches.Count;
+            scan.Matches.Add(match);
         }
 
         static bool IsTopLevel(string root, string child)
@@ -681,19 +701,22 @@ namespace CompInfo
 
         static List<KeywordHit> FindKeywordHits(string fileName, string path, bool inspectContents)
         {
-            int[] content = inspectContents ? KeywordCountsInOpenXml(path) : new int[DocumentKeywords.Length];
-            List<KeywordHit> result = new List<KeywordHit>();
-            for (int i = 0; i < DocumentKeywords.Length; i++)
+            TriggerWords list = Words;
+            int[] counts = list.Count(fileName);
+            if (inspectContents)
             {
-                int count = CountOccurrences(fileName, DocumentKeywords[i]) + content[i];
-                if (count > 0) result.Add(new KeywordHit(DocumentKeywords[i], count));
+                int[] content = KeywordCountsInOpenXml(path, list);
+                for (int i = 0; i < counts.Length; i++) counts[i] += content[i];
             }
+            List<KeywordHit> result = new List<KeywordHit>();
+            for (int i = 0; i < counts.Length; i++)
+                if (counts[i] > 0) result.Add(new KeywordHit(list.Words[i].Text, list.Words[i].Level, counts[i]));
             return result;
         }
 
-        static int[] KeywordCountsInOpenXml(string path)
+        static int[] KeywordCountsInOpenXml(string path, TriggerWords list)
         {
-            int[] counts = new int[DocumentKeywords.Length];
+            int[] counts = new int[list.Words.Length];
             try
             {
                 FileInfo file = new FileInfo(path);
@@ -712,34 +735,14 @@ namespace CompInfo
                         using (StreamReader reader = new StreamReader(stream, Encoding.UTF8, true))
                         {
                             string text = Regex.Replace(Regex.Replace(reader.ReadToEnd(), "<[^>]+>", " "), @"\s+", " ");
-                            for (int i = 0; i < DocumentKeywords.Length; i++) counts[i] += CountOccurrences(text, DocumentKeywords[i]);
+                            int[] found = list.Count(text);
+                            for (int i = 0; i < counts.Length; i++) counts[i] += found[i];
                         }
                     }
                 }
             }
             catch (Exception) { }
             return counts;
-        }
-
-        static int CountOccurrences(string text, string keyword)
-        {
-            int count = 0, start = 0;
-            text = text ?? "";
-            while (start < text.Length)
-            {
-                int found = text.IndexOf(keyword, start, StringComparison.CurrentCultureIgnoreCase);
-                if (found < 0) break;
-                // «ДСК-ЕП» is a stronger, separate marker; do not count its «ДСК» part twice.
-                if (string.Equals(keyword, "дск", StringComparison.OrdinalIgnoreCase) &&
-                    text.IndexOf("дск-еп", found, StringComparison.CurrentCultureIgnoreCase) == found)
-                {
-                    start = found + "дск-еп".Length;
-                    continue;
-                }
-                count++;
-                start = found + Math.Max(1, keyword.Length);
-            }
-            return count;
         }
 
         static string MatchNote(string path, List<KeywordHit> hits, bool recycle)
@@ -751,10 +754,13 @@ namespace CompInfo
             return tagText.Length > 0 ? tagText + " · " + total : total.ToString();
         }
 
-        static string MatchToolTip(List<KeywordHit> hits, string deletedAt)
+        // «Важность: высокая», then the words found, the most important first.
+        static string MatchToolTip(List<KeywordHit> hits, int level, string deletedAt)
         {
             List<string> lines = new List<string>();
-            foreach (KeywordHit hit in hits) lines.Add(hit.Keyword + " — " + hit.Count);
+            lines.Add(L.T("Важность: ") + TriggerWords.LevelName(level));
+            for (int l = TriggerWords.High; l >= TriggerWords.Low; l--)
+                foreach (KeywordHit hit in hits) if (hit.Level == l) lines.Add(hit.Keyword + " — " + hit.Count);
             if (!string.IsNullOrEmpty(deletedAt)) lines.Add(L.T("Удалён: ") + deletedAt);
             return string.Join("\r\n", lines.ToArray());
         }

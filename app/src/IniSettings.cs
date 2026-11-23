@@ -22,6 +22,12 @@ namespace CompInfo
         string path;
         string Path { get { if (path == null) path = Locate(); return path; } }
 
+        // Another file of the program kept where the ini is (SUSpector's copy of the cloud trigger words).
+        public string Beside(string name)
+        {
+            return System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Path), name);
+        }
+
         // On a flash drive the ini stays next to the exe, so the settings travel with it and nothing is left on
         // the computers it runs on. Anywhere else (desktop, Downloads) it goes to %APPDATA%\CHAGEAR, so no extra
         // file appears beside the program; an ini left there by an older version is moved over once.

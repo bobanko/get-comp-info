@@ -14,7 +14,7 @@
     <RootNamespace>CompInfo.Wpf</RootNamespace>
     <ApplicationIcon>..\..\app.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <!-- Title, product, company, version and the target framework (4.8, as the WinForms programs: no 4.0 compatibility
+    <!-- Title, product, company, version and the target framework (4.8: no 4.0 compatibility
          mode) come from obj\Version.cs, written by tools\build.BAT from console-ui.ps1. -->
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
@@ -37,7 +37,7 @@
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
 
-  <!-- the core, shared with the WinForms programs and the tests (C# 5): CORE of tools\build.BAT -->
+  <!-- the core, shared with comp-info.exe and the tests (C# 5: tests.exe is built by csc): CORE of tools\build.BAT -->
   <ItemGroup>
     <Compile Include="..\..\..\obj\Version.cs" Link="Core\Version.cs" />
     <Compile Include="..\..\src\Json.cs" Link="Core\Json.cs" />
@@ -53,6 +53,7 @@
     <Compile Include="..\..\src\SystemChanges.cs" Link="Core\SystemChanges.cs" />
     <!-- only for the place tags of the found documents (SecurityAudit.LocationTags, FileChips); the check itself is SUSpector -->
     <Compile Include="..\..\src\Security.cs" Link="Core\Security.cs" />
+    <Compile Include="..\..\src\TriggerWords.cs" Link="Core\TriggerWords.cs" />
     <Compile Include="..\..\src\SecurityFiles.cs" Link="Core\SecurityFiles.cs" />
     <Compile Include="..\..\src\DocumentSearch.cs" Link="Core\DocumentSearch.cs" />
     <Compile Include="..\..\src\DeviceList.cs" Link="Core\DeviceList.cs" />

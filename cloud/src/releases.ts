@@ -4,6 +4,8 @@ import { createMiddleware } from 'hono/factory';
 import { createLocalJWKSet, createRemoteJWKSet, jwtVerify, type JSONWebKeySet, type JWTVerifyGetKey } from 'jose';
 import { sha256Hex } from './crypto';
 import { fail, nowIso } from './http';
+import { getSetting } from './settings';
+import { TRIGGER_WORDS_KEY, type TriggerWordsValue } from './trigger-words';
 import type { AppEnv } from './types';
 import { readZip, ZipError } from './zip';
 import { writeZip } from './zip-write';
@@ -365,6 +367,14 @@ suspectorApi.get('/latest', async (c) => {
   const release = await getCurrentSuspectorRelease(c.env.DB);
   if (!release) fail(404, 'no_release', 'SUSpector is not published yet.');
   return c.json(release);
+});
+
+// The trigger words of the document check (src/trigger-words.ts), asked before every scan. Who saved them stays private.
+suspectorApi.get('/trigger-words', async (c) => {
+  const record = await getSetting<TriggerWordsValue>(c.env.DB, TRIGGER_WORDS_KEY);
+  if (!record) fail(404, 'no_trigger_words', 'No trigger word list is saved: SUSpector uses its built-in one.');
+  c.header('Cache-Control', 'no-store');
+  return c.json({ revision: record.revision, updatedAt: record.updatedAt, text: record.value.text });
 });
 
 // The program itself for the public download page: SUSpector.exe of the current release, unpacked.

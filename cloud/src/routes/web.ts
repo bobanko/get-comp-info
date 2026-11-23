@@ -14,6 +14,7 @@ import {
 import { fail, isPlainObject, nowIso, readJsonObject, requireRole } from '../http';
 import { buildDownload, describeDownloads, getCurrentRelease, getCurrentSuspectorRelease, isDownloadKind, listReleases, makeCurrent } from '../releases';
 import { getSetting, getSettingHistory, NETWORK_KEY, putSetting, validateNetworkSettings, type NetworkSettings } from '../settings';
+import { TRIGGER_WORDS_KEY, validateTriggerWords, type TriggerWordsValue } from '../trigger-words';
 import { hasRole, isRole, toUser, type AppEnv, type UserRow } from '../types';
 import { writeResponse } from './console';
 
@@ -293,6 +294,36 @@ webApi.put('/settings/network', async (c) => {
   if (result.status === 'conflict') {
     return c.json(
       { error: { code: 'conflict', message: 'The network settings were already changed. Reload the page.' }, current: result.current },
+      409,
+    );
+  }
+  return c.json({ setting: result.record });
+});
+
+// ---------- SUSpector trigger words ----------
+
+webApi.get('/settings/trigger-words', async (c) => {
+  requireRole(c, 'admin');
+  return c.json({ setting: await getSetting<TriggerWordsValue>(c.env.DB, TRIGGER_WORDS_KEY) });
+});
+
+webApi.get('/settings/trigger-words/history', async (c) => {
+  requireRole(c, 'admin');
+  return c.json({ history: await getSettingHistory(c.env.DB, TRIGGER_WORDS_KEY) });
+});
+
+webApi.put('/settings/trigger-words', async (c) => {
+  requireRole(c, 'admin');
+  const body = await readJsonObject(c);
+  const baseRevision = body.baseRevision ?? null;
+  if (baseRevision !== null && !(Number.isInteger(baseRevision) && (baseRevision as number) >= 1)) {
+    fail(400, 'invalid_revision', 'baseRevision must be null or an integer from 1.');
+  }
+  const value = validateTriggerWords(body.value);
+  const result = await putSetting(c.env.DB, TRIGGER_WORDS_KEY, baseRevision as number | null, value, c.get('user'));
+  if (result.status === 'conflict') {
+    return c.json(
+      { error: { code: 'conflict', message: 'The trigger words were already changed. Reload the page.' }, current: result.current },
       409,
     );
   }

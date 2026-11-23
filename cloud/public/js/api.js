@@ -22,6 +22,7 @@ const MESSAGES = {
   invalid_role: () => 'Роль должна быть viewer, harvester, editor или admin.',
   user_exists: () => 'Пользователь с такой почтой уже есть.',
   self_lockout: () => 'Нельзя снять с себя роль admin или отключить себя.',
+  invalid_trigger_words: () => 'В списке слов есть ошибки: исправьте их и сохраните снова.',
   internal: () => 'Внутренняя ошибка сервера.',
 };
 

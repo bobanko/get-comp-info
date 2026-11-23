@@ -14,7 +14,7 @@
     <RootNamespace>CompInfo.Wpf</RootNamespace>
     <ApplicationIcon>..\..\yousbee.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <!-- Title, product, company, version and the target framework (4.8, as the WinForms programs: no 4.0 compatibility
+    <!-- Title, product, company, version and the target framework (4.8: no 4.0 compatibility
          mode) come from obj\YouSBeeVersion.cs, written by tools\build.BAT from app\youSBee.version. -->
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
@@ -35,7 +35,7 @@
     <Reference Include="System.DirectoryServices.AccountManagement" />
   </ItemGroup>
 
-  <!-- the core, shared with the WinForms programs and the tests (C# 5) -->
+  <!-- the core, shared with comp-info.exe and the tests (C# 5: tests.exe is built by csc) -->
   <ItemGroup>
     <Compile Include="..\..\..\obj\YouSBeeVersion.cs" Link="Core\YouSBeeVersion.cs" />
     <Compile Include="..\..\src\Json.cs" Link="Core\Json.cs" />

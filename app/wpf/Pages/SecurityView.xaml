@@ -72,7 +72,7 @@
             <ContentPresenter Content="{Binding Chips}" VerticalAlignment="Center" ToolTip="{Binding ChipsTip}" Visibility="{Binding ChipsVisibility}" />
         </DataTemplate>
         <DataTemplate x:Key="MatchesCell">
-            <TextBlock Text="{Binding Matches}" ToolTip="{Binding MatchesTip}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            <ContentPresenter Content="{Binding MatchesBadge}" ToolTip="{Binding MatchesTip}" HorizontalAlignment="Center" VerticalAlignment="Center" />
         </DataTemplate>
         <DataTemplate x:Key="FileNameCell">
             <TextBlock Text="{Binding Name}" ToolTip="{Binding Path}" FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,7,0,7" />

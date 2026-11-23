@@ -14,7 +14,7 @@
     <RootNamespace>CompInfo.Wpf</RootNamespace>
     <ApplicationIcon>..\..\suspector.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <!-- Title, product, company, version and the target framework (4.8, as the WinForms programs: no 4.0 compatibility
+    <!-- Title, product, company, version and the target framework (4.8: no 4.0 compatibility
          mode) come from obj\SuspectorVersion.cs, written by tools\build.BAT from app\SUSpector.version. -->
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
@@ -37,7 +37,7 @@
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
 
-  <!-- the core, shared with the WinForms programs and the tests (C# 5): SUSPECTOR_CORE of tools\build.BAT -->
+  <!-- the core, shared with comp-info.exe and the tests (C# 5: tests.exe is built by csc): SUSPECTOR_CORE of tools\build.BAT -->
   <ItemGroup>
     <Compile Include="..\..\..\obj\SuspectorVersion.cs" Link="Core\SuspectorVersion.cs" />
     <Compile Include="..\..\src\Json.cs" Link="Core\Json.cs" />
@@ -47,6 +47,7 @@
     <Compile Include="..\..\src\Network.cs" Link="Core\Network.cs" />
     <Compile Include="..\..\src\Shell.cs" Link="Core\Shell.cs" />
     <Compile Include="..\..\src\SystemChanges.cs" Link="Core\SystemChanges.cs" />
+    <Compile Include="..\..\src\TriggerWords.cs" Link="Core\TriggerWords.cs" />
     <Compile Include="..\..\src\Security.cs" Link="Core\Security.cs" />
     <Compile Include="..\..\src\SecurityFiles.cs" Link="Core\SecurityFiles.cs" />
     <Compile Include="..\..\src\LooseSearch.cs" Link="Core\LooseSearch.cs" />

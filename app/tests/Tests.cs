@@ -44,6 +44,8 @@ namespace CompInfo
             Run("search in any alphabet", LooseSearchMatches);
             Run("cloud state", CloudStateFile);
             Run("computer names match PowerShell", ComputerNames);
+            Run("trigger words", TriggerWordList);
+            Run("trigger words from the cloud", TriggerWordsFromCloud);
             Run("security document scan", SecurityDocumentScan);
             Run("deleting found documents", DocumentDeletion);
             Run("document search", DocumentSearchFiles);
@@ -463,12 +465,98 @@ namespace CompInfo
                 Check(!ComputerNaming.MatchesPolicy(name), "invalid generic hostname policy: " + name);
         }
 
+        static string WordList(TriggerWords list)
+        {
+            List<string> parts = new List<string>();
+            foreach (TriggerWord w in list.Words) parts.Add(w.Text + ":" + w.Level);
+            return string.Join(", ", parts.ToArray());
+        }
+
+        static void TriggerWordList()
+        {
+            TriggerWords parsed = TriggerWords.Parse("# comment\r\nДСК\r\n\r\n[высокий]\n  таємно  \nдск\n[low]\nштат\n[нет такого]\nбчс\n[Середній]\nт.  в. о.");
+            Check(WordList(parsed) == "ДСК:2, таємно:3, штат:1, бчс:1, т. в. о.:2",
+                "trigger words: levels, comments, blanks and repeats: " + WordList(parsed));
+            TriggerWords built = SecurityAudit.BuiltInWords();
+            string all = WordList(built);
+            Check(all.Contains("ТФД:2") && all.Contains("ДСК-ЕП:3") && all.Contains("ДСК:3") && all.Contains("штат:1") && all.Contains("т. в. о.:2"),
+                "trigger-words.txt with its levels is built into the program: " + all);
+
+            TriggerWords list = TriggerWords.Parse("[высокий]\nДСК\nДСК-ЕП\n[средний]\nштатка\nт. в. о.\n[низкий]\nштат");
+            int[] c = list.Count("ДСК, дск-еп; ДСК-ЕП. Штатка, штатний розпис, ШТАТ; т.в.о. начальника, т. в. о., Т.В. О.");
+            Check(c[0] == 1 && c[1] == 2 && c[2] == 1 && c[3] == 3 && c[4] == 2,
+                "only the longest of overlapping words counts, spaces in a phrase are optional: " + string.Join(",", Array.ConvertAll(c, x => x.ToString())));
+            Check(TriggerWords.Parse("").Count("ДСК").Length == 0, "an empty list finds nothing");
+            Check(TriggerWords.LevelOf("Високий") == TriggerWords.High && TriggerWords.LevelOf("medium") == TriggerWords.Medium &&
+                TriggerWords.LevelOf("низкий") == TriggerWords.Low && TriggerWords.LevelOf("важный") == 0, "level names in three languages");
+
+            // the most important documents come first, whatever the order of the scan
+            TriggerWords saved = SecurityAudit.Words;
+            string dir = TempDir();
+            try
+            {
+                SecurityAudit.Words = list;
+                File.WriteAllText(Path.Combine(dir, "a штат штат штат штат.doc"), "x");
+                File.WriteAllText(Path.Combine(dir, "b штатка.doc"), "x");
+                File.WriteAllText(Path.Combine(dir, "c ДСК.doc"), "x");
+                File.WriteAllText(Path.Combine(dir, "d ДСК ДСК.doc"), "x");
+                SecurityCheck check = SecurityAudit.CheckDocumentsAt(new[] { dir });
+                List<string> order = new List<string>();
+                foreach (SecurityDetail item in check.Items) order.Add(Path.GetFileName(item.FilePath).Substring(0, 1) + item.Level);
+                Check(string.Join(" ", order.ToArray()) == "d3 c3 b2 a1", "found documents are ordered by importance: " + string.Join(" ", order.ToArray()));
+                SecurityDetail top = check.Items[0];
+                Check(top.ToolTip.StartsWith("Важность: высокая\r\nДСК — 2"), "the tooltip starts with the importance: " + top.ToolTip);
+            }
+            finally
+            {
+                SecurityAudit.Words = saved;
+                Directory.Delete(dir, true);
+            }
+        }
+
+        static void TriggerWordsFromCloud()
+        {
+            string dir = TempDir();
+            string cache = Path.Combine(dir, "profile", "SUSpector-words.json");
+            try
+            {
+                using (FakeCloud cloud = new FakeCloud())
+                {
+                    string url = cloud.ApiUrl.Replace("/api/client", "/api/suspector/trigger-words");
+                    string source;
+                    TriggerWords none = SuspectorUpdate.LoadTriggerWords(url, cache, out source);
+                    Check(source.Contains("встроенный") && WordList(none) == WordList(SecurityAudit.BuiltInWords()) && !File.Exists(cache),
+                        "without a list in the cloud the built-in one is used: " + source);
+
+                    cloud.TriggerWordsJson = "{\"revision\":2,\"updatedAt\":\"2026-11-23T10:00:00.000Z\",\"text\":\"[высокий]\\nБЧС\\n[низкий]\\nштат\"}";
+                    TriggerWords fresh = SuspectorUpdate.LoadTriggerWords(url, cache, out source);
+                    Check(WordList(fresh) == "БЧС:3, штат:1" && source.Contains("из облака от ") && source.Contains("23.11.2026") && File.Exists(cache),
+                        "the cloud list is used and saved: " + source);
+
+                    cloud.TriggerWordsJson = "{\"revision\":3,\"text\":\"# only a comment\"}";
+                    TriggerWords empty = SuspectorUpdate.LoadTriggerWords(url, cache, out source);
+                    Check(WordList(empty) == "БЧС:3, штат:1" && source.Contains("сохранённый"), "a cloud list without words is not used: " + source);
+
+                    cloud.TriggerWordsJson = null;
+                    SuspectorUpdate.LoadTriggerWords(url, cache, out source);
+                    Check(!File.Exists(cache) && source.Contains("встроенный"), "the copy goes when the cloud list is removed");
+
+                    cloud.TriggerWordsJson = "{\"revision\":4,\"updatedAt\":\"2026-11-23T10:00:00.000Z\",\"text\":\"ЗВДТ\"}";
+                    SuspectorUpdate.LoadTriggerWords(url, cache, out source);
+                }
+                // the cloud is gone: the saved copy, then the built-in list
+                string offline;
+                TriggerWords copy = SuspectorUpdate.LoadTriggerWords("http://127.0.0.1:1/api/suspector/trigger-words", cache, out offline);
+                Check(WordList(copy) == "ЗВДТ:2" && offline.Contains("сохранённый"), "without internet the saved copy is used: " + offline);
+                File.Delete(cache);
+                SuspectorUpdate.LoadTriggerWords("http://127.0.0.1:1/api/suspector/trigger-words", cache, out offline);
+                Check(offline.Contains("встроенный"), "without internet and a copy the built-in list is used");
+            }
+            finally { Directory.Delete(dir, true); }
+        }
+
         static void DocumentDeletion()
         {
-            string[] parsed = SecurityAudit.ParseKeywords("# comment\r\nДСК\r\n\r\n  таємно  \nдск\n");
-            Check(parsed.Length == 2 && parsed[0] == "ДСК" && parsed[1] == "таємно", "trigger words: comments, blanks and repeats are skipped");
-            string[] built = SecurityAudit.LoadKeywords();
-            Check(Array.IndexOf(built, "ТФД") >= 0 && Array.IndexOf(built, "ДСК-ЕП") >= 0, "trigger-words.txt is built into the program");
             List<string> tags = SecurityAudit.LocationTags(@"C:\Users\me\Documents\SupraWeed\out\ДСК отчёт.docx", false);
             Check(tags.Count == 2 && tags[0] == "#SupraWeed" && tags[1] == "#документы", "files in a SupraWeed folder get their own tag first");
             Check(!SecurityAudit.LocationTags(@"C:\Users\me\Downloads\supraweed ДСК.docx", false).Contains("#SupraWeed"), "the file name alone is no SupraWeed folder");

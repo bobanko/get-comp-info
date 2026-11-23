@@ -322,7 +322,7 @@ mark { background: color-mix(in srgb, var(--brand-yellow) 38%, transparent); col
 }
 td > .badge:first-child, dd > .badge:first-child { margin-left: 0; }
 .badge-ok, .eset-installed { background: var(--ok-soft); color: var(--ok); }
-.eset-missing { background: var(--warn-soft); color: var(--warn); }
+.eset-missing, .badge-warn { background: var(--warn-soft); color: var(--warn); }
 .eset-unknown, .badge-muted { background: var(--surface-2); color: var(--muted); }
 .badge-danger { background: var(--danger-soft); color: var(--danger); }
 

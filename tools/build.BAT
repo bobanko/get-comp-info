@@ -50,7 +50,7 @@ call :version obj\YouSBeeVersion.cs "youSBee" %YSBVER%
 
 rem The core (C# 5, no window code): built into the programs by their projects in app\wpf and into the checks here.
 set "REFS=/r:System.Management.dll /r:System.Web.Extensions.dll /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll /r:System.DirectoryServices.AccountManagement.dll"
-set "CORE=obj\Version.cs app\src\Json.cs app\src\Store.cs app\src\LooseSearch.cs app\src\Identity.cs app\src\Machine.cs app\src\Network.cs app\src\Export.cs app\src\Collector.cs app\src\Cloud.cs app\src\Shell.cs app\src\SystemChanges.cs app\src\Security.cs app\src\DocumentSearch.cs app\src\UsbList.cs app\src\SecurityFiles.cs app\src\DeviceList.cs app\src\ComputerForms.cs app\src\IniSettings.cs app\src\Lang.cs app\src\Strings.cs"
+set "CORE=obj\Version.cs app\src\Json.cs app\src\Store.cs app\src\LooseSearch.cs app\src\Identity.cs app\src\Machine.cs app\src\Network.cs app\src\Export.cs app\src\Collector.cs app\src\Cloud.cs app\src\Shell.cs app\src\SystemChanges.cs app\src\TriggerWords.cs app\src\Security.cs app\src\DocumentSearch.cs app\src\UsbList.cs app\src\SecurityFiles.cs app\src\DeviceList.cs app\src\ComputerForms.cs app\src\IniSettings.cs app\src\Lang.cs app\src\Strings.cs"
 
 call :dotnet || exit /b 1
 if defined BUILD_TOOLBOX call :wpf comp-info %VER% || exit /b 1

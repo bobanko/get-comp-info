@@ -127,6 +127,14 @@ namespace CompInfo.Wpf
             Status.Note(Glyph.More, L.T("Подготовка проверки…"));
             try
             {
+                if (documents)
+                {
+                    // the admin's list from the cloud (or its saved copy, or the built-in one); where it came from
+                    // is the tooltip of «Сканировать документы»
+                    string source = null;
+                    SecurityAudit.Words = await Task.Run(() => SuspectorUpdate.LoadTriggerWords(App.Settings.Beside("SUSpector-words.json"), out source));
+                    ScanDocuments.ToolTip = source;
+                }
                 int completedCount = 0;
                 Action<SecurityCheck> started = check => Later(() =>
                 {
@@ -484,6 +492,8 @@ namespace CompInfo.Wpf
                     c.Items.Add(new SecurityDetail(Path.Combine(docs, "SupraWeed\\template.docx"), "#SupraWeed · 2", "C:\\demo\\template.docx", "WORD", "2"));
                     c.Items.Add(new SecurityDetail(Path.Combine(docs, "ViberDownloads\\scan.pdf"), "#Viber #WhatsApp · 4", "C:\\demo\\scan.pdf", "PDF", "4"));
                     c.Items.Add(new SecurityDetail(Path.Combine(docs, "notes.txt"), "1", "C:\\demo\\notes.txt", "TXT", "1"));
+                    int[] demoLevels = { TriggerWords.High, TriggerWords.High, TriggerWords.Medium, TriggerWords.Medium, TriggerWords.Low };
+                    for (int i = 0; i < c.Items.Count; i++) c.Items[i].Level = demoLevels[i];
                 }
                 checks.Add(new CheckRow(c, StateOf(c.Level)));
             }
@@ -548,6 +558,8 @@ namespace CompInfo.Wpf
         public string Path { get { return Item.Text; } }
         public string Name { get; private set; }
         public string Matches { get; private set; }
+        // the number of matches in the colour of the document's importance (Chips.Level)
+        public object MatchesBadge { get; private set; }
         public string MatchesTip { get { return Item.ToolTip; } }
         public object Chips { get; private set; }
         public string ChipsTip { get; private set; }
@@ -573,6 +585,7 @@ namespace CompInfo.Wpf
             Name = string.IsNullOrEmpty(name) ? item.Text : name;
             FileChips chips = FileChips.Parse(item.Note);
             Matches = chips != null ? chips.Text : item.Note;
+            MatchesBadge = CompInfo.Wpf.Chips.Level(item.Level, Matches);
             HasChips = chips != null;
             if (chips != null)
             {

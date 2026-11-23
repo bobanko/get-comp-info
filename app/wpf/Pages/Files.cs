@@ -71,6 +71,21 @@ namespace CompInfo.Wpf
             string text = key == "Danger" ? "Bad" : key == "Ok" ? "Good" : key;
             string back = key == "Danger" ? "BadBack" : key == "Warn" ? "WarnBack" : key == "Ok" ? "GoodBack" : key == "Muted" ? "HeaderBack" : "Chip" + key + "Back";
             if (key == "SupraWeed" || key == "Viber" || key == "Claude") text = "Chip" + key + "Text";
+            return Pill(label, text, back);
+        }
+
+        // The number of matches of a found document in the colour of its most important trigger word:
+        // high — red, medium — yellow, low — grey (TriggerWords.High…Low).
+        public static Border Level(int level, string count)
+        {
+            Border pill = level >= TriggerWords.High ? Pill(count, "Bad", "BadBack")
+                : level == TriggerWords.Medium ? Pill(count, "Warn", "WarnBack") : Pill(count, "Muted", "HeaderBack");
+            pill.Margin = new Thickness(0);
+            return pill;
+        }
+
+        static Border Pill(string label, string text, string back)
+        {
             var t = new TextBlock { Text = label, FontSize = 11.5, VerticalAlignment = VerticalAlignment.Center };
             t.SetResourceReference(TextBlock.ForegroundProperty, text);
             var chip = new Border { Child = t, CornerRadius = new CornerRadius(9), Padding = new Thickness(8, 1, 8, 2), Margin = new Thickness(0, 0, 4, 0) };

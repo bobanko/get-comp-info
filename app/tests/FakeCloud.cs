@@ -29,6 +29,8 @@ namespace CompInfo
         long seq;
         public int Puts;
         public string ApiUrl;
+        // The answer of the public /api/suspector/trigger-words; null answers 404 (no list in the cloud).
+        public volatile string TriggerWordsJson;
         public const string Key = "test-key";
 
         public FakeCloud()
@@ -98,9 +100,20 @@ namespace CompInfo
             for (int read = 0; read < length;) read += s.Read(body, read, length - read);
             int status;
             object answer;
-            if (auth != "Bearer " + Key) { status = 401; answer = Error("Ключ не подошёл."); }
-            else answer = Route(request[0], request[1], Encoding.UTF8.GetString(body), out status);
-            byte[] bytes = Encoding.UTF8.GetBytes(answer == null ? "" : Json.Compact(answer));
+            string words = TriggerWordsJson;
+            byte[] bytes;
+            if (request[1] == "/api/suspector/trigger-words")
+            {
+                // public, without a key, as in cloud\src\releases.ts
+                status = words == null ? 404 : 200;
+                bytes = Encoding.UTF8.GetBytes(words == null ? Json.Compact(Error("No list.")) : words);
+            }
+            else
+            {
+                if (auth != "Bearer " + Key) { status = 401; answer = Error("Ключ не подошёл."); }
+                else answer = Route(request[0], request[1], Encoding.UTF8.GetString(body), out status);
+                bytes = Encoding.UTF8.GetBytes(answer == null ? "" : Json.Compact(answer));
+            }
             string head = "HTTP/1.1 " + status + " X\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: " + bytes.Length + "\r\nConnection: close\r\n\r\n";
             byte[] h = Encoding.ASCII.GetBytes(head);
             s.Write(h, 0, h.Length);

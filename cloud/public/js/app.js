@@ -8,6 +8,7 @@ import { renderJournal } from './pages/journal.js';
 import { renderKeys } from './pages/keys.js';
 import { renderNetwork } from './pages/network.js';
 import { renderReleases } from './pages/releases.js';
+import { renderTriggerWords } from './pages/trigger-words.js';
 import { renderUsers } from './pages/users.js';
 
 const main = document.getElementById('main');
@@ -34,6 +35,7 @@ const PAGES = [
   { hash: '#/downloads', icon: '📥', label: 'Загрузки', role: 'viewer' },
   { hash: '#/users', icon: '👥', label: 'Пользователи', role: 'admin' },
   { hash: '#/network', icon: '🌐', label: 'Сеть', role: 'admin' },
+  { hash: '#/trigger-words', icon: '🔎', label: 'Слова SUSpector', role: 'admin' },
   { hash: '#/releases', icon: '📦', label: 'Версии программ', role: 'admin' },
   { hash: '#/journal', icon: '📜', label: 'Журнал', role: 'admin' },
 ];
@@ -139,6 +141,8 @@ async function route() {
     renderUsers(context);
   } else if (hash === '#/network' && hasRole(me, 'admin')) {
     renderNetwork(context);
+  } else if (hash === '#/trigger-words' && hasRole(me, 'admin')) {
+    renderTriggerWords(context);
   } else if (hash === '#/journal' && hasRole(me, 'admin')) {
     renderJournal(context);
   } else if (hash === '#/releases' && hasRole(me, 'admin')) {

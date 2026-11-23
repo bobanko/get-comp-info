@@ -118,6 +118,109 @@ namespace CompInfo
             }
         }
 
+        // ---------- trigger words of the document check ----------
+
+        // The list the admin keeps in the cloud (web page «Слова SUSpector»), asked before every document scan.
+        // A copy of the last answer is kept in cachePath for scans without internet. Without a list in the cloud
+        // the built-in one is used and the copy removed; without an answer, the copy, and without a copy, the built-in list.
+        // source tells which one, for the status line.
+        public static TriggerWords LoadTriggerWords(string cachePath, out string source)
+        {
+            return LoadTriggerWords(ApiUrl + "/trigger-words", cachePath, out source);
+        }
+
+        internal static TriggerWords LoadTriggerWords(string url, string cachePath, out string source)
+        {
+            string answer = null;
+            bool none = false;
+            try { answer = DownloadSmall(url, 5000); }
+            catch (WebException e)
+            {
+                HttpWebResponse response = e.Response as HttpWebResponse;
+                none = response != null && response.StatusCode == HttpStatusCode.NotFound;
+            }
+            catch (Exception) { }
+            if (answer != null)
+            {
+                TriggerWords cloud = CloudWords(answer);
+                if (cloud != null)
+                {
+                    try
+                    {
+                        Directory.CreateDirectory(Path.GetDirectoryName(cachePath));
+                        File.WriteAllText(cachePath, answer, new System.Text.UTF8Encoding(false));
+                    }
+                    catch (Exception) { }
+                    source = L.F("Слова-триггеры: список из облака от {0}.", WordsDate(answer));
+                    return cloud;
+                }
+            }
+            if (none)
+            {
+                try { if (File.Exists(cachePath)) File.Delete(cachePath); } catch (Exception) { }
+            }
+            else
+            {
+                try
+                {
+                    string saved = File.Exists(cachePath) ? File.ReadAllText(cachePath, System.Text.Encoding.UTF8) : null;
+                    TriggerWords copy = saved == null ? null : CloudWords(saved);
+                    if (copy != null)
+                    {
+                        source = L.F("Слова-триггеры: сохранённый список из облака от {0} (облако сейчас недоступно).", WordsDate(saved));
+                        return copy;
+                    }
+                }
+                catch (Exception) { }
+            }
+            source = L.T("Слова-триггеры: встроенный список программы.");
+            return SecurityAudit.BuiltInWords();
+        }
+
+        // {"revision": 3, "updatedAt": "…", "text": "…"}; null when it holds no words.
+        static TriggerWords CloudWords(string json)
+        {
+            try
+            {
+                JsonObject o = Json.ParseObject(json);
+                TriggerWords list = TriggerWords.Parse(o.Text("text"));
+                return list.Words.Length > 0 ? list : null;
+            }
+            catch (Exception) { return null; }
+        }
+
+        static string WordsDate(string json)
+        {
+            try
+            {
+                DateTime at;
+                string text = Json.ParseObject(json).Text("updatedAt") ?? "";
+                if (DateTime.TryParse(text, System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out at))
+                    return at.ToLocalTime().ToString("dd.MM.yyyy HH:mm");
+            }
+            catch (Exception) { }
+            return "?";
+        }
+
+        // A short answer with a time limit: the scan must not wait long for a slow network.
+        static string DownloadSmall(string url, int timeout)
+        {
+            HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
+            request.Timeout = timeout;
+            request.ReadWriteTimeout = timeout;
+            request.UserAgent = "SUSpector/" + AppVersion.Text;
+            using (WebResponse response = request.GetResponse())
+            using (StreamReader reader = new StreamReader(response.GetResponseStream(), System.Text.Encoding.UTF8))
+            {
+                char[] buffer = new char[256 * 1024];
+                int length = 0, read;
+                while (length < buffer.Length && (read = reader.Read(buffer, length, buffer.Length - length)) > 0) length += read;
+                if (length == buffer.Length) throw new InvalidDataException("The answer is too long.");
+                return new string(buffer, 0, length);
+            }
+        }
+
         public static void RemoveLeftovers(string executablePath)
         {
             try

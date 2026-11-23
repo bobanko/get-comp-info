@@ -1,18 +1,36 @@
-# Trigger words of the «Поиск ДСК-файлов» check (SUSpector and the «Кибербезопасность» section of comp-info).
+# Trigger words of the «Поиск ДСК-файлов» check of SUSpector.
 # One word or phrase per line, as it should be shown in the report; case does not matter when searching.
-# Empty lines and lines starting with # are skipped.
-# tools\build.BAT builds this file into the programs: after a change rebuild and release a new version.
+# A space in a phrase matches any spaces or none: «т. в. о.» also finds «т.в.о.».
+# [высокий], [средний], [низкий] start a level: found files are ordered by their most important word.
+# Words before the first level are medium. Empty lines and lines starting with # are skipped.
+#
+# This is the built-in list. The admin keeps the working one in the cloud (web page «Слова SUSpector»):
+# SUSpector loads it before every document scan, so a change there needs no new release.
+# tools\build.BAT builds this file into the program: after a change rebuild and release a new version.
+
+[высокий]
+таємно
+особливої важливості
+ДСК-ЕП
+ДСК
+для службового користування
+гриф надав
+
+[средний]
 ТФД
+БЧС
+ЗВДТ
+ООС
+штатка
+т. в. о.
+МОСІ
 телефонний довідник
 телефонный справочник
+
+[низкий]
+штат
 відомість
 ведомость
 вахтовка
 доповідь
 доклад
-для службового користування
-МОСІ
-ДСК-ЕП
-ДСК
-таємно
-особливої важливості

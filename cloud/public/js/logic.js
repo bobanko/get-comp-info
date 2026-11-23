@@ -338,7 +338,8 @@ export function deviceAuthor(device) {
 
 // ---------- Journal ----------
 
-const NETWORK_SETTINGS_KEY = 'network';
+// Keys of the settings table (src/settings.ts, src/trigger-words.ts) and their names in the journal.
+const SETTINGS_NAMES = { network: 'Сеть', 'suspector-trigger-words': 'Слова SUSpector' };
 const ACTIVE_LABELS = { true: 'включён', false: 'отключён' };
 
 // One journal entry as text: what was done and to what, with a link to the device card when there is one.
@@ -354,7 +355,7 @@ export function journalLine(entry) {
       return { what: `Запись ${HISTORY_ACTIONS[entry.action].toLowerCase()}`, ...object(name, '#/devices/' + encodeURIComponent(entry.target)) };
     }
     case 'settings:update':
-      return { what: 'Изменены настройки', ...object(entry.target === NETWORK_SETTINGS_KEY ? 'Сеть' : entry.target) };
+      return { what: 'Изменены настройки', ...object(SETTINGS_NAMES[entry.target] ?? entry.target) };
     case 'release:publish':
       return { what: 'Опубликована версия Тулбокса', ...object(entry.target) };
     case 'suspector-release:publish':
