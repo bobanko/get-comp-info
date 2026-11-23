@@ -23,11 +23,14 @@ import {
 } from '../public/js/logic.js';
 import {
   commonDns,
+  formatReserved,
   generalProblems,
   isAutoRange,
   locationProblems,
   parseNumberList,
   parseOctet,
+  parseReserved,
+  reservedProblems,
   subnetInfo,
   subnetMask,
   suggestHostRange,
@@ -409,5 +412,26 @@ describe('journal lines', () => {
     expect(journalActor({ ...base, actorKey: 'Флешка' })).toBe('ключ «Флешка»');
     expect(journalActor(base)).toBe('Аня');
     expect(journalActor({ ...base, actor: 'GitHub Actions', actorName: null })).toBe('GitHub Actions');
+  });
+});
+
+describe('reserved addresses', () => {
+  it('are one per line with an optional note', () => {
+    const list = parseReserved('10.0.0.5 — сервер\n\n 10.0.0.6\n10.0.0.7: камера - двор\n10.0.0.8 - принтер');
+    expect(list).toEqual([
+      { address: '10.0.0.5', note: 'сервер' },
+      { address: '10.0.0.6', note: '' },
+      { address: '10.0.0.7', note: 'камера - двор' },
+      { address: '10.0.0.8', note: 'принтер' },
+    ]);
+    expect(parseReserved(formatReserved(list))).toEqual(list);
+    expect(formatReserved(undefined)).toBe('');
+  });
+
+  it('show the same mistakes as the server', () => {
+    expect(reservedProblems('10.0.0.5 — a\n10.0.0.6')).toEqual([]);
+    expect(reservedProblems('10.0.0.256')).toHaveLength(1);
+    expect(reservedProblems('10.0.0.5\n10.0.0.5')).toHaveLength(1);
+    expect(reservedProblems('10.0.0.5 ' + 'x'.repeat(201))).toHaveLength(1);
   });
 });

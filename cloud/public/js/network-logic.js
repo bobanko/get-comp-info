@@ -4,7 +4,38 @@
 const IPV4 = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
 
 export function emptyLocation() {
-  return { name: '', thirdOctet: '', prefixLength: 25, gatewayOctet: '', firstHostOctet: '', lastHostOctet: '', dnsServers: [], segments: [] };
+  return { name: '', tk: '', thirdOctet: '', prefixLength: 25, gatewayOctet: '', firstHostOctet: '', lastHostOctet: '', dnsServers: [], segments: [] };
+}
+
+// Reserved addresses as the page shows them: one per line, "10.0.0.5 — note".
+export function formatReserved(list) {
+  return (list ?? []).map((item) => (item.note ? `${item.address} — ${item.note}` : item.address)).join('\n');
+}
+
+// The textarea back to [{ address, note }]; the dash or colon after the address is optional.
+export function parseReserved(text) {
+  return String(text ?? '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const match = /^([^\s:—–]+)\s*(?:[—–:-]\s*)?(.*)$/.exec(line);
+      return { address: match[1], note: match[2].trim() };
+    });
+}
+
+// Same rules as validateNetworkSettings on the server.
+export function reservedProblems(text) {
+  const problems = [];
+  const seen = new Set();
+  for (const { address, note } of parseReserved(text)) {
+    if (!IPV4.test(address)) problems.push(`«${address}» — не IPv4-адрес.`);
+    else if (seen.has(address)) problems.push(`${address} повторяется.`);
+    if (note.length > 200) problems.push(`${address}: примечание длиннее 200 символов.`);
+    seen.add(address);
+  }
+  if (seen.size > 1000) problems.push('Не больше 1000 адресов.');
+  return problems;
 }
 
 // "111, 112 113" -> [111, 112, 113]; anything that is not a number becomes NaN for the server to reject.
@@ -123,6 +154,7 @@ export function locationProblems(location, allNames = []) {
     problems.push('Такое название уже есть.');
   }
 
+  if (String(location.tk ?? '').trim().length > 20) problems.push('Номер ТК длиннее 20 символов.');
   if (parseOctet(location.thirdOctet) === null) problems.push('Третий октет подсети: число от 0 до 255.');
 
   const info = subnetInfo(location.gatewayOctet, location.prefixLength);

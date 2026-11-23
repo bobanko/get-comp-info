@@ -5,11 +5,14 @@ import {
   autoHostRange,
   commonDns,
   emptyLocation,
+  formatReserved,
   generalProblems,
   isAutoRange,
   locationProblems,
   parseAddressList,
   parseNumberList,
+  parseReserved,
+  reservedProblems,
   subnetInfo,
   subnetMask,
 } from '../network-logic.js';
@@ -42,8 +45,10 @@ export async function renderNetwork(context) {
     dnsServers: sharedDns,
     domainCheckHost: value.domainCheckHost ?? '',
     domainName: value.domainName ?? '',
+    reserved: formatReserved(value.reservedAddresses),
     locations: value.locations.map((location) => ({
       ...location,
+      tk: location.tk ?? '',
       dnsServers: location.dnsServers.join(', ') === sharedDns ? '' : location.dnsServers.join(', '),
       segments: (location.segments ?? []).join(', '),
       autoRange: isAutoRange(location),
@@ -181,6 +186,7 @@ function draw(context, setting, history, draft, view, errorText) {
       'tr',
       { class: editing ? 'location-row open' : 'location-row', onclick: toggle },
       h('td', { class: 'name' }, liveText(() => String(location.name ?? '').trim() || `Корпус ${index + 1}`), status),
+      h('td', {}, liveText(() => String(location.tk ?? '').trim() || '—')),
       h(
         'td',
         { class: 'mono' },
@@ -208,7 +214,7 @@ function draw(context, setting, history, draft, view, errorText) {
         h('button', { class: 'button small', type: 'button', onclick: stop(toggle) }, editing ? 'Свернуть' : 'Изменить'),
       ),
     );
-    return editing ? [summary, h('tr', { class: 'editor-row' }, h('td', { colspan: '6' }, editor(location, index)))] : [summary];
+    return editing ? [summary, h('tr', { class: 'editor-row' }, h('td', { colspan: '7' }, editor(location, index)))] : [summary];
   });
 
   function editor(location, index) {
@@ -250,6 +256,9 @@ function draw(context, setting, history, draft, view, errorText) {
         { class: 'net-grid' },
         h('span', { class: 'net-label' }, 'Название'),
         input(location, 'name', { maxlength: '60', class: 'name-input', 'aria-label': 'Название корпуса' }),
+
+        h('span', { class: 'net-label' }, 'ТК'),
+        input(location, 'tk', { maxlength: '20', class: 'mono segments', placeholder: 'ТК1000', 'aria-label': 'Номер ТК корпуса' }),
 
         h('span', { class: 'net-label' }, 'Подсеть'),
         h(
@@ -358,10 +367,33 @@ function draw(context, setting, history, draft, view, errorText) {
       h(
         'table',
         { class: 'locations' },
-        h('thead', {}, h('tr', {}, h('th', {}, 'Корпус'), h('th', {}, 'Подсеть'), h('th', {}, 'Шлюз'), h('th', {}, 'Адреса ПК'), h('th', {}, 'DNS'), h('th', {}))),
+        h('thead', {}, h('tr', {}, h('th', {}, 'Корпус'), h('th', {}, 'ТК'), h('th', {}, 'Подсеть'), h('th', {}, 'Шлюз'), h('th', {}, 'Адреса ПК'), h('th', {}, 'DNS'), h('th', {}))),
         h('tbody', {}, rows),
       ),
     ),
+  );
+
+  const reserved = h(
+    'section',
+    { class: 'panel' },
+    h('h2', {}, liveText(() => `Занятые адреса (${parseReserved(draft.reserved).length})`)),
+    h(
+      'p',
+      { class: 'muted small' },
+      'Адреса без записи в базе: серверы, камеры, принтеры, компьютеры без серийного номера. Программа не предлагает их как свободные при вводе в домен. По одному в строке, примечание через тире.',
+    ),
+    h('textarea', {
+      class: 'mono reserved',
+      rows: '10',
+      placeholder: '10.0.0.5 — сервер',
+      'aria-label': 'Занятые адреса',
+      value: draft.reserved,
+      oninput: (event) => {
+        draft.reserved = event.target.value;
+        refresh();
+      },
+    }),
+    problemList(() => reservedProblems(draft.reserved)),
   );
 
   const saveButton = h('button', { class: 'button primary', type: 'submit' }, 'Сохранить');
@@ -375,6 +407,11 @@ function draw(context, setting, history, draft, view, errorText) {
         if (generalProblems(draft).length > 0) {
           view.editing = null;
           redraw('Исправьте общую часть адреса.');
+          return;
+        }
+        if (reservedProblems(draft.reserved).length > 0) {
+          view.editing = null;
+          redraw('Исправьте список занятых адресов.');
           return;
         }
         const broken = draft.locations.findIndex((location) => locationProblems(location, names()).length > 0);
@@ -397,6 +434,7 @@ function draw(context, setting, history, draft, view, errorText) {
     errorText && h('div', { class: 'notice notice-error', role: 'alert' }, h('p', {}, errorText)),
     general,
     locations,
+    reserved,
     h(
       'div',
       { class: 'actions sticky-actions' },
@@ -463,7 +501,10 @@ function toValue(draft) {
       };
       const segments = parseNumberList(location.segments);
       if (segments.length > 0) result.segments = segments;
+      const tk = String(location.tk ?? '').trim();
+      if (tk) result.tk = tk;
       return result;
     }),
+    reservedAddresses: parseReserved(draft.reserved),
   };
 }

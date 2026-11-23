@@ -241,9 +241,11 @@ namespace CompInfo
             string dir = TempDir();
             string path = Path.Combine(dir, "network-profiles.json");
             File.WriteAllText(path, "{\"value\":{\"firstOctet\":10,\"segments\":[111,112]," +
-                "\"locations\":[{\"name\":\"Штаб\",\"thirdOctet\":171,\"prefixLength\":25,\"gatewayOctet\":129,\"firstHostOctet\":130,\"lastHostOctet\":133,\"dnsServers\":[\"10.121.1.2\"]}]}}", Encoding.UTF8);
+                "\"locations\":[{\"name\":\"Штаб\",\"tk\":\"ТК1\",\"thirdOctet\":171,\"prefixLength\":25,\"gatewayOctet\":129,\"firstHostOctet\":130,\"lastHostOctet\":133,\"dnsServers\":[\"10.121.1.2\"]}]," +
+                "\"reservedAddresses\":[{\"address\":\"10.111.171.130\",\"note\":\"камера\"},{\"address\":\"10.112.171.130\",\"note\":\"\"}]}}", Encoding.UTF8);
             NetworkProfiles p = NetworkProfiles.Read(path);
             NetworkProfiles.Location l = p.Locations[0];
+            Check(l.Tk == "ТК1" && p.Reserved.Count == 2 && p.Reserved["10.111.171.130"] == "камера", "telecom room and reserved addresses are read");
             Check(p.Address(l, 112, 130) == "10.112.171.130" && p.Gateway(l, 112) == "10.112.171.129", "address and gateway of an office");
             string data = Path.Combine(dir, "data");
             Directory.CreateDirectory(data);
@@ -259,6 +261,9 @@ namespace CompInfo
             Check(book.FirstFree(p, l, 112, 133, null) == 132, "next free address goes round the range");
             Check(book.FirstFree(p, l, 112, -1, new[] { "10.112.171.132" }) == 133, "address found in use on the network is skipped");
             Check(book.FirstFree(p, l, 111, -1, null) == 130, "another segment is free");
+            book.AddReserved(p);
+            Check(book.FirstFree(p, l, 111, -1, null) == 131, "a reserved address is not free");
+            Check(book.Owner("10.111.171.130").Contains("камера") && book.Owner("10.112.171.130") == "FR-042-A", "a record names its address before the reserved list");
             book.Add("10.112.171.132, 10.112.171.133", "X");
             Check(book.FirstFree(p, l, 112, -1, null) == -1, "whole range taken");
             Check(AddressBook.Read(Path.Combine(dir, "none"), null).Used.Count == 0, "no data folder");

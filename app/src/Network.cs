@@ -17,7 +17,11 @@ namespace CompInfo
             public string SubnetMask;
             public List<string> DnsServers = new List<string>();
             public List<int> Segments;          // own segments, or null for the common list
+            public string Tk;                   // number of the telecom room (ТК), or null
         }
+
+        // Addresses without a device record (servers, cameras, computers that cannot be identified): address -> note.
+        public Dictionary<string, string> Reserved = new Dictionary<string, string>(StringComparer.Ordinal);
 
         public bool Missing = true;
         public List<Location> Locations = new List<Location>();
@@ -72,6 +76,8 @@ namespace CompInfo
                         if (dns != null) foreach (object d in dns) l.DnsServers.Add(Convert.ToString(d));
                         List<int> own = Ints(o["segments"]);
                         l.Segments = own.Count > 0 ? own : null;
+                        string tk = (o.Text("tk") ?? "").Trim();
+                        l.Tk = tk.Length > 0 ? tk : null;
                         p.Locations.Add(l);
                     }
                 }
@@ -82,6 +88,16 @@ namespace CompInfo
                 string host = value.Text("domainCheckHost");
                 p.DomainCheckHost = string.IsNullOrEmpty(host) ? null : host;
                 string domain = (value.Text("domainName") ?? p.DomainCheckHost ?? "").Trim().ToLowerInvariant();
+                System.Collections.IList reserved = value["reservedAddresses"] as System.Collections.IList;
+                if (reserved != null)
+                {
+                    foreach (object item in reserved)
+                    {
+                        JsonObject o = item as JsonObject;
+                        string address = o == null ? "" : (o.Text("address") ?? "").Trim();
+                        if (address.Length > 0 && !p.Reserved.ContainsKey(address)) p.Reserved[address] = (o.Text("note") ?? "").Trim();
+                    }
+                }
                 p.DomainName = System.Text.RegularExpressions.Regex.IsMatch(domain, "^(?=.{1,253}$)[a-z0-9]+(?:[.-][a-z0-9]+)*\\.[a-z0-9]*[a-z][a-z0-9]*$") ? domain : null;
                 return p;
             }
@@ -163,6 +179,13 @@ namespace CompInfo
         {
             foreach (string a in (addresses ?? "").Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries))
                 if (!Used.ContainsKey(a)) Used[a] = name;
+        }
+
+        // The reserved addresses of the cloud network settings; a record that has the address names it first.
+        public void AddReserved(NetworkProfiles p)
+        {
+            foreach (KeyValuePair<string, string> r in p.Reserved)
+                Add(r.Key, L.T("занятые адреса на сайте") + (r.Value.Length > 0 ? " (" + r.Value + ")" : ""));
         }
 
         // Name of the computer that has this address in the database, or null.

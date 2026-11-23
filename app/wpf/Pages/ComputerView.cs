@@ -348,6 +348,7 @@ namespace CompInfo.Wpf
             try
             {
                 book = await Task.Run(() => AddressBook.Read(dataPath, OwnRecord(dataPath)));
+                book.AddReserved(profiles);
                 wired = await Task.Run(() =>
                 {
                     List<Adapter> list = LanSetup.WiredAdapters();

@@ -533,6 +533,7 @@ namespace CompInfo
             "Вільна адреса вибирається за локальною копією бази. Синхронізуйте її, поки є інтернет, щоб бачити адреси, видані колегами.",
             "The free address is chosen by the local copy of the database. Synchronize it while there is internet to see the addresses your colleagues gave out.",
             "занят: ", "зайнята: ", "taken: ",
+            "занятые адреса на сайте", "зайняті адреси на сайті", "reserved addresses on the website",
             "занят в сети", "зайнята в мережі", "in use on the network",
             "текущий адрес ПК", "поточна адреса ПК", "this PC's address",
             "свободных нет", "вільних немає", "none free",

@@ -67,6 +67,25 @@ describe('network settings', () => {
     expect(saved.body.setting.value).not.toHaveProperty('extra');
   });
 
+  it('keep the telecom room and the reserved addresses', async () => {
+    const admin = await addUser('admin');
+    const { key } = await harvesterKey();
+    const [main, store] = sampleSettings().locations;
+    const value = sampleSettings({
+      locations: [{ ...main, tk: ' ТК100 ' }, { ...store, tk: '' }],
+      reservedAddresses: [{ address: ' 10.20.5.131 ', note: ' сервер ' }, { address: '10.20.5.132' }],
+    });
+    const saved = await webRequest(admin, 'PUT', '/settings/network', { baseRevision: await currentRevision(admin), value });
+    expect(saved.status).toBe(200);
+    const downloaded = (await consoleRequest(key, 'GET', '/settings/network')).body.value;
+    expect(downloaded.locations[0].tk).toBe('ТК100');
+    expect(downloaded.locations[1]).not.toHaveProperty('tk');
+    expect(downloaded.reservedAddresses).toEqual([{ address: '10.20.5.131', note: 'сервер' }, { address: '10.20.5.132', note: '' }]);
+
+    const without = await webRequest(admin, 'PUT', '/settings/network', { baseRevision: await currentRevision(admin), value: sampleSettings() });
+    expect(without.body.setting.value.reservedAddresses).toEqual([]);
+  });
+
   it('validate addresses and ranges', async () => {
     const admin = await addUser('admin');
     const location = sampleSettings().locations[0];
@@ -86,6 +105,12 @@ describe('network settings', () => {
       ['first after last', { locations: [{ ...location, firstHostOctet: 200, lastHostOctet: 150 }] }],
       ['bad DNS', { locations: [{ ...location, dnsServers: ['10.9.0.300'] }] }],
       ['no DNS', { locations: [{ ...location, dnsServers: [] }] }],
+      ['long telecom room', { locations: [{ ...location, tk: 'x'.repeat(21) }] }],
+      ['telecom room not text', { locations: [{ ...location, tk: 5 }] }],
+      ['reserved not a list', { reservedAddresses: '10.0.0.5' }],
+      ['reserved bad address', { reservedAddresses: [{ address: '10.0.0.256', note: '' }] }],
+      ['reserved repeats', { reservedAddresses: [{ address: '10.0.0.5', note: 'a' }, { address: '10.0.0.5', note: 'b' }] }],
+      ['reserved long note', { reservedAddresses: [{ address: '10.0.0.5', note: 'x'.repeat(201) }] }],
     ];
     for (const [label, overrides] of invalid) {
       const result = await webRequest(admin, 'PUT', '/settings/network', { baseRevision: await currentRevision(admin), value: sampleSettings(overrides) });

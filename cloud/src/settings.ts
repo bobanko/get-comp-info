@@ -15,7 +15,18 @@ export interface NetworkLocation {
   dnsServers: string[];
   // Second-octet options for this location only; when absent the common `segments` apply.
   segments?: number[];
+  // Number of the location's telecom room (ТК), for people; absent when not known.
+  tk?: string;
 }
+
+// An address taken by something without a device record (a server, a camera, a computer that cannot be identified,
+// or one found by a scan): the program does not offer it as a free one.
+export interface ReservedAddress {
+  address: string;
+  note: string;
+}
+
+export const MAX_RESERVED_ADDRESSES = 1000;
 
 export interface NetworkSettings {
   firstOctet: number;
@@ -27,6 +38,7 @@ export interface NetworkSettings {
   // Kept here, not in the public repository.
   domainName: string | null;
   locations: NetworkLocation[];
+  reservedAddresses: ReservedAddress[];
 }
 
 export interface SettingRecord<T> {
@@ -129,9 +141,31 @@ export function validateNetworkSettings(value: unknown): NetworkSettings {
     if (raw.segments !== undefined && raw.segments !== null && !(Array.isArray(raw.segments) && raw.segments.length === 0)) {
       location.segments = segmentList(raw.segments, `${where}, own segments`);
     }
+    if (raw.tk !== undefined && raw.tk !== null && raw.tk !== '') {
+      const tk = typeof raw.tk === 'string' ? raw.tk.trim() : '';
+      if (tk === '' || tk.length > 20) fail(400, 'invalid_settings', `${where}: the telecom room number is up to 20 characters.`);
+      location.tk = tk;
+    }
     return location;
   });
-  return { firstOctet, segments, domainCheckHost, domainName, locations };
+
+  const reservedAddresses: ReservedAddress[] = [];
+  if (value.reservedAddresses !== undefined && value.reservedAddresses !== null) {
+    if (!Array.isArray(value.reservedAddresses) || value.reservedAddresses.length > MAX_RESERVED_ADDRESSES) {
+      fail(400, 'invalid_settings', `Reserved addresses: a list of up to ${MAX_RESERVED_ADDRESSES} is required.`);
+    }
+    const seen = new Set<string>();
+    value.reservedAddresses.forEach((raw: unknown, index: number) => {
+      const address = isPlainObject(raw) && typeof raw.address === 'string' ? raw.address.trim() : '';
+      if (!IPV4.test(address)) fail(400, 'invalid_settings', `Reserved address ${index + 1}: an IPv4 address is required.`);
+      if (seen.has(address)) fail(400, 'invalid_settings', `Reserved address ${address} repeats.`);
+      seen.add(address);
+      const note = isPlainObject(raw) && typeof raw.note === 'string' ? raw.note.trim() : '';
+      if (note.length > 200) fail(400, 'invalid_settings', `Reserved address ${address}: the note is up to 200 characters.`);
+      reservedAddresses.push({ address, note });
+    });
+  }
+  return { firstOctet, segments, domainCheckHost, domainName, locations, reservedAddresses };
 }
 
 interface SettingRow {
