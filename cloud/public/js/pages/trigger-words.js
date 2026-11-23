@@ -5,14 +5,34 @@ import { HIGH, levelCounts, LOW, MEDIUM, normalizeTriggerWords, parseTriggerWord
 
 const LEVEL_BADGES = { [HIGH]: 'badge badge-danger', [MEDIUM]: 'badge badge-warn', [LOW]: 'badge badge-muted' };
 
+// The first text of the editor while the cloud has no list: the list built into SUSpector (app\trigger-words.txt)
+// as of 2026-11-23. Once saved, the cloud list is what the page shows.
 const TEMPLATE = `[высокий]
+таємно
+особливої важливості
+ДСК-ЕП
 ДСК
+для службового користування
+гриф надав
 
 [средний]
 ТФД
+БЧС
+ЗВДТ
+ООС
+штатка
+т. в. о.
+МОСІ
+телефонний довідник
+телефонный справочник
 
 [низкий]
+штат
 відомість
+ведомость
+вахтовка
+доповідь
+доклад
 `;
 
 // Admin page: the trigger words of SUSpector's ДСК document check. SUSpector downloads the list before every scan,
@@ -112,7 +132,7 @@ export async function renderTriggerWords(context) {
     ),
     setting
       ? h('p', { class: 'muted small', title: setting.updatedBy }, `Ревизия ${setting.revision}, изменено ${formatDate(setting.updatedAt)}, ${setting.updatedByName ?? setting.updatedBy}`)
-      : h('div', { class: 'notice' }, h('p', {}, 'Список в облаке ещё не сохранён: SUSpector использует встроенный. Впишите слова и сохраните.')),
+      : h('div', { class: 'notice' }, h('p', {}, 'Список в облаке ещё не сохранён: SUSpector использует встроенный. Ниже он и есть — поправьте при необходимости и сохраните.')),
     form,
     history.length > 0 &&
       h(
