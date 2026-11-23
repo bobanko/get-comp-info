@@ -313,7 +313,8 @@ try {
     Assert-True ($kept.hostname -eq 'PC-1 copy' -and $null -eq $kept.PSObject.Properties['addedToExternalDatabase']) 'The newest collection is kept in the file of the id'
     Assert-True (($script:server.Devices['UUID-1'].data | ConvertFrom-Json).hostname -eq 'PC-1 copy') 'The merged record is sent'
     $backups = @(Get-ChildItem (Join-Path $pc 'data\.duplicates') -Directory | Where-Object { Test-Path (Join-Path $_.FullName 'copy-of-uuid.json') })
-    Assert-True ($backups.Count -eq 1 -and @(Get-ChildItem $backups[0].FullName -File).Count -eq 2) 'Both old files are kept in data\.duplicates'
+    # The folder is named by the second: an earlier merge of this test may share it, so look for these two files only.
+    Assert-True ($backups.Count -eq 1 -and (Test-Path (Join-Path $backups[0].FullName 'UUID-1.json'))) 'Both old files are kept in data\.duplicates'
     Remove-Item -LiteralPath (Join-Path $pc 'data\broken.json')
 
     # ---------- Ids that .NET would otherwise change in the URL ----------
