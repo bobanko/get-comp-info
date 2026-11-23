@@ -431,6 +431,17 @@ table.locations td.row-actions .button { margin-left: 4px; }
 .row-problem:not(:empty) { display: inline-block; margin-left: 8px; padding: 0 6px; border-radius: 999px; background: var(--danger); color: #fff; font-size: 11px; line-height: 16px; }
 .editor-row > td { padding: 4px 16px 16px; background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface)); }
 .location-editor .actions { margin-top: 14px; }
+/* «Слова SUSpector»: word — priority. */
+table.trigger-words { margin-bottom: 10px; }
+table.trigger-words td { vertical-align: middle; padding-top: 4px; padding-bottom: 4px; }
+table.trigger-words td.number { width: 3ch; text-align: right; }
+table.trigger-words th:nth-child(3), table.trigger-words td:nth-child(3) { width: 1%; white-space: nowrap; }
+table.trigger-words td.row-actions { width: 1%; text-align: right; }
+table.trigger-words .word-input { width: 100%; }
+table.trigger-words tr.invalid .word-input { border-color: var(--danger); background: var(--danger-soft); }
+.level-select.level-3 { color: var(--danger); font-weight: 600; }
+.level-select.level-2 { color: var(--warn); font-weight: 600; }
+.level-select.level-1 { color: var(--muted); }
 details.panel summary { font-weight: 600; }
 details.panel ul { margin: 8px 0 0; }
 

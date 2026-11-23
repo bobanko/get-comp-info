@@ -1,4 +1,4 @@
-// The SUSpector trigger word list, as the admin writes it on the page «Слова SUSpector». The page and the Worker
+// The SUSpector trigger word list, kept as text; the page «Слова SUSpector» edits it as a table. The page and the Worker
 // (src/trigger-words.ts) check it with this one module. The rules are those of app\src\TriggerWords.cs, which reads
 // the list in the program: one word or phrase per line; [высокий], [средний], [низкий] (also Ukrainian and English
 // names) start a level; # starts a comment; words before the first level are medium; a repeat (any case) counts once.
@@ -66,6 +66,42 @@ export function parseTriggerWords(text) {
 // "высокий 6 · средний 9 · низкий 6"
 export function levelCounts(words) {
   return [HIGH, MEDIUM, LOW].map((level) => ({ level, label: LEVEL_LABELS[level], count: words.filter((w) => w.level === level).length }));
+}
+
+const SECTION_NAMES = { [HIGH]: 'высокий', [MEDIUM]: 'средний', [LOW]: 'низкий' };
+
+// The table rows of the page as list text: [высокий], then [средний], then [низкий], the words of a level
+// in table order. Empty rows are left out.
+export function wordsToText(rows) {
+  return [HIGH, MEDIUM, LOW]
+    .map((level) => {
+      const words = rows.filter((row) => Number(row.level) === level && row.text.trim() !== '').map((row) => row.text.trim().replace(/\s+/g, ' '));
+      return words.length > 0 ? `[${SECTION_NAMES[level]}]\n${words.join('\n')}\n` : '';
+    })
+    .filter(Boolean)
+    .join('\n');
+}
+
+// Mistakes of the table rows: { rows: Map(index → text), problems: [text] }. A word may not look like a comment
+// or a level line of the list text; a repeat (any case) is a mistake here, because the table has no other way to show it.
+export function checkWordRows(rows) {
+  const marks = new Map();
+  const seen = new Map();
+  let count = 0;
+  rows.forEach((row, index) => {
+    const word = row.text.trim().replace(/\s+/g, ' ');
+    if (word === '') return;
+    count++;
+    if (word.length > MAX_WORD_LENGTH) marks.set(index, `Длиннее ${MAX_WORD_LENGTH} символов.`);
+    else if (word.startsWith('#') || (word.startsWith('[') && word.endsWith(']'))) marks.set(index, 'Слово не может начинаться с # или быть целиком в квадратных скобках.');
+    else if (seen.has(word.toLowerCase())) marks.set(index, `Повтор: «${word}» уже есть в строке ${seen.get(word.toLowerCase()) + 1}.`);
+    else seen.set(word.toLowerCase(), index);
+  });
+  const problems = [];
+  if (marks.size > 0) problems.push(`Ошибок в строках: ${marks.size}. Они отмечены в таблице.`);
+  if (count === 0) problems.push('В списке нет ни одного слова.');
+  if (count > MAX_WORDS) problems.push(`Слов больше ${MAX_WORDS}.`);
+  return { rows: marks, problems };
 }
 
 // The saved form: lines without spaces at the edges, \n line ends, one line end at the end.

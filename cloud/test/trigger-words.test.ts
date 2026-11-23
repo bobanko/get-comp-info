@@ -1,6 +1,6 @@
 import { exports } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
-import { levelCounts, normalizeTriggerWords, parseTriggerWords } from '../public/js/trigger-words-logic.js';
+import { checkWordRows, levelCounts, normalizeTriggerWords, parseTriggerWords, wordsToText } from '../public/js/trigger-words-logic.js';
 import { addUser, webRequest } from './helpers';
 
 const LIST = '[высокий]\nДСК\nгриф надав\n\n[средний]\nБЧС\nт. в. о.\n\n[низкий]\nштат\n';
@@ -81,6 +81,42 @@ describe('trigger word list format', () => {
     expect(parseTriggerWords('').problems).toEqual(['В списке нет ни одного слова.']);
     expect(parseTriggerWords('[срочно]\nДСК').problems[0]).toContain('Строка 1: неизвестный уровень [срочно]');
     expect(parseTriggerWords(Array.from({ length: 301 }, (_, i) => `слово${i}`).join('\n')).problems).toEqual(['Слов больше 300.']);
+  });
+
+  it('turns the table back into list text', () => {
+    const rows = [
+      { text: ' штат ', level: 1 },
+      { text: 'ДСК', level: 3 },
+      { text: '', level: 2 },
+      { text: 'т.  в. о.', level: 2 },
+      { text: 'гриф надав', level: 3 },
+    ];
+    const text = wordsToText(rows);
+    expect(text).toBe('[высокий]\nДСК\nгриф надав\n\n[средний]\nт. в. о.\n\n[низкий]\nштат\n');
+    expect(normalizeTriggerWords(text)).toBe(text);
+    expect(parseTriggerWords(text).words.map((w: any) => [w.text, w.level])).toEqual([
+      ['ДСК', 3],
+      ['гриф надав', 3],
+      ['т. в. о.', 2],
+      ['штат', 1],
+    ]);
+    expect(wordsToText([{ text: 'БЧС', level: 2 }])).toBe('[средний]\nБЧС\n');
+  });
+
+  it('marks the table rows with mistakes', () => {
+    const { rows, problems } = checkWordRows([
+      { text: 'ДСК', level: 3 },
+      { text: 'дск', level: 1 },
+      { text: '# ДСК', level: 2 },
+      { text: '[высокий]', level: 2 },
+      { text: 'x'.repeat(101), level: 2 },
+      { text: '  ', level: 2 },
+    ]);
+    expect([...rows.keys()]).toEqual([1, 2, 3, 4]);
+    expect(rows.get(1)).toBe('Повтор: «дск» уже есть в строке 1.');
+    expect(problems).toEqual(['Ошибок в строках: 4. Они отмечены в таблице.']);
+    expect(checkWordRows([{ text: ' ', level: 2 }]).problems).toEqual(['В списке нет ни одного слова.']);
+    expect(checkWordRows([{ text: 'ДСК', level: 3 }]).problems).toEqual([]);
   });
 
   it('saves the text tidy', () => {
