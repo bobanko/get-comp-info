@@ -213,7 +213,7 @@ namespace CompInfo
             { "hostname", L.T("Имя компьютера") }, { "ip", L.T("IP-адрес") }, { "mac", L.T("MAC-адрес") },
             { "serial", L.T("Серийный номер") }, { "smbiosUuid", "UUID" }, { "manufacturer", L.T("Производитель") },
             { "windowsMachineGuid", L.T("ID установки Windows") }, { "partOfDomain", L.T("Член домена") }, { "domain", L.T("Домен / рабочая группа") },
-            { "model", L.T("Модель") }, { "username", L.T("Пользователь") }, { "comment", L.T("Комментарий") },
+            { "model", L.T("Модель") }, { "username", L.T("Пользователь") }, { "employee", L.T("Сотрудник") }, { "comment", L.T("Комментарий") },
             { "windows", "Windows" }, { "esetInstalled", L.T("ESET установлен") }, { "collectedAt", L.T("Дата сбора") }, { "createdAt", L.T("Дата создания") },
         }; } }
 

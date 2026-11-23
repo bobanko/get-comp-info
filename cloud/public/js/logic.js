@@ -30,6 +30,7 @@ export const FIELD_LABELS = {
   manufacturer: 'Производитель',
   model: 'Модель',
   username: 'Пользователь',
+  employee: 'Сотрудник',
   comment: 'Комментарий',
   windows: 'Windows',
   esetInstalled: 'ESET установлен',
@@ -41,13 +42,13 @@ export const FIELD_LABELS = {
 export const FIELD_ORDER = Object.keys(FIELD_LABELS);
 
 // Fields an editor may change in the web interface. Identity and collection dates come from the console.
-export const EDITABLE_FIELDS = ['hostname', 'ip', 'mac', 'serial', 'manufacturer', 'model', 'username', 'windows', 'comment', 'inventoried'];
+export const EDITABLE_FIELDS = ['hostname', 'ip', 'mac', 'serial', 'manufacturer', 'model', 'username', 'employee', 'windows', 'comment', 'inventoried'];
 
 // Yes/no fields: a checkbox in the edit form; a missing value means "no".
 export const BOOLEAN_FIELDS = ['inventoried'];
 
 // Shown in the card even when the record does not have them yet.
-export const ALWAYS_SHOWN_FIELDS = ['inventoried'];
+export const ALWAYS_SHOWN_FIELDS = ['employee', 'inventoried'];
 
 // Inventory mark, set by people in the web interface (the console keeps it, never sets it).
 export function isInventoried(device) {
@@ -228,6 +229,7 @@ export const SORT_KEYS = {
   hostname: (d) => d.data.hostname,
   ip: (d) => ipSortValue(d.data.ip),
   username: (d) => d.data.username,
+  employee: (d) => d.data.employee,
   serial: (d) => d.data.serial,
   model: (d) => [d.data.manufacturer, d.data.model].filter((v) => !isBlank(v)).join(' '),
   windows: (d) => d.data.windows,

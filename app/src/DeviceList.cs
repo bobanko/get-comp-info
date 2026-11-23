@@ -15,8 +15,8 @@ namespace CompInfo
         public readonly List<string> Warnings = new List<string>();
         Dictionary<string, int> ipCounts = new Dictionary<string, int>(), hostCounts = new Dictionary<string, int>(), serialCounts = new Dictionary<string, int>();
 
-        // Columns of the table: 0 name, 1 IP, 2 serial, 3 user, 4 collected, 5 cloud, 6 ESET, 7 inventory, 8 comment.
-        public static string[] Columns { get { return new[] { L.T("Имя компьютера"), L.T("IP-адрес"), L.T("Серийный номер"), L.T("Пользователь"), L.T("Собрано"), L.T("Облако"), "ESET", L.T("Инвентаризация"), L.T("Комментарий") }; } }
+        // Columns of the table: 0 name, 1 IP, 2 serial, 3 employee or user, 4 collected, 5 cloud, 6 ESET, 7 inventory, 8 comment.
+        public static string[] Columns { get { return new[] { L.T("Имя компьютера"), L.T("IP-адрес"), L.T("Серийный номер"), L.T("Сотрудник / пользователь"), L.T("Собрано"), L.T("Облако"), "ESET", L.T("Инвентаризация"), L.T("Комментарий") }; } }
         public const int CommentColumn = 8;
         // ESET and the comment are not sortable, as in the console.
         public static bool Sortable(int column) { return column != 6 && column != CommentColumn; }
@@ -115,6 +115,13 @@ namespace CompInfo
         }
 
         // The inventory mark set on the website.
+        // The person column: the employee set on the website, otherwise the Windows user.
+        public static string Person(JsonObject d)
+        {
+            string employee = (d.Text("employee") ?? "").Trim();
+            return employee.Length > 0 ? employee : d.Text("username") ?? "";
+        }
+
         public static bool Inventoried(JsonObject d) { return d["inventoried"] is bool && (bool)d["inventoried"]; }
 
         // Every word of the search occurs somewhere in the record (any field), as typed or in the other alphabet.
@@ -189,7 +196,7 @@ namespace CompInfo
                 case 1: c = IpOrder(a.Data.Text("ip")).CompareTo(IpOrder(b.Data.Text("ip"))); break;
                 case 2: c = text.Compare(a.Data.Text("serial") ?? "", b.Data.Text("serial") ?? ""); break;
                 case 3:
-                    string ua = a.Data.Text("username") ?? "", ub = b.Data.Text("username") ?? "";
+                    string ua = Person(a.Data), ub = Person(b.Data);
                     // Records without a user go last.
                     c = (ua.Trim().Length == 0).CompareTo(ub.Trim().Length == 0);
                     if (c == 0) c = text.Compare(ua, ub);
@@ -206,7 +213,7 @@ namespace CompInfo
         // The fields of the card of a computer, in this order; fields this version does not know follow them.
         public static string[][] CardFields { get { return new[]
         {
-            new[] { "hostname", L.T("Имя компьютера") }, new[] { "computerId", L.T("ID компьютера") }, new[] { "computerIdSource", L.T("Источник ID") },
+            new[] { "hostname", L.T("Имя компьютера") }, new[] { "employee", L.T("Сотрудник") }, new[] { "computerId", L.T("ID компьютера") }, new[] { "computerIdSource", L.T("Источник ID") },
             new[] { "serial", L.T("Серийный номер") }, new[] { "smbiosUuid", "UUID" }, new[] { "windowsMachineGuid", L.T("ID установки Windows") },
             new[] { "manufacturer", L.T("Производитель") }, new[] { "model", L.T("Модель") }, new[] { "windows", "Windows" },
             new[] { "partOfDomain", L.T("Член домена") }, new[] { "domain", L.T("Домен / группа") }, new[] { "ip", L.T("IP-адрес") }, new[] { "mac", L.T("MAC-адрес") },

@@ -135,7 +135,8 @@ namespace CompInfo
         public static readonly string[] DeprecatedFields = { "addedToExternalDatabase", "addedToExternalDatabaseAt" };
 
         // Set by people in the web interface, not collected: a new collection keeps them (cloud devices.ts WEB_FIELDS).
-        public static readonly string[] WebFields = { "inventoried" };
+        // employee: full name of the person the computer is issued to.
+        public static readonly string[] WebFields = { "inventoried", "employee" };
 
         // computerId, or the file name for legacy records without it.
         public static string CloudId(JsonObject record, string fileName)

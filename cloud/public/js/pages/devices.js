@@ -26,6 +26,7 @@ import { queryWords, splitMatches } from '../search-logic.js';
 const COLUMNS = [
   { key: 'hostname', label: 'Имя компьютера', always: true },
   { key: 'ip', label: 'IP' },
+  { key: 'employee', label: 'Сотрудник' },
   { key: 'username', label: 'Пользователь' },
   { key: 'serial', label: 'Серийный номер' },
   { key: 'model', label: 'Модель' },

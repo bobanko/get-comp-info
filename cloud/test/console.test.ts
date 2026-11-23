@@ -74,6 +74,22 @@ describe('console upload', () => {
     expect(wrong.body.error.code).toBe('invalid_inventoried');
   });
 
+  it('keeps the employee set in the web when the console sends a record without it', async () => {
+    const { key } = await harvesterKey();
+    const id = unique('dev');
+    await consoleRequest(key, 'PUT', `/devices/${id}`, { baseRevision: null, data: deviceData(id) });
+    const editor = await addUser('editor');
+    const named = await webRequest(editor, 'PATCH', `/devices/${id}`, { baseRevision: 1, changes: { employee: 'Іваненко Іван' } });
+    expect(named.body.device.data.employee).toBe('Іваненко Іван');
+
+    const upload = await consoleRequest(key, 'PUT', `/devices/${id}`, { baseRevision: 2, data: deviceData(id, { comment: 'new' }) });
+    expect(upload.body.device.data).toMatchObject({ comment: 'new', employee: 'Іваненко Іван' });
+
+    const wrong = await consoleRequest(key, 'PUT', `/devices/${id}`, { baseRevision: 3, data: deviceData(id, { employee: 5 }) });
+    expect(wrong.status).toBe(400);
+    expect(wrong.body.error.code).toBe('invalid_employee');
+  });
+
   it('remembers which key made the change', async () => {
     const email = await addUser('harvester');
     const flash = await addKey(email, 'Флешка Кости');

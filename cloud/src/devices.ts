@@ -6,7 +6,9 @@ import type { ApiKeyInfo, User } from './types';
 export const DEPRECATED_FIELDS = ['addedToExternalDatabase', 'addedToExternalDatabaseAt'];
 // Set by people in the web interface, not collected by the console (app Records.WebFields).
 // A console upload without them keeps the cloud value: older program versions drop unknown fields.
-export const WEB_FIELDS = ['inventoried'];
+// employee: full name of the person the computer is issued to.
+export const WEB_FIELDS = ['inventoried', 'employee'];
+const MAX_EMPLOYEE_LENGTH = 200;
 export const MAX_DATA_BYTES = 64 * 1024;
 const MAX_ID_LENGTH = 200;
 
@@ -145,6 +147,11 @@ export function normalizeData(id: string, data: unknown): Record<string, unknown
   }
   if ('inventoried' in result && typeof result.inventoried !== 'boolean' && result.inventoried !== null) {
     fail(400, 'invalid_inventoried', 'inventoried must be true or false.');
+  }
+  if ('employee' in result && result.employee !== null) {
+    if (typeof result.employee !== 'string' || result.employee.length > MAX_EMPLOYEE_LENGTH) {
+      fail(400, 'invalid_employee', `employee must be text up to ${MAX_EMPLOYEE_LENGTH} characters.`);
+    }
   }
   if (new TextEncoder().encode(JSON.stringify(result)).length > MAX_DATA_BYTES) {
     fail(413, 'too_large', 'The device record is larger than 64 KB.');

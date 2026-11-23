@@ -287,7 +287,7 @@ namespace CompInfo.Wpf
             Name = new MarkedText(d.Text("hostname"), words);
             Ip = new MarkedText((d.Text("ip") ?? "").Trim(), words);
             Serial = new MarkedText(d.Text("serial"), words);
-            User = new MarkedText(d.Text("username"), words);
+            User = new MarkedText(DeviceList.Person(d), words);
             string comment = d.Text("comment") ?? "";
             Comment = new MarkedText(comment, words);
             CommentTip = comment.Length > 0 ? comment : null;
