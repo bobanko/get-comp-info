@@ -121,6 +121,8 @@ export async function deletePerson(db: D1Database, id: number, user: User): Prom
   if (linked.length > 0) {
     fail(409, 'person_in_use', `The person is linked to ${linked.length} device(s): ${linked.map((d) => d.hostname || d.id).join(', ')}.`);
   }
+  const items = await db.prepare('SELECT count(*) AS n FROM items WHERE deleted_at IS NULL AND owner_id = ?').bind(id).first<{ n: number }>();
+  if ((items?.n ?? 0) > 0) fail(409, 'person_in_use', `The person is responsible for ${items?.n} item(s) of property.`);
   const now = nowIso();
   const row = await db
     .prepare('UPDATE people SET deleted_at = ?1, updated_at = ?1, updated_by = ?2 WHERE id = ?3 RETURNING *')

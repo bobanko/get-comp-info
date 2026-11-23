@@ -108,6 +108,33 @@ export function personLinks(devices) {
   return links;
 }
 
+// ---------- Property ----------
+
+// The types of the items with their counts, the most common first: [[type, count], …].
+export function itemTypes(items) {
+  const counts = new Map();
+  for (const item of items ?? []) counts.set(item.type, (counts.get(item.type) ?? 0) + 1);
+  return [...counts].sort((a, b) => b[1] - a[1] || collator.compare(a[0], b[0]));
+}
+
+// Items of one type and person whose text has every word of the query, as typed or in another alphabet.
+/**
+ * @param {any[]} items
+ * @param {{ query?: string, type?: string, ownerId?: number | null }} [options]
+ */
+export function filterItems(items, options = {}) {
+  const { query = '', type = '', ownerId = null } = options;
+  const words = queryWords(query);
+  return (items ?? []).filter((item) => {
+    if (type && item.type !== type) return false;
+    if (ownerId !== null && item.ownerId !== ownerId) return false;
+    if (words.length === 0) return true;
+    const text = ['#' + item.id, item.type, item.model, item.serial, item.location, item.note, personName(item.ownerId)].join('\n').toLowerCase();
+    const key = looseKey(text).key;
+    return words.every((word) => textMatches(text, word, key));
+  });
+}
+
 // A field value as people read it: names for person fields.
 export function fieldValueText(name, value) {
   return PERSON_FIELDS.includes(name) ? personName(value) : displayValue(value);
@@ -457,9 +484,35 @@ export function journalLine(entry) {
     }
     case 'audit:person.delete':
       return { what: 'Удалён человек', ...object(`${d.name ?? ''} · #${entry.target}`) };
+    case 'audit:item.create':
+      return { what: 'Добавлено имущество', ...object(itemName(d, entry.target), '#/items') };
+    case 'audit:item.update':
+      return { what: 'Изменено имущество', ...object(`${d.type ?? ''} #${entry.target}: ${itemChangeText(d)}`, '#/items') };
+    case 'audit:item.delete':
+      return { what: 'Удалено имущество', ...object(itemName(d, entry.target)) };
     default:
       return { what: `${entry.kind} ${entry.action}`, ...object(entry.target) };
   }
+}
+
+// «Монітор Dell P2217H, CN-0RH81R · #7»
+function itemName(details, id) {
+  const text = [details.type, details.model].filter((v) => !isBlank(v)).join(' ');
+  return `${text}${details.serial ? ', ' + details.serial : ''} · #${id}`;
+}
+
+const ITEM_FIELD_NAMES = { type: 'тип', model: 'модель', serial: 'серийный номер', location: 'место', ownerId: 'МОЛ', note: 'примечание' };
+
+// "МОЛ Лукашик → —, примечание «» → «під сходами»"
+function itemChangeText(details) {
+  return Object.entries(ITEM_FIELD_NAMES)
+    .filter(([field]) => Array.isArray(details[field]))
+    .map(([field, label]) => {
+      const [before, after] = details[field];
+      if (field === 'ownerId') return `${label} ${personName(before) || '—'} → ${personName(after) || '—'}`;
+      return `${label} «${before ?? ''}» → «${after ?? ''}»`;
+    })
+    .join(', ');
 }
 
 // «Флешка», and whose it is when an admin revoked a key of another user.

@@ -13,6 +13,7 @@ import {
 } from '../devices';
 import { fail, isPlainObject, nowIso, readJsonObject, requireRole } from '../http';
 import { buildDownload, describeDownloads, getCurrentRelease, getCurrentSuspectorRelease, isDownloadKind, listReleases, makeCurrent } from '../releases';
+import { createItem, deleteItem, itemChanges, listItems, parseItemId, updateItem, validateItem } from '../items';
 import { checkPersonRefs, createPerson, deletePerson, devicesOfPerson, listPeople, parsePersonId, updatePerson, validatePerson } from '../people';
 import { getSetting, getSettingHistory, NETWORK_KEY, putSetting, validateNetworkSettings, type NetworkSettings } from '../settings';
 import { TRIGGER_WORDS_KEY, validateTriggerWords, type TriggerWordsValue } from '../trigger-words';
@@ -309,6 +310,38 @@ webApi.delete('/people/:id', async (c) => {
   const person = await deletePerson(c.env.DB, parsePersonId(c.req.param('id')), c.get('user'));
   await audit(c, 'person.delete', String(person.id), { name: person.name });
   return c.json({ person });
+});
+
+// ---------- Property (not computers) ----------
+
+webApi.get('/items', async (c) => {
+  const includeDeleted = c.req.query('deleted') === '1';
+  if (includeDeleted) requireRole(c, 'admin');
+  return c.json({ items: await listItems(c.env.DB, includeDeleted) });
+});
+
+webApi.post('/items', async (c) => {
+  requireRole(c, 'editor');
+  const item = await createItem(c.env.DB, await validateItem(c.env.DB, await readJsonObject(c), false), c.get('user'));
+  await audit(c, 'item.create', String(item.id), { type: item.type, model: item.model, serial: item.serial, ownerId: item.ownerId });
+  return c.json({ item }, 201);
+});
+
+webApi.patch('/items/:id', async (c) => {
+  requireRole(c, 'editor');
+  const id = parseItemId(c.req.param('id'));
+  const value = await validateItem(c.env.DB, await readJsonObject(c), true);
+  const { before, after } = await updateItem(c.env.DB, id, value, c.get('user'));
+  const changes = itemChanges(before, after);
+  if (Object.keys(changes).length > 0) await audit(c, 'item.update', String(id), { type: after.type, ...changes });
+  return c.json({ item: after });
+});
+
+webApi.delete('/items/:id', async (c) => {
+  requireRole(c, 'admin');
+  const item = await deleteItem(c.env.DB, parseItemId(c.req.param('id')), c.get('user'));
+  await audit(c, 'item.delete', String(item.id), { type: item.type, model: item.model, serial: item.serial });
+  return c.json({ item });
 });
 
 // ---------- Network settings ----------

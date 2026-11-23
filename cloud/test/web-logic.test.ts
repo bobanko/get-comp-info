@@ -18,6 +18,8 @@ import {
   isRecent,
   journalActor,
   journalLine,
+  filterItems,
+  itemTypes,
   parsePerson,
   personLinks,
   personName,
@@ -483,5 +485,33 @@ describe('people', () => {
     const entry = { kind: 'audit', category: 'devices', actor: 'a@example.com', actorName: 'Аня', actorKey: null, source: 'web', at: '' };
     expect(journalLine({ ...entry, action: 'person.create', target: '7', details: { name: 'Іваненко Іван' } })).toMatchObject({ what: 'Добавлен человек', object: 'Іваненко Іван · #7', href: '#/people/7' });
     expect(journalLine({ ...entry, action: 'person.update', target: '7', details: { note: ['', 'S1'] } }).object).toBe('#7: примечание «» → «S1»');
+  });
+});
+
+describe('property items', () => {
+  const item = (id: number, extra: Record<string, unknown>) => ({ id, type: 'Монітор', model: '', serial: '', location: '', ownerId: null, note: '', ...extra });
+  const items = [
+    item(1, { model: 'Dell P2217H', serial: 'CN-0RH81R', ownerId: 1 }),
+    item(2, { type: 'Флешка', model: 'Goodram 32GB', ownerId: 2 }),
+    item(3, { type: 'Флешка', note: 'сервер тоц' }),
+  ];
+
+  it('are filtered by type, person and words, and counted by type', () => {
+    setPeople([{ id: 1, name: 'Лукашик', note: '', deleted: false }, { id: 2, name: 'Маркелов', note: '', deleted: false }]);
+    expect(itemTypes(items)).toEqual([['Флешка', 2], ['Монітор', 1]]);
+    const ids = (list: { id: number }[]) => list.map((i) => i.id);
+    expect(ids(filterItems(items, { type: 'Флешка' }))).toEqual([2, 3]);
+    expect(ids(filterItems(items, { ownerId: 2 }))).toEqual([2]);
+    expect(ids(filterItems(items, { query: 'лукашик dell' }))).toEqual([1]);
+    expect(ids(filterItems(items, { query: 'тоц' }))).toEqual([3]);
+    expect(ids(filterItems(items, { query: '#2' }))).toEqual([2]);
+  });
+
+  it('show up in the journal', () => {
+    const entry = { kind: 'audit', category: 'devices', actor: 'a@example.com', actorName: 'Аня', actorKey: null, source: 'web', at: '' };
+    expect(journalLine({ ...entry, action: 'item.create', target: '7', details: { type: 'Монітор', model: 'Dell', serial: 'CN1' } }).object).toBe('Монітор Dell, CN1 · #7');
+    expect(journalLine({ ...entry, action: 'item.update', target: '7', details: { type: 'Монітор', ownerId: [1, null], note: ['', 'x'] } }).object)
+      .toBe('Монітор #7: МОЛ Лукашик → —, примечание «» → «x»');
+    setPeople([]);
   });
 });

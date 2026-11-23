@@ -14,13 +14,21 @@ export async function renderPeople(context, focusId = null) {
   replace(main, h('p', { class: 'muted' }, 'Загрузка списка людей…'));
   let people;
   let devices;
+  let items;
   try {
-    [{ people }, { devices }] = await Promise.all([api('/people'), api('/devices')]);
+    [{ people }, { devices }, { items }] = await Promise.all([api('/people'), api('/devices'), api('/items')]);
   } catch (error) {
     replace(main, h('h1', {}, 'Люди'), errorBox(error, () => renderPeople(context, focusId)));
     return;
   }
   const links = personLinks(devices);
+  // Items of property each person is responsible for.
+  for (const item of items) {
+    if (item.ownerId === null) continue;
+    if (!links.has(item.ownerId)) links.set(item.ownerId, { userId: [], ownerId: [] });
+    const own = links.get(item.ownerId);
+    own.items = (own.items ?? 0) + 1;
+  }
   draw(context, people, links, { focusId, editing: null });
 }
 
@@ -51,6 +59,7 @@ function draw(context, people, links, view) {
       h('td', { class: 'comment' }, marked(person.note, words)),
       h('td', {}, deviceList(own.userId)),
       h('td', {}, deviceList(own.ownerId)),
+      h('td', { class: 'nowrap' }, itemsLink(person.id, own.items)),
       h('td', { class: 'muted small nowrap', title: person.updatedBy }, formatDate(person.updatedAt)),
       h(
         'td',
@@ -63,7 +72,7 @@ function draw(context, people, links, view) {
   function editRow(person, own) {
     const name = h('input', { value: person.name, maxlength: '200', 'aria-label': 'ПІБ' });
     const note = h('input', { value: person.note, maxlength: '500', 'aria-label': 'Примечание', placeholder: 'підрозділ, посада…' });
-    const linked = own.userId.length + own.ownerId.length;
+    const linked = own.userId.length + own.ownerId.length + (own.items ?? 0);
     const save = async () => {
       try {
         await api('/people/' + person.id, { method: 'PATCH', body: { name: name.value, note: note.value } });
@@ -92,6 +101,7 @@ function draw(context, people, links, view) {
       h('td', {}, note),
       h('td', {}, deviceList(own.userId)),
       h('td', {}, deviceList(own.ownerId)),
+      h('td', { class: 'nowrap' }, itemsLink(person.id, own.items)),
       h('td'),
       h(
         'td',
@@ -105,7 +115,7 @@ function draw(context, people, links, view) {
               class: 'button small danger',
               type: 'button',
               disabled: linked > 0,
-              title: linked > 0 ? 'Сначала уберите человека из карточек устройств' : undefined,
+              title: linked > 0 ? 'Сначала уберите человека из карточек устройств и из имущества' : undefined,
               onclick: remove,
             },
             'Удалить',
@@ -132,7 +142,7 @@ function draw(context, people, links, view) {
     h(
       'p',
       { class: 'lead' },
-      'Справочник людей, к которым привязаны устройства по номеру: пользователь по факту и материально ответственное лицо (МОЛ) по ведомости. Номер не меняется и не используется повторно.',
+      'Справочник людей, к которым привязаны компьютеры и имущество по номеру: пользователь по факту и материально ответственное лицо (МОЛ) по ведомости. Номер не меняется и не используется повторно.',
     ),
     editor && h('section', { class: 'panel' }, h('h2', {}, 'Добавить человека'), addForm(reload)),
     h(
@@ -149,7 +159,7 @@ function draw(context, people, links, view) {
           h(
             'thead',
             {},
-            h('tr', {}, h('th', {}, '№'), h('th', {}, 'ПІБ'), h('th', {}, 'Примечание'), h('th', {}, 'Пользователь устройств'), h('th', {}, 'МОЛ устройств'), h('th', {}, 'Изменено'), h('th')),
+            h('tr', {}, h('th', {}, '№'), h('th', {}, 'ПІБ'), h('th', {}, 'Примечание'), h('th', {}, 'Пользователь компьютеров'), h('th', {}, 'МОЛ компьютеров'), h('th', {}, 'МОЛ имущества'), h('th', {}, 'Изменено'), h('th')),
           ),
           tbody,
         ),
@@ -200,6 +210,11 @@ function matches(person, words) {
 function marked(text, words) {
   if (isBlank(text)) return '';
   return splitMatches(text, words).map((part) => (part.match ? h('mark', {}, part.text) : part.text));
+}
+
+function itemsLink(personId, count) {
+  if (!count) return h('span', { class: 'muted' }, '—');
+  return h('a', { href: '#/items/owner/' + personId }, `${count} шт.`);
 }
 
 function deviceList(list) {

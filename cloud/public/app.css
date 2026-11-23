@@ -450,6 +450,15 @@ table.people tr.focused > td { background: color-mix(in srgb, var(--accent-soft)
 table.people td input { width: 100%; }
 table.people td.row-actions { width: 1%; white-space: nowrap; text-align: right; }
 table.people td.row-actions .button { margin-left: 4px; }
+/* «Имущество»: the same inline editing as «Люди». */
+table.items td { vertical-align: middle; }
+table.items td:first-child { width: 1%; white-space: nowrap; }
+table.items tr.focused > td { background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface)); }
+table.items td input { width: 100%; min-width: 90px; }
+table.items td.comment { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+table.items td.row-actions { width: 1%; white-space: nowrap; text-align: right; }
+table.items td.row-actions .button { margin-left: 4px; }
+.items-form input { flex: 1 1 160px; }
 details.panel ul { margin: 8px 0 0; }
 
 @media (max-width: 640px) {

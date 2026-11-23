@@ -24,12 +24,11 @@ import {
   HISTORY_SOURCES,
   isBlank,
   isRecent,
-  parsePerson,
   PERSON_FIELDS,
-  personOption,
   setPeople,
   shortAge,
 } from '../logic.js';
+import { peopleDatalist, personInput, personInputText, resolvePeople } from '../person-input.js';
 import { invalidateDevices } from './devices.js';
 
 // The people list of the last loaded card, offered in the person fields of the edit form.
@@ -174,23 +173,15 @@ function editForm(context, device, history, view, redraw) {
         );
         // Person fields: a name from the list, or a new name added to the list on save.
         const draft = { ...edited };
-        const newPeople = {};
-        for (const name of PERSON_FIELDS) {
-          const parsed = parsePerson(edited[name], people);
-          if (parsed.error) {
-            toast(`${fieldLabel(name)}: ${parsed.error}`, 'error');
-            return;
-          }
-          if (parsed.newName) newPeople[name] = parsed.newName;
-          else edited[name] = parsed.id;
-        }
-        const added = [...new Set(Object.values(newPeople))];
-        if (added.length > 0 && !confirm(`Добавить в список людей: ${added.join(', ')}?`)) return;
         save.disabled = true;
         try {
-          const ids = {};
-          for (const name of added) ids[name] = (await api('/people', { method: 'POST', body: { name } })).person.id;
-          for (const [field, name] of Object.entries(newPeople)) edited[field] = ids[name];
+          const fields = Object.fromEntries(PERSON_FIELDS.map((name) => [name, { label: fieldLabel(name), text: edited[name] }]));
+          const ids = await resolvePeople(fields, people);
+          if (ids === null) {
+            save.disabled = false;
+            return;
+          }
+          Object.assign(edited, ids);
         } catch (error) {
           save.disabled = false;
           toast(error.message, 'error');
@@ -231,10 +222,7 @@ function editForm(context, device, history, view, redraw) {
         return h('label', { class: 'check' }, input, name === 'inventoried' ? 'Инвентаризировано' : fieldLabel(name));
       }
       if (PERSON_FIELDS.includes(name)) {
-        const current = device.data[name];
-        const person = isBlank(current) ? null : findPerson(current);
-        const initial = view.draft?.[name] ?? (isBlank(current) ? '' : person ? personOption(person) : `#${current}`);
-        const input = h('input', { name, value: initial, list: 'people-options', autocomplete: 'off', placeholder: 'ПІБ из списка или новый' });
+        const input = personInput(name, view.draft?.[name] ?? personInputText(device.data[name]));
         inputs[name] = input;
         return h('label', { class: 'field' }, h('span', {}, fieldLabel(name)), input);
       }
@@ -249,11 +237,7 @@ function editForm(context, device, history, view, redraw) {
   );
   const save = h('button', { class: 'button primary', type: 'submit' }, 'Сохранить');
   form.append(
-    h(
-      'datalist',
-      { id: 'people-options' },
-      people.filter((person) => !person.deleted).map((person) => h('option', { value: personOption(person) })),
-    ),
+    peopleDatalist(people),
     h(
       'div',
       { class: 'actions' },
