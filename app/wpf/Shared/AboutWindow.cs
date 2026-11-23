@@ -25,9 +25,10 @@ namespace CompInfo.Wpf
         public readonly StackPanel Text = new StackPanel();
 
         // name marks its coloured part in square brackets («you[SBee]»), highlightKey is its colour (a WpfTheme key);
-        // intro may be null; sections = heading, text, heading, text…; save keeps a choice in the settings (key, value).
+        // intro may be null; sections = heading, text, heading, text…; save keeps a choice in the settings (key, value);
+        // icons (optional) — a glyph per section, shown in the colour of the name before its heading, as in HashPot.
         public AboutContent(ImageSource picture, string name, string highlightKey, string email, string subtitle, string intro,
-            string[] sections, Action<string, string> save, Action languageChanged, double textWidth)
+            string[] sections, Action<string, string> save, Action languageChanged, double textWidth, string[] icons = null)
         {
             this.email = email;
             ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -67,8 +68,27 @@ namespace CompInfo.Wpf
             {
                 var heading = Paragraph(sections[i], 0);
                 heading.FontWeight = FontWeights.SemiBold;
-                Text.Children.Add(heading);
-                Text.Children.Add(Paragraph(sections[i + 1], 12));
+                string icon = icons != null && i / 2 < icons.Length ? icons[i / 2] : null;
+                if (icon == null)
+                {
+                    Text.Children.Add(heading);
+                    Text.Children.Add(Paragraph(sections[i + 1], 12));
+                    continue;
+                }
+                // the icon column: the text of every section starts at the same place, under its heading
+                var row = new Grid { Margin = new Thickness(0, 0, 0, 10) };
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(28) });
+                row.ColumnDefinitions.Add(new ColumnDefinition());
+                var glyph = Glyph.Block(icon, 16, highlightKey);
+                glyph.VerticalAlignment = VerticalAlignment.Top;
+                glyph.Margin = new Thickness(0, 3, 0, 0);
+                row.Children.Add(glyph);
+                var text = new StackPanel();
+                text.Children.Add(heading);
+                text.Children.Add(Paragraph(sections[i + 1], 0));
+                Grid.SetColumn(text, 1);
+                row.Children.Add(text);
+                Text.Children.Add(row);
             }
             var contact = Paragraph(L.T("Связь с разработчиком"), 0);
             contact.FontWeight = FontWeights.SemiBold;
@@ -167,7 +187,7 @@ namespace CompInfo.Wpf
         public bool LanguageChanged { get; private set; }
 
         public AboutWindow(ImageSource picture, string name, string highlightKey, string email, string subtitle,
-            string[] sections, Action<string, string> save)
+            string[] sections, Action<string, string> save, string intro = null, string[] icons = null)
         {
             Title = L.T("О программе");
             SizeToContent = SizeToContent.WidthAndHeight;
@@ -183,8 +203,8 @@ namespace CompInfo.Wpf
             root.RowDefinitions.Add(new RowDefinition());
             root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             Content = root;
-            root.Children.Add(new AboutContent(picture, name, highlightKey, email, subtitle, null, sections, save,
-                delegate { LanguageChanged = true; Close(); }, 460));
+            root.Children.Add(new AboutContent(picture, name, highlightKey, email, subtitle, intro, sections, save,
+                delegate { LanguageChanged = true; Close(); }, 460, icons));
 
             var close = new Button { Content = L.T("Закрыть"), MinWidth = 110, IsDefault = true, IsCancel = true,
                 HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 16, 0, 0) };
