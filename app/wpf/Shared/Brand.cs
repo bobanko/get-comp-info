@@ -72,6 +72,7 @@ namespace CompInfo.Wpf
 
         static readonly Regex ShortWord = new Regex(@"(?<![\w’'-])(\w{1,3}) (?=\S)");
         static readonly Regex InnerHyphen = new Regex(@"(?<=\w)-(?=\w)");
+        static readonly Regex InnerPlus = new Regex(@"(?<=\w)\+(?=\w)");
         static readonly Regex ShortLastWord = new Regex(@" (\S{1,10})$");
 
         // Typography of a paragraph (as AboutWindow.Keep of SupraWeed): a short word (и, в, з, на, для, USB…) and the dash
@@ -85,6 +86,7 @@ namespace CompInfo.Wpf
             s = ShortWord.Replace(s, "$1" + nbsp);
             s = ShortWord.Replace(s, "$1" + nbsp);   // a second pass for short words in a row («и в»)
             s = InnerHyphen.Replace(s, "‑");
+            s = InnerPlus.Replace(s, "⁠+⁠");   // word joiners: «Ctrl+E» is not broken before or after the plus
             return ShortLastWord.Replace(s, nbsp + "$1");
         }
     }

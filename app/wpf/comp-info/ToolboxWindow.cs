@@ -438,9 +438,8 @@ namespace CompInfo.Wpf
             string marked = space < 0 ? name : name.Substring(0, space + 1) + "[" + name.Substring(space + 1) + "]";
             var about = new AboutContent(new BitmapImage(new Uri("pack://application:,,,/" + picture)), marked, "Toolbox", "toolbox@chagear.top",
                 L.T("Учёт компьютеров при подготовке и выдаче сотрудникам"),
-                L.T("Программа собирает сведения о компьютере (имя, серийный номер, сеть, ESET), хранит их на флешке и синхронизирует ") +
-                L.T("с облачной базой. Здесь же — настройка сети по профилям корпусов, имя компьютера и домен, быстрая проверка связи ") +
-                L.T("и поиск по документам."), Sections, Settings.Set, delegate { window.Rebuild(); }, 520)
+                L.T("Собирает сведения о компьютере, хранит их на флешке и синхронизирует с облачной базой."),
+                Sections, Settings.Set, delegate { window.Rebuild(); }, 520, Icons)
             { HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 4, 0, 10) };
             about.AddLink(Glyph.Cloud, WebInterface, L.T("веб-интерфейс базы"), delegate { AboutContent.OpenSite(WebInterface); });
             about.AddLink(Glyph.Folder, L.T("Открыть папку программы"), null, delegate
@@ -450,20 +449,23 @@ namespace CompInfo.Wpf
             Content = about;
         }
 
+        // short, with an icon before every section, as «О программе» of SUSpector and HashPot
+        static readonly string[] Icons = { Glyph.Computer, Glyph.Network, Glyph.Cloud, Glyph.Usb, Glyph.Shield, Glyph.Keyboard };
+
         static string[] Sections { get { return new[]
         {
-            L.T("Где хранятся данные"),
-            L.T("Всё лежит рядом с программой: записи компьютеров — в папке data (один файл на компьютер), выгрузки CSV — в exports. ") +
-            L.T("Программа ничего не устанавливает и работает прямо с флешки, в том числе без интернета."),
+            L.T("Сбор"),
+            L.T("Имя, серийный номер, сеть и ESET — одна запись на компьютер в папке data."),
+            L.T("Настройка"),
+            L.T("Сеть по профилям корпусов, имя компьютера и домен, проверка связи, поиск по документам."),
             L.T("Облако"),
-            L.T("Синхронизация отправляет записи в общую базу и получает изменения коллег. Для неё нужен интернет и личный ключ доступа ") +
-            L.T("из веб-интерфейса. Записи, удалённые на флешке вручную, из облака не удаляются."),
+            L.T("Общая база с коллегами, по личному ключу из веб-интерфейса. Удалённое на флешке из облака не пропадает."),
+            L.T("Установка не нужна"),
+            L.T("Работает прямо с флешки, без интернета тоже. Выгрузки CSV — в папке exports."),
             L.T("Права администратора"),
-            L.T("Программа запускается без них. Разрешение Windows (окно UAC) понадобится только для настройки сети, ") +
-            L.T("смены имени компьютера и работы с доменом — такие разделы отмечены в меню щитом."),
+            L.T("Нужны только разделам со щитом в меню: сеть, имя и домен."),
             L.T("Клавиши"),
-            L.T("Ctrl+1…9 — разделы меню, Ctrl+0 — «О программе», Ctrl+Tab — следующий раздел. F5 — обновить или проверить заново, ") +
-            L.T("Ctrl+S — сохранить сбор, Ctrl+F — поиск в базе (стрелки и Enter — по таблице), Ctrl+E — экспорт в CSV, Ctrl+Enter — применить настройки сети, имени или домена."),
+            L.T("Ctrl+1…9 — разделы, F5 — обновить, Ctrl+S — сохранить, Ctrl+F — поиск, Ctrl+E — CSV, Ctrl+Enter — применить."),
         }; } }
 
         public void Opened() { }
