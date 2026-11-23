@@ -441,7 +441,7 @@ namespace CompInfo.Wpf
                 L.T("Собирает сведения о компьютере, хранит их на флешке и синхронизирует с облачной базой."),
                 Sections, Settings.Set, delegate { window.Rebuild(); }, 520, Icons)
             { HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 4, 0, 10) };
-            about.AddLink(Glyph.Cloud, WebInterface, L.T("веб-интерфейс базы"), delegate { AboutContent.OpenSite(WebInterface); });
+            about.AddLink(Glyph.Cloud, WebInterface, L.T("веб-интерфейс базы"), delegate { AboutContent.OpenSite(WebInterface); }, true);
             about.AddLink(Glyph.Folder, L.T("Открыть папку программы"), null, delegate
             {
                 try { Process.Start("explorer.exe", "\"" + AppPaths.Root + "\""); } catch (Exception) { }

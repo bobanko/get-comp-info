@@ -110,15 +110,22 @@ namespace CompInfo.Wpf
             Text.Children.Add(mailRow);
             // the page of this program on the site (chagear.top/suspector), not the main page
             string link = Site + "/" + page;
-            AddLink(Glyph.Open, link, null, delegate { OpenUrl("https://" + link + "/"); });
+            AddLink(Glyph.Globe, link, null, delegate { OpenUrl("https://" + link + "/"); }, true);
         }
 
         // A link row under the contacts: an icon, the link, an optional muted note after it.
-        public void AddLink(string glyph, string text, string note, Action click)
+        // external — it opens in the browser: the «open in a new window» icon after the text, as in SupraWeed and HashPot.
+        public void AddLink(string glyph, string text, string note, Action click, bool external = false)
         {
             var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(-11, 0, 0, 0) };
             var link = new Button();
             Glyph.Label(link, glyph, text);
+            if (external)
+            {
+                var open = Glyph.Block(Glyph.Open, 14, null);
+                open.Margin = new Thickness(6, 1, 0, 0);
+                ((Panel)link.Content).Children.Add(open);
+            }
             link.SetResourceReference(StyleProperty, "Link");
             link.Click += delegate { click(); };
             row.Children.Add(link);
