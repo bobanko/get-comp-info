@@ -215,7 +215,7 @@ namespace CompInfo
         // The fields of the card of a computer, in this order; fields this version does not know follow them.
         public static string[][] CardFields { get { return new[]
         {
-            new[] { "hostname", L.T("Имя компьютера") }, new[] { "userId", L.T("Пользователь (по факту)") }, new[] { "ownerId", L.T("МОЛ (по ведомости)") },
+            new[] { "hostname", L.T("Имя компьютера") }, new[] { "userId", L.T("Пользователь (по факту)") }, new[] { "ownerId", L.T("МВО (по ведомости)") },
             new[] { "computerId", L.T("ID компьютера") }, new[] { "computerIdSource", L.T("Источник ID") },
             new[] { "serial", L.T("Серийный номер") }, new[] { "smbiosUuid", "UUID" }, new[] { "windowsMachineGuid", L.T("ID установки Windows") },
             new[] { "manufacturer", L.T("Производитель") }, new[] { "model", L.T("Модель") }, new[] { "windows", "Windows" },

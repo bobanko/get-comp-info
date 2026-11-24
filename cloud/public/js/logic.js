@@ -30,7 +30,7 @@ export const FIELD_LABELS = {
   manufacturer: 'Производитель',
   model: 'Модель',
   userId: 'Пользователь (по факту)',
-  ownerId: 'МОЛ (по ведомости)',
+  ownerId: 'МВО (по ведомости)',
   username: 'Учётная запись Windows',
   comment: 'Комментарий',
   windows: 'Windows',
@@ -129,7 +129,10 @@ export function filterItems(items, options = {}) {
     if (type && item.type !== type) return false;
     if (ownerId !== null && item.ownerId !== ownerId) return false;
     if (words.length === 0) return true;
-    const text = ['#' + item.id, item.type, item.model, item.serial, item.location, item.note, personName(item.ownerId)].join('\n').toLowerCase();
+    const text = ['#' + item.id, item.hostname, item.type, item.model, item.serial, item.location, item.note, personName(item.ownerId)]
+      .filter((value) => !isBlank(value))
+      .join('\n')
+      .toLowerCase();
     const key = looseKey(text).key;
     return words.every((word) => textMatches(text, word, key));
   });
@@ -501,9 +504,9 @@ function itemName(details, id) {
   return `${text}${details.serial ? ', ' + details.serial : ''} · #${id}`;
 }
 
-const ITEM_FIELD_NAMES = { type: 'тип', model: 'модель', serial: 'серийный номер', location: 'место', ownerId: 'МОЛ', note: 'примечание' };
+const ITEM_FIELD_NAMES = { type: 'тип', model: 'модель', serial: 'серийный номер', location: 'место', ownerId: 'МВО', note: 'примечание' };
 
-// "МОЛ Лукашик → —, примечание «» → «під сходами»"
+// "МВО Лукашик → —, примечание «» → «під сходами»"
 function itemChangeText(details) {
   return Object.entries(ITEM_FIELD_NAMES)
     .filter(([field]) => Array.isArray(details[field]))

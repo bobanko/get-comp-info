@@ -505,13 +505,15 @@ describe('property items', () => {
     expect(ids(filterItems(items, { query: 'лукашик dell' }))).toEqual([1]);
     expect(ids(filterItems(items, { query: 'тоц' }))).toEqual([3]);
     expect(ids(filterItems(items, { query: '#2' }))).toEqual([2]);
+    const computer = { id: 'PF1', kind: 'device', hostname: 'IF-042-A208-SUK', type: 'Комп’ютер', model: 'LENOVO 82YU', serial: 'PF1', location: '', ownerId: 1, note: '' };
+    expect(filterItems([...items, computer], { query: 'a208' }).map((i: { id: unknown }) => i.id)).toEqual(['PF1']);
   });
 
   it('show up in the journal', () => {
     const entry = { kind: 'audit', category: 'devices', actor: 'a@example.com', actorName: 'Аня', actorKey: null, source: 'web', at: '' };
     expect(journalLine({ ...entry, action: 'item.create', target: '7', details: { type: 'Монітор', model: 'Dell', serial: 'CN1' } }).object).toBe('Монітор Dell, CN1 · #7');
     expect(journalLine({ ...entry, action: 'item.update', target: '7', details: { type: 'Монітор', ownerId: [1, null], note: ['', 'x'] } }).object)
-      .toBe('Монітор #7: МОЛ Лукашик → —, примечание «» → «x»');
+      .toBe('Монітор #7: МВО Лукашик → —, примечание «» → «x»');
     setPeople([]);
   });
 });

@@ -78,7 +78,7 @@ namespace CompInfo
             "Модель", "Модель", "Model",
             "Пользователь", "Користувач", "User",
             "Пользователь (по факту)", "Користувач (фактично)", "User (actual)",
-            "МОЛ (по ведомости)", "МВО (за відомістю)", "Responsible person (by the register)",
+            "МВО (по ведомости)", "МВО (за відомістю)", "Responsible person (by the register)",
             "Учётная запись Windows", "Обліковий запис Windows", "Windows account",
             " (нет в списке людей, синхронизируйте базу)", " (немає у списку людей, синхронізуйте базу)", " (not in the people list, synchronize the database)",
             "Список людей", "Список людей", "People list",

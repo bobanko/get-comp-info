@@ -7,18 +7,22 @@ import { invalidateDevices } from './devices.js';
 // Survives navigation to a device and back.
 const state = { query: '' };
 
-// People devices are linked to by number: the actual user and the person materially responsible (МОЛ).
-// focusId: the person to show first (#/people/12), e.g. from a device card.
-export async function renderPeople(context, focusId = null) {
+// People devices are linked to by number: the actual user and the person materially responsible (МВО).
+// personId: the card of one person (#/people/12), linked from devices, property and the journal.
+export async function renderPeople(context, personId = null) {
   const { main } = context;
-  replace(main, h('p', { class: 'muted' }, 'Загрузка списка людей…'));
+  replace(main, h('p', { class: 'muted' }, personId === null ? 'Загрузка списка людей…' : 'Загрузка…'));
   let people;
   let devices;
   let items;
   try {
     [{ people }, { devices }, { items }] = await Promise.all([api('/people'), api('/devices'), api('/items')]);
   } catch (error) {
-    replace(main, h('h1', {}, 'Люди'), errorBox(error, () => renderPeople(context, focusId)));
+    replace(main, h('h1', {}, 'Люди'), errorBox(error, () => renderPeople(context, personId)));
+    return;
+  }
+  if (personId !== null) {
+    drawPerson(context, people, devices, items, personId, { editing: false });
     return;
   }
   const links = personLinks(devices);
@@ -29,13 +33,13 @@ export async function renderPeople(context, focusId = null) {
     const own = links.get(item.ownerId);
     own.items = (own.items ?? 0) + 1;
   }
-  draw(context, people, links, { focusId, editing: null });
+  draw(context, people, links, { editing: null });
 }
 
 function draw(context, people, links, view) {
   const { me, main } = context;
   const redraw = (changes = {}) => draw(context, people, links, { ...view, ...changes });
-  const reload = () => renderPeople(context, view.focusId);
+  const reload = () => renderPeople(context);
   const editor = hasRole(me, 'editor');
 
   const tbody = h('tbody');
@@ -49,13 +53,12 @@ function draw(context, people, links, view) {
 
   function row(person, words) {
     const own = links.get(person.id) ?? { userId: [], ownerId: [] };
-    const focused = person.id === view.focusId;
     if (view.editing === person.id) return editRow(person, own);
     return h(
       'tr',
-      { id: 'person-' + person.id, class: focused ? 'focused' : undefined },
+      { id: 'person-' + person.id },
       h('td', { class: 'mono muted' }, '#' + person.id),
-      h('td', {}, marked(person.name, words)),
+      h('td', {}, h('a', { href: '#/people/' + person.id }, marked(person.name, words))),
       h('td', { class: 'comment' }, marked(person.note, words)),
       h('td', {}, deviceList(own.userId)),
       h('td', {}, deviceList(own.ownerId)),
@@ -64,7 +67,7 @@ function draw(context, people, links, view) {
       h(
         'td',
         { class: 'row-actions' },
-        editor && h('button', { class: 'button small', type: 'button', onclick: () => redraw({ editing: person.id, focusId: person.id }) }, 'Изменить'),
+        editor && h('button', { class: 'button small', type: 'button', onclick: () => redraw({ editing: person.id }) }, 'Изменить'),
       ),
     );
   }
@@ -142,7 +145,7 @@ function draw(context, people, links, view) {
     h(
       'p',
       { class: 'lead' },
-      'Справочник людей, к которым привязаны компьютеры и имущество по номеру: пользователь по факту и материально ответственное лицо (МОЛ) по ведомости. Номер не меняется и не используется повторно.',
+      'Справочник людей, к которым привязаны компьютеры и имущество по номеру: пользователь по факту и матеріально відповідальна особа (МВО) по ведомости. Номер не меняется и не используется повторно.',
     ),
     editor && h('section', { class: 'panel' }, h('h2', {}, 'Добавить человека'), addForm(reload)),
     h(
@@ -159,7 +162,7 @@ function draw(context, people, links, view) {
           h(
             'thead',
             {},
-            h('tr', {}, h('th', {}, '№'), h('th', {}, 'ПІБ'), h('th', {}, 'Примечание'), h('th', {}, 'Пользователь компьютеров'), h('th', {}, 'МОЛ компьютеров'), h('th', {}, 'МОЛ имущества'), h('th', {}, 'Изменено'), h('th')),
+            h('tr', {}, h('th', {}, '№'), h('th', {}, 'ПІБ'), h('th', {}, 'Примечание'), h('th', {}, 'Пользователь компьютеров'), h('th', {}, 'МВО компьютеров'), h('th', {}, 'МВО имущества'), h('th', {}, 'Изменено'), h('th')),
           ),
           tbody,
         ),
@@ -167,8 +170,152 @@ function draw(context, people, links, view) {
     ),
   );
   fill();
-  const focused = view.focusId && document.getElementById('person-' + view.focusId);
-  if (focused) focused.scrollIntoView({ block: 'center' });
+}
+
+// The card of one person: name and note, the computers where the person is the user or the МВО, the property.
+function drawPerson(context, people, devices, items, id, view) {
+  const { me, main } = context;
+  const back = h('a', { class: 'back', href: '#/people' }, '← Все люди');
+  const person = people.find((p) => p.id === id);
+  if (!person) {
+    replace(main, back, h('div', { class: 'notice notice-error' }, h('p', {}, `Человека #${id} нет в списке: его удалили или номер неверный.`)));
+    return;
+  }
+  const redraw = (changes = {}) => drawPerson(context, people, devices, items, id, { ...view, ...changes });
+  const live = devices.filter((device) => !device.deleted);
+  const asUser = live.filter((device) => device.data.userId === id);
+  const asOwner = live.filter((device) => device.data.ownerId === id);
+  const own = items.filter((item) => item.ownerId === id);
+  const linked = asUser.length + asOwner.length + own.length;
+
+  const remove = async () => {
+    if (!confirm(`Удалить «${person.name}» (#${person.id}) из списка? Номер больше не будет использован.`)) return;
+    try {
+      await api('/people/' + person.id, { method: 'DELETE' });
+      toast('Удалено.');
+      location.hash = '#/people';
+    } catch (error) {
+      toast(error.message, 'error');
+    }
+  };
+
+  let head;
+  if (view.editing) {
+    const name = h('input', { value: person.name, maxlength: '200', 'aria-label': 'ПІБ' });
+    const note = h('input', { value: person.note, maxlength: '500', 'aria-label': 'Примечание', placeholder: 'підрозділ, посада…' });
+    head = h(
+      'form',
+      {
+        class: 'panel inline-form',
+        onsubmit: async (event) => {
+          event.preventDefault();
+          try {
+            await api('/people/' + person.id, { method: 'PATCH', body: { name: name.value, note: note.value } });
+            invalidateDevices();
+            toast('Сохранено.');
+            await renderPeople(context, id);
+          } catch (error) {
+            toast(error.message, 'error');
+          }
+        },
+      },
+      name,
+      note,
+      h('button', { class: 'button primary', type: 'submit' }, 'Сохранить'),
+      h('button', { class: 'button', type: 'button', onclick: () => redraw({ editing: false }) }, 'Отмена'),
+    );
+  } else {
+    head = h(
+      'div',
+      { class: 'card-head' },
+      h('div', {}, h('h1', {}, person.name), h('p', { class: 'muted' }, `№${person.id}`, person.note ? ` · ${person.note}` : '')),
+      h(
+        'div',
+        { class: 'actions' },
+        hasRole(me, 'editor') && h('button', { class: 'button primary', type: 'button', onclick: () => redraw({ editing: true }) }, 'Изменить'),
+        hasRole(me, 'admin') &&
+          h(
+            'button',
+            {
+              class: 'button danger',
+              type: 'button',
+              disabled: linked > 0,
+              title: linked > 0 ? 'Сначала уберите человека из карточек устройств и из имущества' : undefined,
+              onclick: remove,
+            },
+            'Удалить',
+          ),
+      ),
+    );
+  }
+
+  const deviceTable = (list) =>
+    list.length === 0
+      ? h('p', { class: 'muted' }, 'Нет.')
+      : h(
+          'div',
+          { class: 'table-wrap' },
+          h(
+            'table',
+            {},
+            h('thead', {}, h('tr', {}, h('th', {}, 'Имя компьютера'), h('th', {}, 'Модель'), h('th', {}, 'Серийный номер'), h('th', {}, 'Комментарий'))),
+            h(
+              'tbody',
+              {},
+              list.map((device) =>
+                h(
+                  'tr',
+                  {},
+                  h('td', {}, h('a', { href: '#/devices/' + encodeURIComponent(device.id) }, isBlank(device.data.hostname) ? device.id : device.data.hostname)),
+                  h('td', {}, [device.data.manufacturer, device.data.model].filter((v) => !isBlank(v)).join(' ')),
+                  h('td', { class: 'mono' }, device.data.serial ?? ''),
+                  h('td', { class: 'comment', title: device.data.comment || undefined }, device.data.comment ?? ''),
+                ),
+              ),
+            ),
+          ),
+        );
+
+  replace(
+    main,
+    back,
+    head,
+    h('section', { class: 'panel' }, h('h2', {}, `Пользователь компьютеров (${asUser.length})`), deviceTable(asUser)),
+    h('section', { class: 'panel' }, h('h2', {}, `МВО компьютеров (${asOwner.length})`), deviceTable(asOwner)),
+    h(
+      'section',
+      { class: 'panel' },
+      h('h2', {}, `МВО имущества (${own.length})`, own.length > 0 ? ' ' : '', own.length > 0 && h('a', { class: 'small', href: '#/items/owner/' + id }, 'открыть в «Имуществе»')),
+      own.length === 0
+        ? h('p', { class: 'muted' }, 'Нет.')
+        : h(
+            'div',
+            { class: 'table-wrap' },
+            h(
+              'table',
+              {},
+              h('thead', {}, h('tr', {}, h('th', {}, '№'), h('th', {}, 'Тип'), h('th', {}, 'Модель'), h('th', {}, 'Серийный номер'), h('th', {}, 'Место'), h('th', {}, 'Примечание'))),
+              h(
+                'tbody',
+                {},
+                own.map((item) =>
+                  h(
+                    'tr',
+                    {},
+                    h('td', { class: 'mono muted' }, '#' + item.id),
+                    h('td', {}, item.type),
+                    h('td', {}, item.model),
+                    h('td', { class: 'mono' }, item.serial),
+                    h('td', {}, item.location),
+                    h('td', { class: 'comment', title: item.note || undefined }, item.note),
+                  ),
+                ),
+              ),
+            ),
+          ),
+    ),
+    h('p', { class: 'muted small', title: person.updatedBy }, `Изменено ${formatDate(person.updatedAt)}`),
+  );
 }
 
 function addForm(reload) {

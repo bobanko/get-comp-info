@@ -30,7 +30,7 @@ const COLUMNS = [
   { key: 'hostname', label: 'Имя компьютера', always: true },
   { key: 'ip', label: 'IP' },
   { key: 'userId', label: 'Пользователь' },
-  { key: 'ownerId', label: 'МОЛ', hidden: true },
+  { key: 'ownerId', label: 'МВО', hidden: true },
   { key: 'username', label: 'Учётная запись Windows' },
   { key: 'serial', label: 'Серийный номер' },
   { key: 'model', label: 'Модель' },
@@ -489,8 +489,14 @@ function cell(key, device, duplicates, now, words = []) {
       return h('td', { class: repeated('serial') ? 'mono dup' : 'mono', title: repeated('serial') ? 'Этот серийный номер есть у нескольких устройств' : undefined }, marked(displayValue(data.serial), words));
     case 'userId':
     case 'ownerId': {
+      if (!Number.isInteger(data[key])) return h('td');
       const person = findPerson(data[key]);
-      return h('td', { title: person?.note || undefined }, marked(personName(data[key]), words));
+      // The link opens the person, not the device the row opens.
+      return h(
+        'td',
+        { title: person?.note || undefined },
+        h('a', { href: '#/people/' + data[key], onclick: (event) => event.stopPropagation(), onkeydown: (event) => event.stopPropagation() }, marked(personName(data[key]), words)),
+      );
     }
     case 'model':
       return h('td', {}, marked([data.manufacturer, data.model].filter((v) => !isBlank(v)).join(' '), words));

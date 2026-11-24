@@ -208,7 +208,7 @@ function Get-SyncFieldLabel {
         hostname = 'Имя компьютера'; ip = 'IP-адрес'; mac = 'MAC-адрес'
         serial = 'Серийный номер'; smbiosUuid = 'UUID'; manufacturer = 'Производитель'
         windowsMachineGuid = 'ID установки Windows'; partOfDomain = 'Член домена'; domain = 'Домен / рабочая группа'
-        model = 'Модель'; username = 'Учётная запись Windows'; userId = 'Пользователь (по факту), №'; ownerId = 'МОЛ (по ведомости), №'; comment = 'Комментарий'
+        model = 'Модель'; username = 'Учётная запись Windows'; userId = 'Пользователь (по факту), №'; ownerId = 'МВО (по ведомости), №'; comment = 'Комментарий'
         windows = 'Windows'; esetInstalled = 'ESET установлен'; collectedAt = 'Дата сбора'; createdAt = 'Дата создания'
     }
     if ($labels.ContainsKey($Name)) { return $labels[$Name] }
