@@ -468,7 +468,9 @@ function cell(key, device, duplicates, now, words = []) {
   switch (key) {
     case 'hostname': {
       const issue = hostnameIssue(data.hostname);
+      const nameless = isBlank(data.hostname);
       const notes = [
+        nameless && 'Имени нет: программа этот компьютер ещё не собирала. Показан идентификатор записи (серийный номер или MAC)',
         repeated('hostname') && 'Это имя есть у нескольких устройств',
         issue === 'default' && 'Имя по умолчанию от Windows: переименуйте по правилам',
         issue === 'pattern' && 'Имя не по правилам (ожидается вид АА-000-…)',
@@ -477,7 +479,7 @@ function cell(key, device, duplicates, now, words = []) {
       return h(
         'td',
         { class: classes, title: notes.join('\n') || undefined },
-        isBlank(data.hostname) ? h('span', { class: 'muted' }, marked(device.id, words)) : marked(data.hostname, words),
+        nameless ? [h('span', { class: 'muted nameless' }, marked(device.id, words)), h('span', { class: 'nameless-mark' }, '*')] : marked(data.hostname, words),
         device.deleted && h('span', { class: 'badge badge-danger' }, 'удалено'),
       );
     }

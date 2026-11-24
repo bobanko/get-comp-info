@@ -293,6 +293,9 @@ table.devices td.comment { max-width: 360px; overflow: hidden; text-overflow: el
 /* Hostname against the naming policy; a repeat (red) wins over it. */
 table.devices td.off-policy { color: var(--warn); }
 table.devices td.dup { color: var(--danger); font-weight: 600; }
+/* No hostname yet: the record id stands in, in italics, with a warning asterisk. */
+table.devices .nameless { font-style: italic; font-weight: 400; }
+table.devices .nameless-mark { margin-left: 2px; color: var(--warn); font-weight: 700; }
 table.devices td.recent { color: var(--ok); font-weight: 600; }
 table.devices tr.deleted td { opacity: 0.6; }
 tr.inactive td { color: var(--muted); }
