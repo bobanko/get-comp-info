@@ -487,6 +487,8 @@ namespace CompInfo
             public bool MatchLimit;
             public bool RecycleChecked;
             public string RecycleError = "";
+            // the users whose profile folder or bin did not open (no administrator rights)
+            public readonly List<string> DeniedUsers = new List<string>();
         }
 
         class DocumentMatch
@@ -563,7 +565,7 @@ namespace CompInfo
             List<DocumentCandidate> candidates = new List<DocumentCandidate>();
             if (progress != null) progress(new SecurityProgress(true, 0, 0, 0, 0));
             foreach (string root in roots) CollectDirectory(root, scan, candidates, progress);
-            if (includeRecycle) CollectRecycleBin(scan, candidates, progress);
+            if (includeRecycle) CollectRecycleBin(roots, scan, candidates, progress);
             scan.Files = candidates.Count;
             if (progress != null) progress(new SecurityProgress(false, scan.Files, 0, scan.Files, 0));
             for (int i = 0; i < candidates.Count; i++)
@@ -582,6 +584,8 @@ namespace CompInfo
         static SecurityCheck DocumentResult(DocumentScan scan)
         {
             string summary = L.F("Проверено: {0}; помечено как ДСК: {1}", scan.Files, scan.MatchCount);
+            if (scan.DeniedUsers.Count > 0)
+                summary += L.F("; не проверены папки и корзины пользователей (нужны права администратора): {0}", string.Join(", ", scan.DeniedUsers.ToArray()));
             if (scan.MatchCount == 0)
                 return New(scan.RecycleError.Length == 0 ? SecurityLevel.Good : SecurityLevel.Warning, summary, "");
             // highest level first, then the larger score, then the order of the scan
@@ -609,21 +613,44 @@ namespace CompInfo
             return check;
         }
 
-        static void CollectRecycleBin(DocumentScan scan, List<DocumentCandidate> candidates, Action<SecurityProgress> progress)
+        // The bins of every user as folders, so the files inside deleted folders are found too (the bins of the others
+        // open with administrator rights; without them the users whose bins or profile folders did not open are named
+        // in the summary). The Shell, which shows only the top items, reads the own bin if its folder did not open.
+        static void CollectRecycleBin(IEnumerable<string> drives, DocumentScan scan, List<DocumentCandidate> candidates, Action<SecurityProgress> progress)
         {
             scan.RecycleChecked = true;
-            try
+            string mine = null;
+            try { mine = WindowsIdentity.GetCurrent().User.Value; } catch (Exception) { }
+            List<string> deniedSids = new List<string>();
+            List<RecycleFile> files = RecycleFolders.Files(drives, null, deniedSids);
+            if (mine == null || deniedSids.Contains(mine))
             {
-                foreach (RecycleFile file in RecycleBin.Files())
-                {
-                    string extension = Path.GetExtension(file.OriginalName);
-                    if (!OfficeExtensions.Contains(extension) || !File.Exists(file.Path)) continue;
-                    scan.RecycleFiles++;
-                    candidates.Add(new DocumentCandidate(file));
-                    ReportCollected(progress, candidates.Count);
-                }
+                deniedSids.Remove(mine ?? "");
+                try { files.AddRange(RecycleBin.Files()); }
+                catch (Exception e) { scan.RecycleError = e.Message; }
             }
-            catch (Exception e) { scan.RecycleError = e.Message; }
+            foreach (RecycleFile file in files)
+            {
+                if (!Collected(file.OriginalName) || !File.Exists(file.Path)) continue;
+                scan.RecycleFiles++;
+                candidates.Add(new DocumentCandidate(file));
+                ReportCollected(progress, candidates.Count);
+            }
+
+            ProfileFolders profiles = ProfileFolders.Read();
+            foreach (string sid in deniedSids)
+            {
+                string profile;
+                if (profiles.BySid.TryGetValue(sid, out profile)) AddUnique(scan.DeniedUsers, Path.GetFileName(profile));
+            }
+            string own = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            foreach (string profile in profiles.Paths)
+            {
+                if (string.Equals(profile.TrimEnd('\\'), own.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)) continue;
+                try { Directory.GetFileSystemEntries(profile); }
+                catch (UnauthorizedAccessException) { AddUnique(scan.DeniedUsers, Path.GetFileName(profile.TrimEnd('\\'))); }
+                catch (Exception) { }
+            }
         }
 
         static List<string> ScanRoots()
@@ -652,8 +679,7 @@ namespace CompInfo
                 {
                     foreach (string file in Directory.GetFiles(directory))
                     {
-                        string extension = Path.GetExtension(file);
-                        if (!OfficeExtensions.Contains(extension)) continue;
+                        if (!Collected(Path.GetFileName(file))) continue;
                         candidates.Add(new DocumentCandidate(file));
                         ReportCollected(progress, candidates.Count);
                     }
@@ -670,6 +696,12 @@ namespace CompInfo
             }
         }
 
+        // Office documents, and any file whose name a mask of the list matches (*.pfx).
+        static bool Collected(string fileName)
+        {
+            return OfficeExtensions.Contains(Path.GetExtension(fileName)) || Words.NameMatches(fileName);
+        }
+
         static void ReportCollected(Action<SecurityProgress> progress, int found)
         {
             if (progress != null && found % 25 == 0) progress(new SecurityProgress(true, found, 0, 0, 0));
@@ -677,8 +709,7 @@ namespace CompInfo
 
         static void InspectDocument(DocumentCandidate file, DocumentScan scan)
         {
-            List<KeywordHit> hits = FindKeywordHits(Path.GetFileNameWithoutExtension(file.FileName), file.Path,
-                OpenXmlExtensions.Contains(file.Extension));
+            List<KeywordHit> hits = FindKeywordHits(file.FileName, file.Path, OpenXmlExtensions.Contains(file.Extension));
             if (hits.Count == 0) return;
             scan.MatchCount++;
             DocumentMatch match = file.Recycle
@@ -702,7 +733,10 @@ namespace CompInfo
         static List<KeywordHit> FindKeywordHits(string fileName, string path, bool inspectContents)
         {
             TriggerWords list = Words;
-            int[] counts = list.Count(fileName);
+            // the words in the name without its extension, the masks on the whole name
+            int[] counts = list.Count(Path.GetFileNameWithoutExtension(fileName));
+            int[] masks = list.MatchName(fileName);
+            for (int i = 0; i < counts.Length; i++) counts[i] += masks[i];
             if (inspectContents)
             {
                 int[] content = KeywordCountsInOpenXml(path, list);
@@ -809,7 +843,9 @@ namespace CompInfo
             string extension = Path.GetExtension(path).ToLowerInvariant();
             if (extension.StartsWith(".doc") || extension.StartsWith(".dot")) return "WORD";
             if (extension.StartsWith(".xls") || extension.StartsWith(".xlt")) return "EXCEL";
-            return "PPT";
+            if (extension.StartsWith(".pp") || extension.StartsWith(".pot")) return "PPT";
+            // a file found by a mask: its extension (PFX)
+            return extension.Length > 1 ? extension.Substring(1).ToUpperInvariant() : "?";
         }
 
         static SecurityCheck CheckAdministrators()
@@ -914,6 +950,92 @@ namespace CompInfo
     public class RecycleFile
     {
         public string Path = "", OriginalName = "", OriginalFolder = "", DeletedAt = "";
+    }
+
+    // The bins of every user as folders: X:\$Recycle.Bin\<SID>\ on each disk. A deleted item is $R… with its $I… record,
+    // which holds where it was deleted from and when (version 1 up to Windows 8.1, version 2 since Windows 10).
+    // Another user's folder opens only with administrator rights. Unlike the Shell (RecycleBin), this finds the files
+    // inside deleted folders too.
+    public static class RecycleFolders
+    {
+        // The items of the bins on the disks, except the bin of skipSid; a deleted folder gives the files in it.
+        // denied: the SIDs whose bin could not be opened.
+        public static List<RecycleFile> Files(IEnumerable<string> drives, string skipSid, List<string> denied)
+        {
+            List<RecycleFile> result = new List<RecycleFile>();
+            foreach (string drive in drives)
+            {
+                string bin = System.IO.Path.Combine(drive, "$Recycle.Bin");
+                string[] sids;
+                try { sids = Directory.GetDirectories(bin); }
+                catch (Exception) { continue; }
+                foreach (string folder in sids)
+                {
+                    string sid = System.IO.Path.GetFileName(folder);
+                    if (skipSid != null && string.Equals(sid, skipSid, StringComparison.OrdinalIgnoreCase)) continue;
+                    string[] records;
+                    try { records = Directory.GetFiles(folder, "$I*"); }
+                    catch (UnauthorizedAccessException) { if (!denied.Contains(sid)) denied.Add(sid); continue; }
+                    catch (IOException) { continue; }
+                    foreach (string record in records)
+                    {
+                        DateTime deleted;
+                        string original;
+                        try { original = ReadInfo(File.ReadAllBytes(record), out deleted); }
+                        catch (Exception) { continue; }
+                        if (string.IsNullOrEmpty(original)) continue;
+                        string item = System.IO.Path.Combine(folder, "$R" + System.IO.Path.GetFileName(record).Substring(2));
+                        string when = deleted == DateTime.MinValue ? "" : deleted.ToString("g");
+                        if (File.Exists(item)) result.Add(Item(item, original, when));
+                        else if (Directory.Exists(item)) AddFolder(result, item, original, when);
+                    }
+                }
+            }
+            return result;
+        }
+
+        static RecycleFile Item(string path, string original, string deletedAt)
+        {
+            RecycleFile file = new RecycleFile();
+            file.Path = path;
+            file.OriginalName = System.IO.Path.GetFileName(original);
+            file.OriginalFolder = System.IO.Path.GetDirectoryName(original) ?? "";
+            file.DeletedAt = deletedAt;
+            return file;
+        }
+
+        static void AddFolder(List<RecycleFile> result, string folder, string original, string deletedAt)
+        {
+            try
+            {
+                foreach (string file in Directory.GetFiles(folder, "*", SearchOption.AllDirectories))
+                    result.Add(Item(file, System.IO.Path.Combine(original, file.Substring(folder.Length).TrimStart('\\')), deletedAt));
+            }
+            catch (Exception) { }
+        }
+
+        // The original path of a $I record and the time of deletion; null for a record of another format.
+        internal static string ReadInfo(byte[] data, out DateTime deleted)
+        {
+            deleted = DateTime.MinValue;
+            if (data == null || data.Length < 24) return null;
+            long version = BitConverter.ToInt64(data, 0);
+            string path;
+            if (version == 1) path = Encoding.Unicode.GetString(data, 24, Math.Min(520, data.Length - 24) & ~1);
+            else if (version == 2 && data.Length >= 28)
+            {
+                int chars = BitConverter.ToInt32(data, 24);
+                if (chars <= 0) return null;
+                path = Encoding.Unicode.GetString(data, 28, Math.Min(chars * 2, data.Length - 28) & ~1);
+            }
+            else return null;
+            int end = path.IndexOf('\0');
+            if (end >= 0) path = path.Substring(0, end);
+            long time = BitConverter.ToInt64(data, 16);
+            try { if (time > 0) deleted = DateTime.FromFileTime(time); }
+            catch (ArgumentOutOfRangeException) { }
+            return path.Length == 0 ? null : path;
+        }
     }
 
     // The Recycle Bin is a virtual Shell folder. Enumerating it through Shell.Application preserves

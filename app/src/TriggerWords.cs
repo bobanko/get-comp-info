@@ -18,14 +18,16 @@ namespace CompInfo
     // one word or phrase per line; [высокий], [средний], [низкий] (also Ukrainian and English names) start a level;
     // # starts a comment. Words before the first level are medium; repeats (any case) count once, the first one wins.
     // A space in a phrase matches any spaces or none: «т. в. о.» finds «т.в.о.» too.
+    // A line with * or ? and no spaces is a mask of file names (*.pfx — VPN certificates): such files are found by the name
+    // alone, whatever is in them, and a mask is not searched for in the text.
     public class TriggerWords
     {
         public const int High = 3, Medium = 2, Low = 1;
 
         public readonly TriggerWord[] Words;
-        readonly Regex pattern;
-        // group number in pattern → index in Words
-        readonly int[] groups;
+        readonly Regex pattern, masks;
+        // group number in pattern (masks) → index in Words
+        readonly int[] groups, maskGroups;
 
         public TriggerWords(IList<TriggerWord> words)
         {
@@ -33,14 +35,21 @@ namespace CompInfo
             // The longest word first: where words overlap (ДСК in ДСК-ЕП, штат in штатка) the regex alternation
             // takes the first one that matches, so only the longest is counted.
             List<int> order = new List<int>();
-            for (int i = 0; i < Words.Length; i++) order.Add(i);
+            List<string> maskParts = new List<string>();
+            List<int> maskIndex = new List<int> { -1 };
+            for (int i = 0; i < Words.Length; i++)
+                if (IsMask(Words[i].Text)) { maskParts.Add("(" + MaskPattern(Words[i].Text) + ")"); maskIndex.Add(i); }
+                else order.Add(i);
+            maskGroups = maskIndex.ToArray();
+            masks = maskParts.Count == 0 ? null
+                : new Regex("^(?:" + string.Join("|", maskParts.ToArray()) + ")$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
             order.Sort(delegate (int a, int b)
             {
                 int byLength = Compact(Words[b].Text).Length.CompareTo(Compact(Words[a].Text).Length);
                 return byLength != 0 ? byLength : a.CompareTo(b);
             });
             List<string> parts = new List<string>();
-            groups = new int[Words.Length + 1];
+            groups = new int[order.Count + 1];
             for (int n = 0; n < order.Count; n++)
             {
                 parts.Add("(" + Pattern(Words[order[n]].Text) + ")");
@@ -48,6 +57,37 @@ namespace CompInfo
             }
             pattern = parts.Count == 0 ? null
                 : new Regex(string.Join("|", parts.ToArray()), RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+        }
+
+        // *.pfx, ключ?.txt: a word with * or ? and no spaces.
+        public static bool IsMask(string word)
+        {
+            return word.IndexOfAny(new[] { '*', '?' }) >= 0 && !Regex.IsMatch(word, @"\s");
+        }
+
+        static string MaskPattern(string mask)
+        {
+            return Regex.Escape(mask).Replace(@"\*", ".*").Replace(@"\?", ".");
+        }
+
+        public bool HasMasks { get { return masks != null; } }
+
+        // The masks the file name matches (1 each), in the order of Words.
+        public int[] MatchName(string fileName)
+        {
+            int[] counts = new int[Words.Length];
+            if (masks == null || string.IsNullOrEmpty(fileName)) return counts;
+            // the masks may overlap (*.pfx and cert*): every matching one counts
+            for (int g = 1; g < maskGroups.Length; g++)
+                if (Regex.IsMatch(fileName, "^" + MaskPattern(Words[maskGroups[g]].Text) + "$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+                    counts[maskGroups[g]] = 1;
+            return counts;
+        }
+
+        // Whether a file is found by its name alone (a mask matches it): the scan takes it whatever its type.
+        public bool NameMatches(string fileName)
+        {
+            return masks != null && !string.IsNullOrEmpty(fileName) && masks.IsMatch(fileName);
         }
 
         static string Compact(string text)

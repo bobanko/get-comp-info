@@ -2,6 +2,8 @@
 # One word or phrase per line, as it should be shown in the report; case does not matter when searching.
 # A space in a phrase matches any spaces or none: «т. в. о.» also finds «т.в.о.».
 # [высокий], [средний], [низкий] start a level: found files are ordered by their most important word.
+# A line with * or ? and no spaces is a mask of file names: *.pfx (VPN certificates) finds such files by the name alone,
+# whatever their type and content.
 # Words before the first level are medium. Empty lines and lines starting with # are skipped.
 #
 # This is the built-in list. The admin keeps the working one in the cloud (web page «Слова SUSpector»):
@@ -34,3 +36,4 @@
 вахтовка
 доповідь
 доклад
+*.pfx

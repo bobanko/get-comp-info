@@ -6,7 +6,7 @@ import { checkWordRows, HIGH, LEVEL_LABELS, levelCounts, LOW, MEDIUM, normalizeT
 const LEVEL_BADGES = { [HIGH]: 'badge badge-danger', [MEDIUM]: 'badge badge-warn', [LOW]: 'badge badge-muted' };
 
 // The first list of the table while the cloud has none: the list built into SUSpector (app\trigger-words.txt)
-// as of 2026-11-23. Once saved, the cloud list is what the page shows.
+// as of 2026-11-24. Once saved, the cloud list is what the page shows.
 const TEMPLATE = `[высокий]
 таємно
 особливої важливості
@@ -33,6 +33,7 @@ const TEMPLATE = `[высокий]
 вахтовка
 доповідь
 доклад
+*.pfx
 `;
 
 const rowsOf = (text) => parseTriggerWords(text).words.map(({ text: word, level }) => ({ text: word, level }));
@@ -204,6 +205,7 @@ export async function renderTriggerWords(context) {
         { class: 'muted small' },
         'Регистр не важен. Пробел во фразе совпадает с любыми пробелами или их отсутствием: «т. в. о.» найдёт и «т.в.о.». ',
         'Если одно слово входит в другое (ДСК и ДСК-ЕП, штат и штатка), засчитывается более длинное. ',
+        'Строка со * или ? без пробелов — маска имени файла: «*.pfx» (сертификаты VPN) находит такие файлы по имени, какого бы типа они ни были; внутри текста маска не ищется. ',
         'Порядок строк внутри приоритета ни на что не влияет; после сохранения таблица упорядочивается по приоритету.',
       ),
     ),

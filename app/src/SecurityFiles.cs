@@ -5,6 +5,64 @@ using Microsoft.Win32;
 
 namespace CompInfo
 {
+    // The user profiles of this computer: ProfileList of the registry without the system ones (systemprofile, services),
+    // the folder that holds them (C:\Users) and the profile of each SID (whose bin $Recycle.Bin\<SID> is).
+    public class ProfileFolders
+    {
+        public readonly List<string> Paths = new List<string>();
+        public readonly List<string> Roots = new List<string>();
+        public readonly Dictionary<string, string> BySid = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        public static ProfileFolders Read()
+        {
+            ProfileFolders result = new ProfileFolders();
+            try
+            {
+                using (RegistryKey list = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList"))
+                    if (list != null)
+                    {
+                        string root = Convert.ToString(list.GetValue("ProfilesDirectory"));
+                        if (!string.IsNullOrEmpty(root)) result.Roots.Add(Environment.ExpandEnvironmentVariables(root));
+                        foreach (string sid in list.GetSubKeyNames())
+                            using (RegistryKey key = list.OpenSubKey(sid))
+                            {
+                                string path = key == null ? null : Convert.ToString(key.GetValue("ProfileImagePath"));
+                                if (string.IsNullOrEmpty(path)) continue;
+                                path = Environment.ExpandEnvironmentVariables(path).TrimEnd('\\');
+                                if (path.IndexOf(@"\Windows\", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                                result.Paths.Add(path);
+                                // a profile kept aside while Windows repairs it is SID.bak
+                                string clean = sid.EndsWith(".bak", StringComparison.OrdinalIgnoreCase) ? sid.Substring(0, sid.Length - 4) : sid;
+                                if (!result.BySid.ContainsKey(clean)) result.BySid.Add(clean, path);
+                            }
+                    }
+            }
+            catch (Exception) { }
+            string mine = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (mine.Length > 0)
+            {
+                result.Paths.Add(mine.TrimEnd('\\'));
+                string parent = Path.GetDirectoryName(mine);
+                if (!string.IsNullOrEmpty(parent)) result.Roots.Add(parent);
+            }
+            return result;
+        }
+
+        // The profile of the bin that holds a file (X:\$Recycle.Bin\<SID>\…), or null.
+        public string BinOwner(string filePath)
+        {
+            string p = filePath ?? "";
+            const string bin = @"\$Recycle.Bin\";
+            int at = p.IndexOf(bin, StringComparison.OrdinalIgnoreCase);
+            if (at < 0) return null;
+            int start = at + bin.Length;
+            int end = p.IndexOf('\\', start);
+            if (end < 0) return null;
+            string profile;
+            return BySid.TryGetValue(p.Substring(start, end - start), out profile) ? profile : null;
+        }
+    }
+
     // Where a found document lies, for the view «По пользователям» of SUSpector: whose profile (or which disk) and which
     // place in it: the bin, a messenger or Claude, or the first folder under the profile (Документы, Рабочий стол…).
     public class DocumentPlace
@@ -19,54 +77,27 @@ namespace CompInfo
         public string OwnerKey { get { return OwnerKind + ":" + (OwnerPath ?? "").ToLowerInvariant(); } }
         public string FolderKey { get { return OwnerKey + "|" + FolderKind + ":" + (Folder ?? "").ToLowerInvariant(); } }
 
-        // The profile folders of this computer (ProfileList, without the system ones) and the folder that holds them.
-        public static List<string> Profiles(out List<string> roots)
-        {
-            List<string> profiles = new List<string>();
-            roots = new List<string>();
-            try
-            {
-                using (RegistryKey list = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList"))
-                    if (list != null)
-                    {
-                        string root = Convert.ToString(list.GetValue("ProfilesDirectory"));
-                        if (!string.IsNullOrEmpty(root)) roots.Add(Environment.ExpandEnvironmentVariables(root));
-                        foreach (string sid in list.GetSubKeyNames())
-                            using (RegistryKey key = list.OpenSubKey(sid))
-                            {
-                                string path = key == null ? null : Convert.ToString(key.GetValue("ProfileImagePath"));
-                                if (string.IsNullOrEmpty(path)) continue;
-                                path = Environment.ExpandEnvironmentVariables(path);
-                                if (path.IndexOf(@"\Windows\", StringComparison.OrdinalIgnoreCase) >= 0) continue;
-                                profiles.Add(path);
-                            }
-                    }
-            }
-            catch (Exception) { }
-            string mine = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            if (mine.Length > 0)
-            {
-                profiles.Add(mine);
-                string parent = Path.GetDirectoryName(mine);
-                if (!string.IsNullOrEmpty(parent)) roots.Add(parent);
-            }
-            return profiles;
-        }
-
-        // profiles: the profile folders; roots: the folders of profiles (C:\Users), where a folder of a removed profile
-        // also counts as a user.
-        public static DocumentPlace Of(string path, bool recycle, IList<string> profiles, IList<string> roots)
+        // A document by its shown path; a file in a bin is under the user of that bin (binOwner: the profile folder of
+        // its SID), also when it was deleted outside the profile. In the folder of profiles (C:\Users) a folder of a
+        // removed profile also counts as a user.
+        public static DocumentPlace Of(string path, bool recycle, ProfileFolders profiles, string binOwner)
         {
             DocumentPlace place = new DocumentPlace();
             string p = (path ?? "").Replace('/', '\\');
             string owner = null;
-            foreach (string profile in profiles)
+            foreach (string profile in profiles.Paths)
             {
                 string folder = profile.TrimEnd('\\');
                 if (Under(p, folder) && (owner == null || folder.Length > owner.Length)) owner = folder;
             }
+            bool outside = false;
+            if (recycle && !string.IsNullOrEmpty(binOwner) && (owner == null || !string.Equals(owner, binOwner.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)))
+            {
+                owner = binOwner.TrimEnd('\\');
+                outside = true;
+            }
             if (owner == null)
-                foreach (string root in roots)
+                foreach (string root in profiles.Roots)
                 {
                     string folder = root.TrimEnd('\\');
                     if (!Under(p, folder)) continue;
@@ -93,7 +124,8 @@ namespace CompInfo
                 place.Owner = L.T("Место неизвестно");
             }
 
-            string rest = place.OwnerPath.Length == 0 ? p.TrimStart('\\') : p.Substring(place.OwnerPath.TrimEnd('\\').Length).TrimStart('\\');
+            // a file of a user's bin deleted elsewhere keeps its whole path (D:\Обмін\…)
+            string rest = place.OwnerPath.Length == 0 || outside ? p.TrimStart('\\') : p.Substring(place.OwnerPath.TrimEnd('\\').Length).TrimStart('\\');
             place.Rest = rest;
             List<string> tags = SecurityAudit.LocationTags(p, recycle);
             if (recycle) { place.FolderKind = "bin"; place.Folder = L.T("Корзина"); return place; }
@@ -194,9 +226,9 @@ namespace CompInfo
         }
 
         // The place of a found file for the view by users: its shown path is the original one also for a file in the bin.
-        public static DocumentPlace Place(SecurityDetail item, IList<string> profiles, IList<string> roots)
+        public static DocumentPlace Place(SecurityDetail item, ProfileFolders profiles)
         {
-            return DocumentPlace.Of(item.Text, TagsOf(item).Contains(L.T("#корзина").TrimStart('#')), profiles, roots);
+            return DocumentPlace.Of(item.Text, TagsOf(item).Contains(L.T("#корзина").TrimStart('#')), profiles, profiles.BinOwner(item.FilePath));
         }
 
         // Files in a SupraWeed folder are the program's own templates: they hold trigger words, not ДСК content.

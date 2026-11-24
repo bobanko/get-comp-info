@@ -49,6 +49,7 @@ namespace CompInfo
             Run("security document scan", SecurityDocumentScan);
             Run("deleting found documents", DocumentDeletion);
             Run("found documents by user and place", DocumentPlaces);
+            Run("the bins of other users", OtherUsersBins);
             Run("document search", DocumentSearchFiles);
             Run("standalone SUSpector", StandaloneSuspector);
             Run("toolbox sections", ToolboxSections);
@@ -85,6 +86,13 @@ namespace CompInfo
         {
             List<RecycleFile> files = RecycleBin.Files();
             Console.WriteLine("Recycle Bin items available through Windows Shell: " + files.Count);
+            var drives = new List<string>();
+            foreach (DriveInfo drive in DriveInfo.GetDrives())
+                if (drive.IsReady && drive.DriveType == DriveType.Fixed) drives.Add(drive.RootDirectory.FullName);
+            var denied = new List<string>();
+            string mine = System.Security.Principal.WindowsIdentity.GetCurrent().User.Value;
+            Console.WriteLine("Items in the bins of the other users: " + RecycleFolders.Files(drives, mine, denied).Count + "; denied: " + string.Join(", ", denied.ToArray()));
+            Console.WriteLine("Own bin read as folders: " + RecycleFolders.Files(drives, null, new List<string>()).Count + " items (other users included)");
             return 0;
         }
 
@@ -497,6 +505,35 @@ namespace CompInfo
             Check(TriggerWords.LevelOf("Високий") == TriggerWords.High && TriggerWords.LevelOf("medium") == TriggerWords.Medium &&
                 TriggerWords.LevelOf("низкий") == TriggerWords.Low && TriggerWords.LevelOf("важный") == 0, "level names in three languages");
 
+            // masks of file names: *.pfx finds the files by the name alone, it is not searched for in the text
+            TriggerWords masked = TriggerWords.Parse("[высокий]\nДСК\n[низкий]\n*.pfx\nкл?ч*.p12\nфайл *.txt");
+            Check(TriggerWords.IsMask("*.pfx") && !TriggerWords.IsMask("файл *.txt") && !TriggerWords.IsMask("ДСК"), "a mask has * or ? and no spaces");
+            Check(masked.NameMatches("VPN Іванов.PFX") && masked.NameMatches("ключ-2026.p12") && !masked.NameMatches("a.pfx.docx") && !masked.NameMatches("a.docx"),
+                "masks match the whole file name, any case");
+            int[] byName = masked.MatchName("ДСК.pfx");
+            Check(byName[1] == 1 && byName[2] == 0 && byName[0] == 0, "a matching mask counts once, the words are not counted by MatchName");
+            Check(masked.Count("about *.pfx files")[1] == 0, "a mask is not searched in the text");
+            Check(!list.HasMasks && masked.HasMasks, "a list knows whether it has masks");
+            TriggerWords keep = SecurityAudit.Words;
+            string certs = TempDir();
+            try
+            {
+                SecurityAudit.Words = masked;
+                File.WriteAllText(Path.Combine(certs, "vpn.pfx"), "binary");
+                File.WriteAllText(Path.Combine(certs, "ДСК.pfx"), "binary");
+                File.WriteAllText(Path.Combine(certs, "notes.txt"), "*.pfx ДСК");
+                SecurityCheck found = SecurityAudit.CheckDocumentsAt(new[] { certs });
+                List<string> names = new List<string>();
+                foreach (SecurityDetail item in found.Items) names.Add(Path.GetFileName(item.FilePath) + ":" + item.Level + ":" + item.FileType);
+                Check(string.Join(" ", names.ToArray()) == "ДСК.pfx:3:PFX vpn.pfx:1:PFX",
+                    "files of a mask are found whatever their type, the words in their names count too: " + string.Join(" ", names.ToArray()));
+            }
+            finally
+            {
+                SecurityAudit.Words = keep;
+                Directory.Delete(certs, true);
+            }
+
             // the most important documents come first, whatever the order of the scan
             TriggerWords saved = SecurityAudit.Words;
             string dir = TempDir();
@@ -590,30 +627,100 @@ namespace CompInfo
 
         static void DocumentPlaces()
         {
-            var profiles = new List<string> { @"C:\Users\olena", @"D:\Profiles\ivan.CORP" };
-            var roots = new List<string> { @"C:\Users" };
-            DocumentPlace p = DocumentPlace.Of(@"C:\Users\olena\Documents\Звіти\2026\ДСК.docx", false, profiles, roots);
+            var profiles = new ProfileFolders();
+            profiles.Paths.Add(@"C:\Users\olena");
+            profiles.Paths.Add(@"D:\Profiles\ivan.CORP");
+            profiles.Roots.Add(@"C:\Users");
+            profiles.BySid.Add("S-1-5-21-7-1001", @"D:\Profiles\ivan.CORP");
+            DocumentPlace p = DocumentPlace.Of(@"C:\Users\olena\Documents\Звіти\2026\ДСК.docx", false, profiles, null);
             Check(p.OwnerKind == "user" && p.Owner == "olena" && p.FolderKind == "folder" && p.Folder == L.T("Документы") && p.Rest == @"Звіти\2026\ДСК.docx",
                 "a document of a profile is under its user and the first folder");
-            p = DocumentPlace.Of(@"D:\Profiles\ivan.CORP\Desktop\a.docx", false, profiles, roots);
+            p = DocumentPlace.Of(@"D:\Profiles\ivan.CORP\Desktop\a.docx", false, profiles, null);
             Check(p.Owner == "ivan.CORP" && p.Folder == L.T("Рабочий стол") && p.Rest == "a.docx", "a profile outside C:\\Users is found by ProfileList");
-            p = DocumentPlace.Of(@"C:\Users\old\Downloads\Telegram Desktop\x.docx", false, profiles, roots);
+            p = DocumentPlace.Of(@"C:\Users\old\Downloads\Telegram Desktop\x.docx", false, profiles, null);
             Check(p.Owner == "old" && p.FolderKind == "app" && p.Folder == "Telegram" && p.Rest == @"Downloads\Telegram Desktop\x.docx",
                 "a removed profile still counts as a user; Telegram comes before Downloads");
-            p = DocumentPlace.Of(@"C:\Users\olena\Documents\x.docx", true, profiles, roots);
+            p = DocumentPlace.Of(@"C:\Users\olena\Documents\x.docx", true, profiles, null);
             Check(p.FolderKind == "bin" && p.Folder == L.T("Корзина") && p.Rest == @"Documents\x.docx", "a file in the bin is under its user's bin");
-            p = DocumentPlace.Of(@"C:\Users\olena\AppData\Roaming\Claude\a.docx", false, profiles, roots);
+            p = DocumentPlace.Of(@"C:\Users\olena\AppData\Roaming\Claude\a.docx", false, profiles, null);
             Check(p.FolderKind == "app" && p.Folder == "Claude", "Claude files have their own place");
-            p = DocumentPlace.Of(@"C:\Users\olena\ДСК.docx", false, profiles, roots);
+            p = DocumentPlace.Of(@"C:\Users\olena\ДСК.docx", false, profiles, null);
             Check(p.FolderKind == "root" && p.Rest == "ДСК.docx", "a file straight in the profile");
-            p = DocumentPlace.Of(@"E:\Архів\2025\ДСК.xlsx", false, profiles, roots);
+            p = DocumentPlace.Of(@"E:\Архів\2025\ДСК.xlsx", false, profiles, null);
             Check(p.OwnerKind == "drive" && p.OwnerPath == @"E:\" && p.Folder == "Архів" && p.Rest == @"2025\ДСК.xlsx", "a file outside the profiles is under its disk");
-            p = DocumentPlace.Of(@"C:\Users\ДСК.docx", false, profiles, roots);
+            p = DocumentPlace.Of(@"C:\Users\ДСК.docx", false, profiles, null);
             Check(p.OwnerKind == "drive" && p.Folder == "Users", "a file straight in C:\\Users is no one's");
-            p = DocumentPlace.Of("ДСК.docx", true, profiles, roots);
+            p = DocumentPlace.Of("ДСК.docx", true, profiles, null);
             Check(p.OwnerKind == "unknown" && p.FolderKind == "bin", "a bin file without its folder");
-            Check(DocumentPlace.Of(@"C:\Users\OLENA\Documents\a.docx", false, profiles, roots).OwnerKey ==
-                  DocumentPlace.Of(@"C:\Users\olena\Desktop\a.docx", false, profiles, roots).OwnerKey, "the owner does not depend on the case of the path");
+            Check(DocumentPlace.Of(@"C:\Users\OLENA\Documents\a.docx", false, profiles, null).OwnerKey ==
+                  DocumentPlace.Of(@"C:\Users\olena\Desktop\a.docx", false, profiles, null).OwnerKey, "the owner does not depend on the case of the path");
+
+            // a file in another user's bin is under the user of that bin, wherever it was deleted from
+            string binOwner = profiles.BinOwner(@"E:\$Recycle.Bin\S-1-5-21-7-1001\$RAB12.docx");
+            Check(binOwner == @"D:\Profiles\ivan.CORP", "the bin of a SID belongs to its profile");
+            Check(profiles.BinOwner(@"E:\$Recycle.Bin\S-1-5-21-9-9\$RAB12.docx") == null && profiles.BinOwner(@"C:\Users\olena\a.docx") == null,
+                "an unknown SID or no bin: no owner");
+            p = DocumentPlace.Of(@"E:\Обмін\ДСК.docx", true, profiles, binOwner);
+            Check(p.Owner == "ivan.CORP" && p.FolderKind == "bin" && p.Rest == @"E:\Обмін\ДСК.docx", "deleted outside the profile: the whole path under the user's bin");
+            p = DocumentPlace.Of(@"D:\Profiles\ivan.CORP\Documents\ДСК.docx", true, profiles, binOwner);
+            Check(p.Owner == "ivan.CORP" && p.Rest == @"Documents\ДСК.docx", "deleted from the profile: the path under it");
+        }
+
+        static byte[] RecycleRecord(int version, string path, DateTime deleted)
+        {
+            var data = new List<byte>();
+            data.AddRange(BitConverter.GetBytes((long)version));
+            data.AddRange(BitConverter.GetBytes(1234L));
+            data.AddRange(BitConverter.GetBytes(deleted.ToFileTime()));
+            if (version == 2)
+            {
+                data.AddRange(BitConverter.GetBytes(path.Length + 1));
+                data.AddRange(Encoding.Unicode.GetBytes(path + "\0"));
+            }
+            else
+            {
+                byte[] name = new byte[520];
+                Encoding.Unicode.GetBytes(path).CopyTo(name, 0);
+                data.AddRange(name);
+            }
+            return data.ToArray();
+        }
+
+        static void OtherUsersBins()
+        {
+            DateTime when = new DateTime(2026, 11, 20, 14, 30, 0);
+            DateTime deleted;
+            Check(RecycleFolders.ReadInfo(RecycleRecord(2, @"C:\Users\olena\Documents\ДСК.docx", when), out deleted) == @"C:\Users\olena\Documents\ДСК.docx" && deleted == when,
+                "a $I record of Windows 10 and later");
+            Check(RecycleFolders.ReadInfo(RecycleRecord(1, @"D:\a.xlsx", when), out deleted) == @"D:\a.xlsx", "a $I record of Windows Vista to 8.1");
+            Check(RecycleFolders.ReadInfo(new byte[] { 9, 0, 0, 0, 0, 0, 0, 0 }, out deleted) == null, "an unknown record is skipped");
+
+            // a disk with the bins of two users: a file, a deleted folder with a file inside, a record without its item
+            string drive = TempDir();
+            try
+            {
+                string mine = Path.Combine(drive, @"$Recycle.Bin\S-1-5-21-1-500");
+                string other = Path.Combine(drive, @"$Recycle.Bin\S-1-5-21-1-1001");
+                Directory.CreateDirectory(mine);
+                Directory.CreateDirectory(Path.Combine(other, @"$R2\Накази"));
+                File.WriteAllBytes(Path.Combine(other, "$I1.docx"), RecycleRecord(2, @"C:\Users\olena\Desktop\ДСК.docx", when));
+                File.WriteAllText(Path.Combine(other, "$R1.docx"), "x");
+                File.WriteAllBytes(Path.Combine(other, "$I2"), RecycleRecord(2, @"C:\Users\olena\Documents\Старе", when));
+                File.WriteAllText(Path.Combine(other, @"$R2\Накази\наказ.docx"), "x");
+                File.WriteAllBytes(Path.Combine(other, "$I3.pfx"), RecycleRecord(2, @"C:\Users\olena\vpn.pfx", when));
+                File.WriteAllBytes(Path.Combine(mine, "$I4.docx"), RecycleRecord(2, @"C:\Users\me\mine.docx", when));
+                File.WriteAllText(Path.Combine(mine, "$R4.docx"), "x");
+                var denied = new List<string>();
+                List<RecycleFile> files = RecycleFolders.Files(new[] { drive }, "S-1-5-21-1-500", denied);
+                files.Sort(delegate (RecycleFile a, RecycleFile b) { return string.CompareOrdinal(a.OriginalName, b.OriginalName); });
+                Check(files.Count == 2 && files[0].OriginalName == "ДСК.docx" && files[0].OriginalFolder == @"C:\Users\olena\Desktop" &&
+                      files[0].Path == Path.Combine(other, "$R1.docx") && files[0].DeletedAt == when.ToString("g") &&
+                      files[1].OriginalName == "наказ.docx" && files[1].OriginalFolder == @"C:\Users\olena\Documents\Старе\Накази",
+                    "the bins of the other users: files and the files of deleted folders, not the bin read through the Shell: " + files.Count);
+                Check(denied.Count == 0, "nothing denied in a folder that opens");
+                Check(RecycleFolders.Files(new[] { drive }, null, denied).Count == 3, "without the Shell the own bin is read as folders too");
+            }
+            finally { Directory.Delete(drive, true); }
         }
 
         static void SecurityDocumentScan()

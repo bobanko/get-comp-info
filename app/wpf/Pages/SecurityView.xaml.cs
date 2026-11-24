@@ -30,7 +30,7 @@ namespace CompInfo.Wpf
         readonly ObservableCollection<CheckRow> checks = new ObservableCollection<CheckRow>();
         // the groups of the view by users that the user folded (PlaceGroup.Key), kept while the list is rebuilt
         readonly HashSet<string> folded = new HashSet<string>();
-        List<string> profiles, profileRoots;
+        ProfileFolders profiles;
         bool running, ready;
         CancellationTokenSource cancel;
 
@@ -340,13 +340,13 @@ namespace CompInfo.Wpf
         // folders under the place.
         ListCollectionView ByPlace(List<FileRow> found)
         {
-            if (profiles == null) profiles = DocumentPlace.Profiles(out profileRoots);
+            if (profiles == null) profiles = ProfileFolders.Read();
             var groups = new Dictionary<string, PlaceGroup>();
             var order = new Dictionary<FileRow, int>();
             foreach (FileRow row in found)
             {
                 order[row] = order.Count;
-                DocumentPlace place = SecurityFiles.Place(row.Item, profiles, profileRoots);
+                DocumentPlace place = SecurityFiles.Place(row.Item, profiles);
                 row.Owner = Group(groups, place.OwnerKey, 1, place.OwnerKind, place.Owner, place.OwnerKind == "user" ? place.OwnerPath : "");
                 row.Place = Group(groups, place.FolderKey, 2, place.FolderKind, place.Folder, "");
                 if (place.FolderKind == "app") row.Place.Glyph = place.Folder == "Claude" ? "" : place.Folder == "SupraWeed" ? Glyph.Lock : "";
