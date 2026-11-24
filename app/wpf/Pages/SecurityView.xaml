@@ -75,7 +75,12 @@
             <ContentPresenter Content="{Binding MatchesBadge}" ToolTip="{Binding MatchesTip}" HorizontalAlignment="Center" VerticalAlignment="Center" />
         </DataTemplate>
         <DataTemplate x:Key="FileNameCell">
-            <TextBlock Text="{Binding Name}" ToolTip="{Binding Path}" FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,7,0,7" />
+            <!-- in the view by users the folders under the place go in a muted line under the name -->
+            <StackPanel ToolTip="{Binding Path}" VerticalAlignment="Center" Margin="0,7,0,7">
+                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding Folder}" Visibility="{Binding FolderVisibility}" FontSize="12" TextWrapping="Wrap"
+                           Foreground="{DynamicResource Muted}" Margin="0,1,0,0" />
+            </StackPanel>
         </DataTemplate>
         <DataTemplate x:Key="FileButtonsCell">
             <StackPanel Orientation="Horizontal">
@@ -94,7 +99,73 @@
                     <Setter TargetName="Delete" Property="Cursor" Value="Arrow" />
                 </DataTrigger>
             </DataTemplate.Triggers>
-        </DataTemplate>    </UserControl.Resources>
+        </DataTemplate>
+
+        <!-- the view by users: a group row (a user or a disk, then a place in it) with its arrow, icon, name and the number
+             of files in the colour of the most important one; the group is a PlaceGroup (Name of the CollectionViewGroup) -->
+        <Style x:Key="PlaceGroupHead" TargetType="ToggleButton">
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Back" Background="Transparent" BorderBrush="{DynamicResource Divider}" BorderThickness="0,0,0,1">
+                            <Grid>
+                                <Border x:Name="Hover" Background="Transparent" />
+                                <StackPanel Orientation="Horizontal" Margin="{Binding Name.Indent}" MinHeight="34">
+                                    <TextBlock x:Name="Arrow" Text="&#xE70D;" FontFamily="{StaticResource IconFont}" FontSize="10" Width="16"
+                                               VerticalAlignment="Center" Foreground="{DynamicResource Muted}" />
+                                    <TextBlock x:Name="Icon" Text="{Binding Name.Glyph}" FontFamily="{StaticResource IconFont}" FontSize="15"
+                                               Margin="4,0,8,0" VerticalAlignment="Center" Foreground="{DynamicResource Folder}" />
+                                    <TextBlock x:Name="Label" Text="{Binding Name.Label}" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding Name.Hint}" Foreground="{DynamicResource Muted}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                    <ContentPresenter Content="{Binding Name.Badge}" ToolTip="{Binding Name.BadgeTip}" Margin="10,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Hover" Property="Background" Value="{DynamicResource SubtleHover}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="False">
+                                <Setter TargetName="Arrow" Property="Text" Value="&#xE76C;" />
+                            </Trigger>
+                            <DataTrigger Binding="{Binding Name.Depth}" Value="1">
+                                <Setter TargetName="Back" Property="Background" Value="{DynamicResource HeaderBack}" />
+                                <Setter TargetName="Label" Property="FontWeight" Value="SemiBold" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Name.Tone}" Value="Accent">
+                                <Setter TargetName="Icon" Property="Foreground" Value="{DynamicResource Accent}" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Name.Tone}" Value="Bad">
+                                <Setter TargetName="Icon" Property="Foreground" Value="{DynamicResource Bad}" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Name.Tone}" Value="Muted">
+                                <Setter TargetName="Icon" Property="Foreground" Value="{DynamicResource Muted}" />
+                            </DataTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="PlaceGroup" TargetType="GroupItem">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="GroupItem">
+                        <StackPanel>
+                            <ToggleButton Style="{StaticResource PlaceGroupHead}" IsChecked="{Binding Name.Expanded, Mode=TwoWay}" />
+                            <ItemsPresenter x:Name="Items" />
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <DataTrigger Binding="{Binding Name.Expanded}" Value="False">
+                                <Setter TargetName="Items" Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
 
     <DockPanel>
         <!-- one row: run, «scan documents», «disable OneDrive» (for the OneDrive check), the status, the layout switch -->
@@ -105,6 +176,7 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <Button x:Name="RunButton" Style="{StaticResource AccentButton}" VerticalAlignment="Center" Click="Run_Click" />
@@ -114,7 +186,17 @@
             <Button x:Name="OneDriveButton" Grid.Column="2" VerticalAlignment="Center" Margin="10,0,0,0" Visibility="Collapsed"
                     Click="OneDrive_Click" />
             <local:StatusLine x:Name="Status" Grid.Column="3" VerticalAlignment="Center" Margin="16,0,12,0" />
-            <Border x:Name="LayoutSwitch" Grid.Column="4" Style="{StaticResource Segmented}" VerticalAlignment="Center">
+            <!-- the found files as a list or by user and place (only while they are shown) -->
+            <Border x:Name="FileViewSwitch" Grid.Column="4" Style="{StaticResource Segmented}" VerticalAlignment="Center" Margin="0,0,10,0"
+                    Visibility="Collapsed">
+                <StackPanel Orientation="Horizontal">
+                    <RadioButton x:Name="ListMode" Style="{StaticResource Segment}" GroupName="FileView" Content="&#xE8FD;" Width="40"
+                                 FontFamily="{StaticResource IconFont}" FontSize="16" Checked="FileView_Checked" />
+                    <RadioButton x:Name="TreeMode" Style="{StaticResource Segment}" GroupName="FileView" Content="&#xE716;" Width="40"
+                                 FontFamily="{StaticResource IconFont}" FontSize="16" Checked="FileView_Checked" />
+                </StackPanel>
+            </Border>
+            <Border x:Name="LayoutSwitch" Grid.Column="5" Style="{StaticResource Segmented}" VerticalAlignment="Center">
                 <StackPanel Orientation="Horizontal">
                     <RadioButton x:Name="Bottom" Style="{StaticResource Segment}" GroupName="Layout" Content="&#xE90E;" Width="40"
                                  FontFamily="{StaticResource IconFont}" FontSize="16" Checked="Layout_Checked" />
@@ -162,6 +244,11 @@
                         </Grid.RowDefinitions>
                         <ListView x:Name="Files" Style="{StaticResource GridTable}" SelectionMode="Single"
                                   MouseDoubleClick="Files_MouseDoubleClick" KeyDown="Files_KeyDown">
+                            <!-- used only in the view by users: the user (or disk), then the place in it -->
+                            <ListView.GroupStyle>
+                                <GroupStyle ContainerStyle="{StaticResource PlaceGroup}" />
+                                <GroupStyle ContainerStyle="{StaticResource PlaceGroup}" />
+                            </ListView.GroupStyle>
                             <ListView.View>
                                 <GridView ColumnHeaderContainerStyle="{StaticResource GridTableHeader}">
                                     <GridViewColumn Width="34" CellTemplate="{StaticResource FileIconCell}" />

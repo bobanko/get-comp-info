@@ -48,6 +48,7 @@ namespace CompInfo
             Run("trigger words from the cloud", TriggerWordsFromCloud);
             Run("security document scan", SecurityDocumentScan);
             Run("deleting found documents", DocumentDeletion);
+            Run("found documents by user and place", DocumentPlaces);
             Run("document search", DocumentSearchFiles);
             Run("standalone SUSpector", StandaloneSuspector);
             Run("toolbox sections", ToolboxSections);
@@ -585,6 +586,34 @@ namespace CompInfo
                 Check(missing, "a file that is already gone is reported");
             }
             finally { Directory.Delete(dir, true); }
+        }
+
+        static void DocumentPlaces()
+        {
+            var profiles = new List<string> { @"C:\Users\olena", @"D:\Profiles\ivan.CORP" };
+            var roots = new List<string> { @"C:\Users" };
+            DocumentPlace p = DocumentPlace.Of(@"C:\Users\olena\Documents\Звіти\2026\ДСК.docx", false, profiles, roots);
+            Check(p.OwnerKind == "user" && p.Owner == "olena" && p.FolderKind == "folder" && p.Folder == L.T("Документы") && p.Rest == @"Звіти\2026\ДСК.docx",
+                "a document of a profile is under its user and the first folder");
+            p = DocumentPlace.Of(@"D:\Profiles\ivan.CORP\Desktop\a.docx", false, profiles, roots);
+            Check(p.Owner == "ivan.CORP" && p.Folder == L.T("Рабочий стол") && p.Rest == "a.docx", "a profile outside C:\\Users is found by ProfileList");
+            p = DocumentPlace.Of(@"C:\Users\old\Downloads\Telegram Desktop\x.docx", false, profiles, roots);
+            Check(p.Owner == "old" && p.FolderKind == "app" && p.Folder == "Telegram" && p.Rest == @"Downloads\Telegram Desktop\x.docx",
+                "a removed profile still counts as a user; Telegram comes before Downloads");
+            p = DocumentPlace.Of(@"C:\Users\olena\Documents\x.docx", true, profiles, roots);
+            Check(p.FolderKind == "bin" && p.Folder == L.T("Корзина") && p.Rest == @"Documents\x.docx", "a file in the bin is under its user's bin");
+            p = DocumentPlace.Of(@"C:\Users\olena\AppData\Roaming\Claude\a.docx", false, profiles, roots);
+            Check(p.FolderKind == "app" && p.Folder == "Claude", "Claude files have their own place");
+            p = DocumentPlace.Of(@"C:\Users\olena\ДСК.docx", false, profiles, roots);
+            Check(p.FolderKind == "root" && p.Rest == "ДСК.docx", "a file straight in the profile");
+            p = DocumentPlace.Of(@"E:\Архів\2025\ДСК.xlsx", false, profiles, roots);
+            Check(p.OwnerKind == "drive" && p.OwnerPath == @"E:\" && p.Folder == "Архів" && p.Rest == @"2025\ДСК.xlsx", "a file outside the profiles is under its disk");
+            p = DocumentPlace.Of(@"C:\Users\ДСК.docx", false, profiles, roots);
+            Check(p.OwnerKind == "drive" && p.Folder == "Users", "a file straight in C:\\Users is no one's");
+            p = DocumentPlace.Of("ДСК.docx", true, profiles, roots);
+            Check(p.OwnerKind == "unknown" && p.FolderKind == "bin", "a bin file without its folder");
+            Check(DocumentPlace.Of(@"C:\Users\OLENA\Documents\a.docx", false, profiles, roots).OwnerKey ==
+                  DocumentPlace.Of(@"C:\Users\olena\Desktop\a.docx", false, profiles, roots).OwnerKey, "the owner does not depend on the case of the path");
         }
 
         static void SecurityDocumentScan()

@@ -289,9 +289,11 @@ namespace CompInfo.Wpf
             main.Left = -20000; main.Top = -20000;
             main.ShowInTaskbar = false;
             main.ShowActivated = false;
-            // --width N: the layout of a narrow (or wide) window
+            // --width N, --height N: the layout of a narrow (or wide, or tall) window
             double width;
             if (double.TryParse(Option(args, "--width", 1), out width)) { main.MinWidth = 0; main.Width = width; }
+            double height;
+            if (double.TryParse(Option(args, "--height", 1), out height)) { main.MinHeight = 0; main.Height = height; }
             main.Show();
             Window target = main;
             if (Array.IndexOf(args, "--about") >= 0)

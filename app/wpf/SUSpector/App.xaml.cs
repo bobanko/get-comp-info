@@ -12,7 +12,7 @@ namespace CompInfo.Wpf
     {
         // Only harmless UI preferences: theme, language, where the file table is, window place.
         // Always written App.Settings: a bare «Settings» is the comp-info.ini of the toolbox (Lang.cs).
-        public static readonly IniSettings Settings = new IniSettings("SUSpector.ini", "SUSpector settings", "theme", "language", "layout", "window");
+        public static readonly IniSettings Settings = new IniSettings("SUSpector.ini", "SUSpector settings", "theme", "language", "layout", "view", "window");
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -22,6 +22,8 @@ namespace CompInfo.Wpf
             SuspectorUpdate.RemoveLeftovers(Process.GetCurrentProcess().MainModule.FileName);
             SecurityView.TableLayout = StandaloneStart.Option(e.Args, "--layout", 1) ?? Settings.Get("layout", "bottom");
             SecurityView.LayoutSaved = value => Settings.Set("layout", value);
+            SecurityView.FileView = StandaloneStart.Option(e.Args, "--view", 1) ?? Settings.Get("view", "list");
+            SecurityView.FileViewSaved = value => Settings.Set("view", value);
             StandaloneStart.Run(this, e.Args, "SUSpector", Settings, () => new SuspectorWindow());
         }
     }

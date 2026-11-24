@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 
@@ -22,8 +23,14 @@ namespace CompInfo.Wpf
         // The program that hosts the page loads it and saves a change through LayoutSaved.
         public static string TableLayout = "bottom";
         public static Action<string> LayoutSaved;
+        // The found files: "list" (by importance) or "tree" (by user, then the place: bin, Claude, Документы…).
+        public static string FileView = "list";
+        public static Action<string> FileViewSaved;
 
         readonly ObservableCollection<CheckRow> checks = new ObservableCollection<CheckRow>();
+        // the groups of the view by users that the user folded (PlaceGroup.Key), kept while the list is rebuilt
+        readonly HashSet<string> folded = new HashSet<string>();
+        List<string> profiles, profileRoots;
         bool running, ready;
         CancellationTokenSource cancel;
 
@@ -41,6 +48,11 @@ namespace CompInfo.Wpf
             Right.ToolTip = L.T("Таблицы рядом");
             System.Windows.Automation.AutomationProperties.SetName(Bottom, (string)Bottom.ToolTip);
             System.Windows.Automation.AutomationProperties.SetName(Right, (string)Right.ToolTip);
+            ListMode.ToolTip = L.T("Списком");
+            TreeMode.ToolTip = L.T("По пользователям и папкам");
+            System.Windows.Automation.AutomationProperties.SetName(ListMode, (string)ListMode.ToolTip);
+            System.Windows.Automation.AutomationProperties.SetName(TreeMode, (string)TreeMode.ToolTip);
+            (FileView == "tree" ? TreeMode : ListMode).IsChecked = true;
             CheckColumn.Header = L.T("Проверка");
             ResultColumn.Header = L.T("Результат");
             DetailsHeader.Text = L.T("Детали");
@@ -287,6 +299,7 @@ namespace CompInfo.Wpf
             bool files = SecurityFiles.HasFiles(check);
             TextDetails.Visibility = files ? Visibility.Collapsed : Visibility.Visible;
             FileDetails.Visibility = files ? Visibility.Visible : Visibility.Collapsed;
+            FileViewSwitch.Visibility = files ? Visibility.Visible : Visibility.Collapsed;
             UpdateBulkBar(check);
             var lines = new List<LineRow>();
             var found = new List<FileRow>();
@@ -306,7 +319,76 @@ namespace CompInfo.Wpf
             // without tags the column keeps no title and shrinks to nothing (a GridView column cannot be hidden)
             TagsColumn.Header = tags ? L.T("Метки") : "";
             Lines.ItemsSource = lines;
-            Files.ItemsSource = found;
+            Files.ItemsSource = FileView == "tree" ? ByPlace(found) : (System.Collections.IEnumerable)found;
+        }
+
+        void FileView_Checked(object sender, RoutedEventArgs e)
+        {
+            if (!ready) return;
+            FileView = TreeMode.IsChecked == true ? "tree" : "list";
+            object chosen = Files.SelectedItem;
+            ShowDetails();
+            var row = chosen as FileRow;
+            if (row != null)
+                foreach (object item in Files.Items)
+                    if (item is FileRow && ((FileRow)item).Item == row.Item) { Files.SelectedItem = item; Files.ScrollIntoView(item); break; }
+            if (FileViewSaved != null) FileViewSaved(FileView);
+        }
+
+        // The view by users: the found files grouped by their user (or disk), then by the place in it; users before
+        // disks, the groups with the most important files first, the files in the order of the list. A file shows its
+        // folders under the place.
+        ListCollectionView ByPlace(List<FileRow> found)
+        {
+            if (profiles == null) profiles = DocumentPlace.Profiles(out profileRoots);
+            var groups = new Dictionary<string, PlaceGroup>();
+            var order = new Dictionary<FileRow, int>();
+            foreach (FileRow row in found)
+            {
+                order[row] = order.Count;
+                DocumentPlace place = SecurityFiles.Place(row.Item, profiles, profileRoots);
+                row.Owner = Group(groups, place.OwnerKey, 1, place.OwnerKind, place.Owner, place.OwnerKind == "user" ? place.OwnerPath : "");
+                row.Place = Group(groups, place.FolderKey, 2, place.FolderKind, place.Folder, "");
+                if (place.FolderKind == "app") row.Place.Glyph = place.Folder == "Claude" ? "" : place.Folder == "SupraWeed" ? Glyph.Lock : "";
+                row.Folder = System.IO.Path.GetDirectoryName(place.Rest);
+                foreach (PlaceGroup group in new[] { row.Owner, row.Place })
+                {
+                    group.Count++;
+                    group.Level = Math.Max(group.Level, row.Item.Level);
+                }
+            }
+            foreach (PlaceGroup group in groups.Values) group.Done();
+            found.Sort(delegate (FileRow a, FileRow b)
+            {
+                int c = Compare(a.Owner, b.Owner);
+                if (c == 0) c = Compare(a.Place, b.Place);
+                return c != 0 ? c : order[a].CompareTo(order[b]);
+            });
+            var view = new ListCollectionView(found);
+            view.GroupDescriptions.Add(new PropertyGroupDescription("Owner"));
+            view.GroupDescriptions.Add(new PropertyGroupDescription("Place"));
+            return view;
+        }
+
+        PlaceGroup Group(Dictionary<string, PlaceGroup> groups, string key, int depth, string kind, string label, string hint)
+        {
+            PlaceGroup group;
+            if (!groups.TryGetValue(key, out group))
+            {
+                group = new PlaceGroup(key, folded) { Depth = depth, Kind = kind, Label = label, Hint = hint };
+                groups.Add(key, group);
+            }
+            return group;
+        }
+
+        static int Compare(PlaceGroup a, PlaceGroup b)
+        {
+            if (a == b) return 0;
+            int c = a.Rank.CompareTo(b.Rank);
+            if (c == 0) c = b.Level.CompareTo(a.Level);
+            if (c == 0) c = b.Count.CompareTo(a.Count);
+            if (c == 0) c = string.Compare(a.Label, b.Label, StringComparison.CurrentCultureIgnoreCase);
+            return c != 0 ? c : string.CompareOrdinal(a.Key, b.Key);
         }
 
         void UpdateBulkBar(SecurityCheck check)
@@ -492,7 +574,12 @@ namespace CompInfo.Wpf
                     c.Items.Add(new SecurityDetail(Path.Combine(docs, "SupraWeed\\template.docx"), "#SupraWeed · 2", "C:\\demo\\template.docx", "WORD", "2"));
                     c.Items.Add(new SecurityDetail(Path.Combine(docs, "ViberDownloads\\scan.pdf"), "#Viber #WhatsApp · 4", "C:\\demo\\scan.pdf", "PDF", "4"));
                     c.Items.Add(new SecurityDetail(Path.Combine(docs, "notes.txt"), "1", "C:\\demo\\notes.txt", "TXT", "1"));
-                    int[] demoLevels = { TriggerWords.High, TriggerWords.High, TriggerWords.Medium, TriggerWords.Medium, TriggerWords.Low };
+                    string users = Path.GetDirectoryName(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+                    c.Items.Add(new SecurityDetail(Path.Combine(users, "olena\\Desktop\\Накази\\наказ 17.docx"), "#Desktop · 6", "C:\\demo\\order.docx", "WORD", "6"));
+                    c.Items.Add(new SecurityDetail(Path.Combine(users, "olena\\AppData\\Roaming\\Claude\\uploads\\штат.xlsx"), "#Claude · 2", "C:\\demo\\staff.xlsx", "EXCEL", "2"));
+                    c.Items.Add(new SecurityDetail("D:\\Архів\\2025\\звіт.docx", "1", "C:\\demo\\archive.docx", "WORD", "1"));
+                    int[] demoLevels = { TriggerWords.High, TriggerWords.High, TriggerWords.Medium, TriggerWords.Medium, TriggerWords.Low,
+                                         TriggerWords.High, TriggerWords.Medium, TriggerWords.Low };
                     for (int i = 0; i < c.Items.Count; i++) c.Items[i].Level = demoLevels[i];
                 }
                 checks.Add(new CheckRow(c, StateOf(c.Level)));
@@ -549,6 +636,55 @@ namespace CompInfo.Wpf
 
     public class LineRow { public string Text { get; set; } }
 
+    // A group of the view by users (DocumentPlace): a user or a disk (Depth 1), a place in it (Depth 2). Folding is kept
+    // in the page's set by Key, so a group stays folded when the list is rebuilt after a deletion.
+    public class PlaceGroup : INotifyPropertyChanged
+    {
+        readonly HashSet<string> folded;
+
+        public string Key { get; private set; }
+        public int Depth { get; set; }
+        public string Kind { get; set; }
+        public string Label { get; set; }
+        public string Hint { get; set; }
+        public string Glyph { get; set; }
+        // the colour of the icon: Accent, Bad, Muted or Folder (PlaceGroupHead of SecurityView.xaml)
+        public string Tone { get; set; }
+        public Thickness Indent { get { return new Thickness(Depth == 1 ? 8 : 30, 0, 8, 0); } }
+        // the files in the group and the highest importance among them
+        public int Count { get; set; }
+        public int Level { get; set; }
+        public object Badge { get; private set; }
+        public string BadgeTip { get; private set; }
+        // users first, then disks; the bin first among the places
+        public int Rank { get { return Kind == "user" || Kind == "bin" ? 0 : Kind == "drive" || Kind == "app" ? 1 : 2; } }
+
+        public PlaceGroup(string key, HashSet<string> folded) { Key = key; this.folded = folded; }
+
+        public bool Expanded
+        {
+            get { return !folded.Contains(Key); }
+            set
+            {
+                if (value) folded.Remove(Key); else folded.Add(Key);
+                if (PropertyChanged != null) PropertyChanged(this, new PropertyChangedEventArgs("Expanded"));
+            }
+        }
+
+        // After the files are counted: the icon, its colour and the number of files.
+        public void Done()
+        {
+            if (Glyph == null)
+                Glyph = Kind == "user" ? CompInfo.Wpf.Glyph.Person : Kind == "drive" ? "" : Kind == "bin" ? CompInfo.Wpf.Glyph.Delete
+                      : Kind == "folder" ? CompInfo.Wpf.Glyph.Folder : Kind == "root" ? CompInfo.Wpf.Glyph.Document : CompInfo.Wpf.Glyph.Info;
+            Tone = Kind == "user" || Kind == "app" ? "Accent" : Kind == "bin" ? "Bad" : Kind == "folder" ? "Folder" : "Muted";
+            Badge = Chips.Level(Level, Count.ToString());
+            BadgeTip = L.F("Файлов: {0}", Count) + "\r\n" + L.T("Важность: ") + TriggerWords.LevelName(Level);
+        }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+    }
+
     // A found document: a note «#tag #tag · count» gives the chips and the number of matches.
     public class FileRow
     {
@@ -557,6 +693,12 @@ namespace CompInfo.Wpf
         public string Type { get { return Item.FileType; } }
         public string Path { get { return Item.Text; } }
         public string Name { get; private set; }
+        // in the view by users: the folders between the place and the file
+        public string Folder { get; set; }
+        public Visibility FolderVisibility { get { return string.IsNullOrEmpty(Folder) ? Visibility.Collapsed : Visibility.Visible; } }
+        // the groups of the view by users: the user (or disk) and the place in it
+        public PlaceGroup Owner { get; set; }
+        public PlaceGroup Place { get; set; }
         public string Matches { get; private set; }
         // the number of matches in the colour of the document's importance (Chips.Level)
         public object MatchesBadge { get; private set; }
