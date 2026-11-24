@@ -1,5 +1,6 @@
 import { api } from '../api.js';
 import { errorBox, h, replace, toast } from '../dom.js';
+import { f, t } from '../i18n.js';
 import { formatDate } from '../logic.js';
 import { checkWordRows, HIGH, LEVEL_LABELS, levelCounts, LOW, MEDIUM, normalizeTriggerWords, parseTriggerWords, wordsToText } from '../trigger-words-logic.js';
 
@@ -43,13 +44,13 @@ const rowsOf = (text) => parseTriggerWords(text).words.map(({ text: word, level 
 // (the format of app\trigger-words.txt), which the program reads; the table is only its editor.
 export async function renderTriggerWords(context) {
   const { main } = context;
-  replace(main, h('p', { class: 'muted' }, 'Загрузка списка слов…'));
+  replace(main, h('p', { class: 'muted' }, t('Загрузка списка слов…')));
   let setting;
   let history;
   try {
     [{ setting }, { history }] = await Promise.all([api('/settings/trigger-words'), api('/settings/trigger-words/history')]);
   } catch (error) {
-    replace(main, h('h1', {}, 'Слова SUSpector'), errorBox(error, () => renderTriggerWords(context)));
+    replace(main, h('h1', {}, t('Слова SUSpector')), errorBox(error, () => renderTriggerWords(context)));
     return;
   }
 
@@ -59,7 +60,7 @@ export async function renderTriggerWords(context) {
   const summary = h('div', { class: 'actions' });
   const problems = h('div');
   const dirtyNote = h('span', { class: 'muted small' });
-  const saveButton = h('button', { class: 'button primary', type: 'submit' }, 'Сохранить');
+  const saveButton = h('button', { class: 'button primary', type: 'submit' }, t('Сохранить'));
 
   function addRow(at, level) {
     rows.splice(at, 0, { text: '', level });
@@ -84,8 +85,8 @@ export async function renderTriggerWords(context) {
               value: row.text,
               maxlength: '200',
               spellcheck: 'false',
-              placeholder: 'слово или фраза',
-              'aria-label': `Слово ${index + 1}`,
+              placeholder: t('слово или фраза'),
+              'aria-label': f('Слово {0}', index + 1),
               oninput: (event) => {
                 row.text = event.target.value;
                 check();
@@ -105,7 +106,7 @@ export async function renderTriggerWords(context) {
               'select',
               {
                 class: `level-select level-${row.level}`,
-                'aria-label': `Приоритет слова ${index + 1}`,
+                'aria-label': f('Приоритет слова {0}', index + 1),
                 onchange: (event) => {
                   row.level = Number(event.target.value);
                   event.target.className = `level-select level-${row.level}`;
@@ -123,8 +124,8 @@ export async function renderTriggerWords(context) {
               {
                 class: 'button small danger',
                 type: 'button',
-                title: 'Удалить слово',
-                'aria-label': `Удалить слово ${index + 1}`,
+                title: t('Удалить слово'),
+                'aria-label': f('Удалить слово {0}', index + 1),
                 onclick: () => {
                   rows.splice(index, 1);
                   drawRows();
@@ -152,12 +153,12 @@ export async function renderTriggerWords(context) {
     const words = rows.filter((row) => row.text.trim() !== '');
     replace(
       summary,
-      h('span', { class: 'muted small' }, `Слов: ${words.length}`),
+      h('span', { class: 'muted small' }, f('Слов: {0}', words.length)),
       levelCounts(words).map(({ level, label, count }) => h('span', { class: LEVEL_BADGES[level] }, `${label}: ${count}`)),
     );
     replace(problems, errors.length > 0 && h('div', { class: 'notice notice-error', role: 'alert' }, errors.map((text) => h('p', {}, text))));
     const dirty = wordsToText(rows) !== saved;
-    dirtyNote.textContent = !setting ? 'Список ещё не сохранён' : dirty ? 'Есть несохранённые изменения' : '';
+    dirtyNote.textContent = !setting ? t('Список ещё не сохранён') : dirty ? t('Есть несохранённые изменения') : '';
     saveButton.disabled = errors.length > 0 || (!dirty && Boolean(setting));
   }
 
@@ -169,7 +170,7 @@ export async function renderTriggerWords(context) {
         saveButton.disabled = true;
         try {
           await api('/settings/trigger-words', { method: 'PUT', body: { baseRevision: setting?.revision ?? null, value: { text: normalizeTriggerWords(wordsToText(rows)) } } });
-          toast('Слова сохранены. SUSpector возьмёт их при следующей проверке документов.');
+          toast(t('Слова сохранены. SUSpector возьмёт их при следующей проверке документов.'));
           await renderTriggerWords(context);
         } catch (error) {
           replace(
@@ -177,7 +178,7 @@ export async function renderTriggerWords(context) {
             h(
               'div',
               { class: 'notice notice-error', role: 'alert' },
-              h('p', {}, error.code === 'conflict' ? 'Список уже изменил другой администратор. Обновите страницу: ваши правки не сохранены.' : error.message),
+              h('p', {}, error.code === 'conflict' ? t('Список уже изменил другой администратор. Обновите страницу: ваши правки не сохранены.') : error.message),
             ),
           );
           saveButton.disabled = false;
@@ -187,26 +188,26 @@ export async function renderTriggerWords(context) {
     h(
       'section',
       { class: 'panel' },
-      h('div', { class: 'panel-head' }, h('h2', {}, 'Список'), summary),
+      h('div', { class: 'panel-head' }, h('h2', {}, t('Список')), summary),
       h(
         'div',
         { class: 'table-wrap' },
-        h('table', { class: 'trigger-words' }, h('thead', {}, h('tr', {}, h('th', {}, '№'), h('th', {}, 'Слово или фраза'), h('th', {}, 'Приоритет'), h('th', {}))), body),
+        h('table', { class: 'trigger-words' }, h('thead', {}, h('tr', {}, h('th', {}, '№'), h('th', {}, t('Слово или фраза')), h('th', {}, t('Приоритет')), h('th', {}))), body),
       ),
       h(
         'div',
         { class: 'actions' },
-        h('button', { class: 'button', type: 'button', onclick: () => addRow(rows.length, MEDIUM) }, '+ Добавить слово'),
-        h('span', { class: 'muted small' }, 'Enter в строке добавляет следующее слово с тем же приоритетом.'),
+        h('button', { class: 'button', type: 'button', onclick: () => addRow(rows.length, MEDIUM) }, t('+ Добавить слово')),
+        h('span', { class: 'muted small' }, t('Enter в строке добавляет следующее слово с тем же приоритетом.')),
       ),
       problems,
       h(
         'p',
         { class: 'muted small' },
-        'Регистр не важен. Пробел во фразе совпадает с любыми пробелами или их отсутствием: «т. в. о.» найдёт и «т.в.о.». ',
-        'Если одно слово входит в другое (ДСК и ДСК-ЕП, штат и штатка), засчитывается более длинное. ',
-        'Строка со * или ? без пробелов — маска имени файла: «*.pfx» (сертификаты VPN) находит такие файлы по имени, какого бы типа они ни были; внутри текста маска не ищется. ',
-        'Порядок строк внутри приоритета ни на что не влияет; после сохранения таблица упорядочивается по приоритету.',
+        t('Регистр не важен. Пробел во фразе совпадает с любыми пробелами или их отсутствием: «т. в. о.» найдёт и «т.в.о.». '),
+        t('Если одно слово входит в другое (ДСК и ДСК-ЕП, штат и штатка), засчитывается более длинное. '),
+        t('Строка со * или ? без пробелов — маска имени файла: «*.pfx» (сертификаты VPN) находит такие файлы по имени, какого бы типа они ни были; внутри текста маска не ищется. '),
+        t('Порядок строк внутри приоритета ни на что не влияет; после сохранения таблица упорядочивается по приоритету.'),
       ),
     ),
     h('div', { class: 'actions' }, h('span', { class: 'spacer' }), dirtyNote, saveButton),
@@ -214,23 +215,23 @@ export async function renderTriggerWords(context) {
 
   replace(
     main,
-    h('h1', {}, 'Слова SUSpector'),
+    h('h1', {}, t('Слова SUSpector')),
     h(
       'p',
       { class: 'lead' },
-      'Слова-триггеры проверки «Поиск ДСК-файлов». SUSpector скачивает список перед каждой проверкой документов, новая версия программы не нужна. ',
-      'Найденные файлы идут по важности: сначала со словами высокого приоритета, внутри него — по числу совпадений с учётом приоритета как веса (3, 2, 1). ',
-      'Без интернета программа берёт последний скачанный список, а если его нет — встроенный.',
+      t('Слова-триггеры проверки «Поиск ДСК-файлов». SUSpector скачивает список перед каждой проверкой документов, новая версия программы не нужна. '),
+      t('Найденные файлы идут по важности: сначала со словами высокого приоритета, внутри него — по числу совпадений с учётом приоритета как веса (3, 2, 1). '),
+      t('Без интернета программа берёт последний скачанный список, а если его нет — встроенный.'),
     ),
     setting
-      ? h('p', { class: 'muted small', title: setting.updatedBy }, `Ревизия ${setting.revision}, изменено ${formatDate(setting.updatedAt)}, ${setting.updatedByName ?? setting.updatedBy}`)
-      : h('div', { class: 'notice' }, h('p', {}, 'Список в облаке ещё не сохранён: SUSpector использует встроенный. Ниже он и есть — поправьте при необходимости и сохраните.')),
+      ? h('p', { class: 'muted small', title: setting.updatedBy }, f('Ревизия {0}, изменено {1}, {2}', setting.revision, formatDate(setting.updatedAt), setting.updatedByName ?? setting.updatedBy))
+      : h('div', { class: 'notice' }, h('p', {}, t('Список в облаке ещё не сохранён: SUSpector использует встроенный. Ниже он и есть — поправьте при необходимости и сохраните.'))),
     form,
     history.length > 0 &&
       h(
         'details',
         { class: 'panel muted small' },
-        h('summary', {}, `История (${history.length})`),
+        h('summary', {}, f('История ({0})', history.length)),
         h(
           'ul',
           {},
@@ -238,7 +239,7 @@ export async function renderTriggerWords(context) {
             h(
               'li',
               { title: entry.changedBy },
-              `#${entry.revision} — ${formatDate(entry.changedAt)}, ${entry.changedByName ?? entry.changedBy}, слов: ${parseTriggerWords(entry.value.text).words.length} `,
+              f('#{0} — {1}, {2}, слов: {3} ', entry.revision, formatDate(entry.changedAt), entry.changedByName ?? entry.changedBy, parseTriggerWords(entry.value.text).words.length),
               entry.revision !== setting?.revision &&
                 h(
                   'button',
@@ -252,7 +253,7 @@ export async function renderTriggerWords(context) {
                       window.scrollTo(0, 0);
                     },
                   },
-                  'В редактор',
+                  t('В редактор'),
                 ),
             ),
           ),

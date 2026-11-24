@@ -27,6 +27,7 @@ export interface DeviceRow {
   // Joined by DEVICE_SELECT: nickname of the author and the console key of the last change.
   updated_by_name?: string | null;
   updated_by_key?: string | null;
+  updated_source?: Source | null;
 }
 
 export interface Device {
@@ -39,6 +40,8 @@ export interface Device {
   // Nickname of updatedBy (the email when there is none) and the console key name, null for web changes.
   updatedByName: string;
   updatedByKey: string | null;
+  // Where the last change came from; null for rows written before history kept it.
+  updatedSource: Source | null;
   data: Record<string, unknown>;
 }
 
@@ -121,6 +124,7 @@ export function toDevice(row: DeviceRow): Device {
     updatedBy: row.updated_by,
     updatedByName: row.updated_by_name || row.updated_by,
     updatedByKey: row.updated_by_key ?? null,
+    updatedSource: row.updated_source ?? null,
     data: JSON.parse(row.data) as Record<string, unknown>,
   };
 }
@@ -158,7 +162,7 @@ export function normalizeData(id: string, data: unknown): Record<string, unknown
 }
 
 // The author's nickname comes from users, the key from the history row change_id points at.
-const DEVICE_SELECT = `SELECT d.*, u.name AS updated_by_name, k.label AS updated_by_key
+const DEVICE_SELECT = `SELECT d.*, u.name AS updated_by_name, k.label AS updated_by_key, h.source AS updated_source
   FROM devices d
   LEFT JOIN users u ON u.email = d.updated_by
   LEFT JOIN device_history h ON h.id = d.change_id

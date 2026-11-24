@@ -1,31 +1,35 @@
 import { api } from '../api.js';
 import { errorBox, h, replace, toast } from '../dom.js';
+import { f, t } from '../i18n.js';
+import { focusSearch, listToolbar, marked } from '../list-toolbar.js';
 import { filterItems, findPerson, formatDate, hasRole, isBlank, itemTypes, personName, setPeople } from '../logic.js';
 import { peopleDatalist, personInput, personInputText, resolvePeople } from '../person-input.js';
-import { splitMatches, queryWords } from '../search-logic.js';
+import { queryWords } from '../search-logic.js';
 
 // Survives navigation to a person and back.
 const state = { query: '', type: '' };
 
 const FIELDS = [
-  { key: 'type', label: 'Тип', max: 100 },
-  { key: 'model', label: 'Модель', max: 200 },
-  { key: 'serial', label: 'Серийный номер', max: 200, mono: true },
-  { key: 'location', label: 'Место / секция', max: 200 },
+  { key: 'type', label: t('Тип'), max: 100 },
+  { key: 'model', label: t('Модель'), max: 200 },
+  { key: 'serial', label: t('Серийный номер'), max: 200, mono: true },
+  { key: 'location', label: t('Место / секция'), max: 200 },
 ];
 
-// Property that is not a computer, from the property register: who is materially responsible (МВО) for what.
+// Property from the property register, «Майно» in every language: who is materially responsible (МВО) for what.
+// Items have numbers in the cloud (the journal, the API), but the page does not show them: the register is
+// read by type, model and serial number, and the numbers meant nothing to people.
 // ownerId: show only the items of this person (#/items/owner/12).
 export async function renderItems(context, ownerId = null) {
   const { main } = context;
-  replace(main, h('p', { class: 'muted' }, 'Загрузка имущества…'));
+  replace(main, h('p', { class: 'muted' }, t('Загрузка майна…')));
   let items;
   let people;
   let devices;
   try {
     [{ items }, { people }, { devices }] = await Promise.all([api('/items'), api('/people'), api('/devices')]);
   } catch (error) {
-    replace(main, h('h1', {}, 'Имущество'), errorBox(error, () => renderItems(context, ownerId)));
+    replace(main, h('h1', {}, t('Майно')), errorBox(error, () => renderItems(context, ownerId)));
     return;
   }
   setPeople(people);
@@ -58,6 +62,7 @@ function draw(context, items, people, view) {
   const editor = hasRole(me, 'editor');
   const redraw = (changes = {}) => draw(context, items, people, { ...view, ...changes });
   const reload = () => renderItems(context, view.ownerId);
+  const cancelEdit = () => redraw({ editing: null });
 
   const tbody = h('tbody');
   const count = h('p', { class: 'muted count' });
@@ -65,35 +70,63 @@ function draw(context, items, people, view) {
     const words = queryWords(state.query);
     const shown = filterItems(items, { query: state.query, type: state.type, ownerId: view.ownerId });
     const computers = shown.filter((item) => item.kind === 'device').length;
-    count.textContent = (shown.length === items.length ? `Всего: ${items.length}` : `Показано: ${shown.length} из ${items.length}`) + (computers > 0 ? `, из них компьютеров: ${computers}` : '');
+    count.textContent =
+      (shown.length === items.length ? f('Всего: {0}', items.length) : f('Показано: {0} из {1}', shown.length, items.length)) +
+      (computers > 0 ? f(', из них компьютеров: {0}', computers) : '');
     replace(tbody, shown.map((item) => (item.kind === 'item' && view.editing === item.id ? editRow(item) : row(item, words))));
+    if (shown.length === 0) replace(tbody, h('tr', { class: 'empty-row' }, h('td', { colspan: '8', class: 'empty' }, t('Ничего не найдено.'))));
+    updateFilters();
   };
+
+  // The type works as a tag: a click shows only that type (the same as the type list), a second click shows all.
+  const pickType = (type) => {
+    state.type = state.type === type ? '' : type;
+    typeSelect.value = state.type;
+    fill();
+  };
+
+  function typeCell(item, words) {
+    const computer = item.kind === 'device';
+    return h(
+      'td',
+      { class: 'type', 'data-col': 'type' },
+      h(
+        'button',
+        {
+          type: 'button',
+          class: state.type === item.type ? 'tag active' : 'tag',
+          title: state.type === item.type ? t('Показать все типы') : f('Показать только: {0}', item.type),
+          onclick: () => pickType(item.type),
+        },
+        marked(item.type, words),
+      ),
+      computer && h('a', { class: 'host', href: '#/devices/' + encodeURIComponent(item.id) }, marked(item.hostname, words)),
+    );
+  }
 
   function row(item, words) {
     const person = findPerson(item.ownerId);
     const computer = item.kind === 'device';
-    const card = computer ? '#/devices/' + encodeURIComponent(item.id) : null;
     return h(
       'tr',
       { class: computer ? 'computer' : undefined },
-      computer ? h('td', {}, h('a', { href: card }, marked(item.hostname, words))) : h('td', { class: 'mono muted' }, '#' + item.id),
-      h('td', {}, marked(item.type, words)),
-      h('td', {}, marked(item.model, words)),
-      h('td', { class: 'mono' }, marked(item.serial, words)),
-      h('td', {}, marked(item.location, words)),
+      typeCell(item, words),
+      h('td', { 'data-col': 'model' }, marked(item.model, words)),
+      h('td', { class: 'mono', 'data-col': 'serial' }, marked(item.serial, words)),
+      h('td', { 'data-col': 'location' }, marked(item.location, words)),
       h(
         'td',
-        { title: person?.note || undefined },
+        { 'data-col': 'owner', title: person?.note || undefined },
         item.ownerId === null ? h('span', { class: 'muted' }, '—') : h('a', { href: '#/people/' + item.ownerId }, marked(personName(item.ownerId), words)),
       ),
-      h('td', { class: 'comment', title: item.note || undefined }, marked(item.note, words)),
-      h('td', { class: 'muted small nowrap', title: item.updatedBy }, formatDate(item.updatedAt)),
+      h('td', { class: 'comment', 'data-col': 'note', title: item.note || undefined }, marked(item.note, words)),
+      h('td', { class: 'muted small nowrap', 'data-col': 'updated', title: item.updatedBy }, formatDate(item.updatedAt)),
       h(
         'td',
         { class: 'row-actions' },
         computer
-          ? h('a', { class: 'button small', href: card, title: 'МВО компьютера меняется в его карточке' }, 'Карточка')
-          : editor && h('button', { class: 'button small', type: 'button', onclick: () => redraw({ editing: item.id, adding: false }) }, 'Изменить'),
+          ? h('a', { class: 'button small', href: '#/devices/' + encodeURIComponent(item.id), title: t('МВО компьютера меняется в его карточке') }, t('Карточка'))
+          : editor && h('button', { class: 'button small', type: 'button', onclick: () => redraw({ editing: item.id, adding: false }) }, t('Изменить')),
       ),
     );
   }
@@ -114,7 +147,7 @@ function draw(context, items, people, view) {
       ]),
     );
     fields.owner = personInput('owner', personInputText(item.ownerId), { 'aria-label': 'МВО' });
-    fields.note = h('input', { value: item.note ?? '', maxlength: '1000', 'aria-label': 'Примечание', placeholder: 'Примечание' });
+    fields.note = h('input', { value: item.note ?? '', maxlength: '1000', 'aria-label': t('Примечание'), placeholder: t('Примечание') });
     return fields;
   }
 
@@ -126,6 +159,13 @@ function draw(context, items, people, view) {
     return result;
   }
 
+  // Escape cancels the editing, as the «Отмена» button.
+  const escapeTo = (cancel) => (event) => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    cancel();
+  };
+
   function editRow(item) {
     const fields = inputs(item);
     const save = async () => {
@@ -133,17 +173,17 @@ function draw(context, items, people, view) {
         const body = await values(fields);
         if (body === null) return;
         await api('/items/' + item.id, { method: 'PATCH', body });
-        toast('Сохранено.');
+        toast(t('Сохранено.'));
         await reload();
       } catch (error) {
         toast(error.message, 'error');
       }
     };
     const remove = async () => {
-      if (!confirm(`Удалить «${item.type} ${item.model}» (#${item.id})?`)) return;
+      if (!confirm(f('Удалить «{0}»?', [item.type, item.model].filter((v) => !isBlank(v)).join(' ')))) return;
       try {
         await api('/items/' + item.id, { method: 'DELETE' });
-        toast('Удалено.');
+        toast(t('Удалено.'));
         await reload();
       } catch (error) {
         toast(error.message, 'error');
@@ -151,33 +191,34 @@ function draw(context, items, people, view) {
     };
     return h(
       'tr',
-      { class: 'focused' },
-      h('td', { class: 'mono muted' }, '#' + item.id),
-      FIELDS.map((field) => h('td', {}, fields[field.key])),
-      h('td', {}, fields.owner),
-      h('td', {}, fields.note),
-      h('td'),
+      { class: 'focused', onkeydown: escapeTo(cancelEdit) },
+      FIELDS.map((field) => h('td', { 'data-col': field.key }, fields[field.key])),
+      h('td', { 'data-col': 'owner' }, fields.owner),
+      h('td', { 'data-col': 'note' }, fields.note),
+      h('td', { 'data-col': 'updated' }),
       h(
         'td',
         { class: 'row-actions' },
-        h('button', { class: 'button small primary', type: 'button', onclick: save }, 'Сохранить'),
-        h('button', { class: 'button small', type: 'button', onclick: () => redraw({ editing: null }) }, 'Отмена'),
-        hasRole(me, 'admin') && h('button', { class: 'button small danger', type: 'button', onclick: remove }, 'Удалить'),
+        h('button', { class: 'button small primary', type: 'button', onclick: save }, t('Сохранить')),
+        h('button', { class: 'button small', type: 'button', title: t('Отмена (Esc)'), onclick: cancelEdit }, t('Отмена')),
+        hasRole(me, 'admin') && h('button', { class: 'button small danger', type: 'button', onclick: remove }, t('Удалить')),
       ),
     );
   }
 
   function addPanel() {
-    const fields = inputs({ ownerId: view.ownerId });
-    const add = h('button', { class: 'button primary', type: 'submit' }, 'Добавить');
+    const fields = inputs({ ownerId: view.ownerId, type: state.type });
+    const add = h('button', { class: 'button primary', type: 'submit' }, t('Добавить'));
+    const cancel = () => redraw({ adding: false });
     return h(
       'section',
-      { class: 'panel' },
-      h('h2', {}, 'Добавить имущество'),
+      { class: 'panel add-panel' },
+      h('h2', {}, t('Добавить майно')),
       h(
         'form',
         {
           class: 'inline-form items-form',
+          onkeydown: escapeTo(cancel),
           onsubmit: async (event) => {
             event.preventDefault();
             add.disabled = true;
@@ -188,7 +229,7 @@ function draw(context, items, people, view) {
                 return;
               }
               const { item } = await api('/items', { method: 'POST', body });
-              toast(`Добавлено: ${item.type}, №${item.id}.`);
+              toast(f('Добавлено: {0}.', [item.type, item.model].filter((v) => !isBlank(v)).join(' ')));
               await reload();
             } catch (error) {
               add.disabled = false;
@@ -200,95 +241,84 @@ function draw(context, items, people, view) {
         fields.owner,
         fields.note,
         add,
-        h('button', { class: 'button', type: 'button', onclick: () => redraw({ adding: false }) }, 'Отмена'),
+        h('button', { class: 'button', type: 'button', title: t('Отмена (Esc)'), onclick: cancel }, t('Отмена')),
       ),
     );
   }
 
   const types = itemTypes(items);
-  const search = h('input', {
-    type: 'search',
-    class: 'search',
-    value: state.query,
-    placeholder: 'Поиск: тип, модель, серийный номер, МВО, примечание',
-    'aria-label': 'Поиск имущества',
-    oninput: (event) => {
-      state.query = event.target.value;
-      fill();
-    },
-  });
   const typeSelect = h(
     'select',
     {
-      'aria-label': 'Тип',
+      'aria-label': t('Тип'),
       onchange: (event) => {
         state.type = event.target.value;
         fill();
       },
     },
-    h('option', { value: '' }, 'Все типы'),
+    h('option', { value: '' }, t('Все типы')),
     types.map(([type, n]) => h('option', { value: type, selected: type === state.type }, `${type} (${n})`)),
   );
+  const { toolbar, search, updateFilters } = listToolbar({
+    name: 'items-filter',
+    placeholder: t('Поиск: тип, модель, серийный номер, МВО, примечание'),
+    query: state.query,
+    onQuery: (query) => {
+      state.query = query;
+      fill();
+    },
+    extra: [typeSelect],
+    activeFilters: () => (state.type ? 1 : 0),
+    actions: [
+      editor &&
+        !view.adding &&
+        h('button', { class: 'button primary', type: 'button', title: t('Добавить майно'), onclick: () => redraw({ adding: true, editing: null }) }, t('+ Добавить')),
+    ],
+  });
   const owner = view.ownerId === null ? null : findPerson(view.ownerId);
 
+  const panel = editor && view.adding && addPanel();
   replace(
     main,
-    h('h1', {}, 'Имущество'),
+    h('h1', { class: 'list-title' }, t('Майно')),
     h(
       'p',
-      { class: 'lead' },
-      'Вся техника по ведомости: компьютеры, мониторы, принтеры, зарядные станции, флешки, SIM-карты и прочее. Компьютеры — записи вкладки «Устройства»: первая колонка ведёт в их карточку, там же меняется их МВО.',
+      { class: 'lead list-lead' },
+      t('Вся техника по ведомости: компьютеры, мониторы, принтеры, зарядные станции, флешки, SIM-карты и прочее. Компьютеры — записи вкладки «Устройства»: имя под типом ведёт в их карточку, там же меняется их МВО. Нажмите на тип, чтобы оставить только его.'),
     ),
     view.ownerId !== null &&
       h(
         'div',
         { class: 'notice' },
-        h('p', {}, `Только имущество, за которое отвечает ${owner ? owner.name : '#' + view.ownerId}. `, h('a', { href: '#/items' }, 'Показать всё')),
+        h('p', {}, f('Только майно, за которое отвечает {0}. ', owner ? owner.name : '#' + view.ownerId), h('a', { href: '#/items' }, t('Показать всё'))),
       ),
-    editor && view.adding && addPanel(),
+    panel,
+    toolbar,
+    count,
     h(
-      'section',
-      { class: 'panel' },
+      'div',
+      { class: 'table-wrap table-scroll' },
       h(
-        'div',
-        { class: 'toolbar' },
-        search,
-        typeSelect,
-        editor && !view.adding && h('button', { class: 'button primary', type: 'button', onclick: () => redraw({ adding: true, editing: null }) }, '+ Добавить'),
-      ),
-      count,
-      h(
-        'div',
-        { class: 'table-wrap' },
+        'table',
+        { class: 'items' },
         h(
-          'table',
-          { class: 'items' },
-          h(
-            'thead',
-            {},
-            h(
-              'tr',
-              {},
-              h('th', {}, '№ / компьютер'),
-              FIELDS.map((field) => h('th', {}, field.label)),
-              h('th', {}, 'МВО'),
-              h('th', {}, 'Примечание'),
-              h('th', {}, 'Изменено'),
-              h('th'),
-            ),
-          ),
-          tbody,
+          'thead',
+          {},
+          h('tr', {}, FIELDS.map((field) => h('th', {}, field.label)), h('th', {}, 'МВО'), h('th', {}, t('Примечание')), h('th', {}, t('Изменено')), h('th')),
         ),
+        tbody,
       ),
     ),
     h('datalist', { id: 'item-types' }, types.map(([type]) => h('option', { value: type }))),
     peopleDatalist(people),
   );
   fill();
-}
-
-function marked(text, words) {
-  if (isBlank(text)) return '';
-  if (words.length === 0) return text;
-  return splitMatches(text, words).map((part) => (part.match ? h('mark', {}, part.text) : part.text));
+  if (panel) {
+    window.scrollTo(0, 0);
+    panel.querySelector('input')?.focus();
+  } else if (view.editing !== null) {
+    tbody.querySelector('tr.focused input')?.focus();
+  } else {
+    focusSearch(search, state.query);
+  }
 }

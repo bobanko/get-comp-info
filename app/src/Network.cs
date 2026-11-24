@@ -95,13 +95,43 @@ namespace CompInfo
                     {
                         JsonObject o = item as JsonObject;
                         string address = o == null ? "" : (o.Text("address") ?? "").Trim();
-                        if (address.Length > 0 && !p.Reserved.ContainsKey(address)) p.Reserved[address] = (o.Text("note") ?? "").Trim();
+                        string last = o == null ? "" : (o.Text("lastAddress") ?? "").Trim();
+                        string note = o == null ? "" : (o.Text("note") ?? "").Trim();
+                        foreach (string a in Range(address, last))
+                            if (!p.Reserved.ContainsKey(a)) p.Reserved[a] = note;
                     }
                 }
                 p.DomainName = System.Text.RegularExpressions.Regex.IsMatch(domain, "^(?=.{1,253}$)[a-z0-9]+(?:[.-][a-z0-9]+)*\\.[a-z0-9]*[a-z][a-z0-9]*$") ? domain : null;
                 return p;
             }
             catch (Exception) { return empty; }
+        }
+
+        // The addresses of a reserved entry: the address alone, or every address up to `last` (the cloud allows
+        // ranges up to 1024 addresses; anything longer or broken counts as the first address only).
+        static IEnumerable<string> Range(string first, string last)
+        {
+            if (first.Length == 0) yield break;
+            IPAddress a, b;
+            if (last.Length == 0 || !IPAddress.TryParse(first, out a) || !IPAddress.TryParse(last, out b) ||
+                a.AddressFamily != AddressFamily.InterNetwork || b.AddressFamily != AddressFamily.InterNetwork)
+            {
+                yield return first;
+                yield break;
+            }
+            uint from = Number(a), to = Number(b);
+            if (to < from || to - from >= 1024) { yield return first; yield break; }
+            for (uint n = from; ; n++)
+            {
+                yield return string.Format("{0}.{1}.{2}.{3}", n >> 24, (n >> 16) & 255, (n >> 8) & 255, n & 255);
+                if (n == to) break;
+            }
+        }
+
+        static uint Number(IPAddress address)
+        {
+            byte[] o = address.GetAddressBytes();
+            return ((uint)o[0] << 24) | ((uint)o[1] << 16) | ((uint)o[2] << 8) | o[3];
         }
 
         // Address inside one of the office networks (from the gateway to the last host).

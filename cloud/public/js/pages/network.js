@@ -1,18 +1,22 @@
 import { api } from '../api.js';
 import { errorBox, h, replace, toast } from '../dom.js';
+import { f, t } from '../i18n.js';
 import { formatDate } from '../logic.js';
 import {
   autoHostRange,
+  checkReserved,
   commonDns,
   emptyLocation,
-  formatReserved,
   generalProblems,
   isAutoRange,
   locationProblems,
   parseAddressList,
   parseNumberList,
-  parseReserved,
-  reservedProblems,
+  parseReservedLines,
+  rangeEnd,
+  rangeSize,
+  reservedRows,
+  reservedValue,
   subnetInfo,
   subnetMask,
 } from '../network-logic.js';
@@ -23,13 +27,13 @@ const PREFIXES = [24, 25, 26, 27, 28, 29, 30];
 // Locations are a compact table; one location at a time opens in an editor under its row.
 export async function renderNetwork(context) {
   const { main } = context;
-  replace(main, h('p', { class: 'muted' }, 'Загрузка настроек сети…'));
+  replace(main, h('p', { class: 'muted' }, t('Загрузка настроек сети…')));
   let setting;
   let history;
   try {
     [{ setting }, { history }] = await Promise.all([api('/settings/network'), api('/settings/network/history')]);
   } catch (error) {
-    replace(main, h('h1', {}, 'Сеть'), errorBox(error, () => renderNetwork(context)));
+    replace(main, h('h1', {}, t('Сеть')), errorBox(error, () => renderNetwork(context)));
     return;
   }
 
@@ -45,7 +49,7 @@ export async function renderNetwork(context) {
     dnsServers: sharedDns,
     domainCheckHost: value.domainCheckHost ?? '',
     domainName: value.domainName ?? '',
-    reserved: formatReserved(value.reservedAddresses),
+    reserved: reservedRows(value.reservedAddresses),
     locations: value.locations.map((location) => ({
       ...location,
       tk: location.tk ?? '',
@@ -106,44 +110,44 @@ function draw(context, setting, history, draft, view, errorText) {
   const general = h(
     'section',
     { class: 'panel' },
-    h('h2', {}, 'Общая часть адреса'),
+    h('h2', {}, t('Общая часть адреса')),
     h(
       'div',
       { class: 'net-grid' },
-      h('span', { class: 'net-label' }, 'Сеть'),
+      h('span', { class: 'net-label' }, t('Сеть')),
       h(
         'div',
         {},
         h(
           'span',
           { class: 'ip mono' },
-          octetInput(draft, 'firstOctet', 'Первый октет'),
+          octetInput(draft, 'firstOctet', t('Первый октет')),
           '.',
-          input(draft, 'segments', { class: 'mono segments', placeholder: '20, 21', 'aria-label': 'Второй октет: сегменты' }),
+          input(draft, 'segments', { class: 'mono segments', placeholder: '20, 21', 'aria-label': t('Второй октет: сегменты') }),
           '.x.x',
         ),
-        h('small', { class: 'muted hint' }, 'Второй октет — сегменты через запятую, первый используется по умолчанию.'),
+        h('small', { class: 'muted hint' }, t('Второй октет — сегменты через запятую, первый используется по умолчанию.')),
       ),
       h('span', { class: 'net-label' }, 'DNS'),
       h(
         'div',
         {},
-        input(draft, 'dnsServers', { class: 'mono wide', placeholder: '10.0.0.1, 10.0.0.2', 'aria-label': 'DNS-серверы для всех корпусов' }),
-        h('small', { class: 'muted hint' }, 'Для всех корпусов, через запятую, до 4. Корпус может задать свои.'),
+        input(draft, 'dnsServers', { class: 'mono wide', placeholder: '10.0.0.1, 10.0.0.2', 'aria-label': t('DNS-серверы для всех корпусов') }),
+        h('small', { class: 'muted hint' }, t('Для всех корпусов, через запятую, до 4. Корпус может задать свои.')),
       ),
-      h('span', { class: 'net-label' }, 'Проверка домена'),
+      h('span', { class: 'net-label' }, t('Проверка домена')),
       h(
         'div',
         {},
-        input(draft, 'domainCheckHost', { class: 'mono host', placeholder: 'не проверять', 'aria-label': 'Узел для проверки домена' }),
-        h('small', { class: 'muted hint' }, 'Быстрый ping проверяет этот узел, если компьютер в одной из сетей.'),
+        input(draft, 'domainCheckHost', { class: 'mono host', placeholder: t('не проверять'), 'aria-label': t('Узел для проверки домена') }),
+        h('small', { class: 'muted hint' }, t('Быстрый ping проверяет этот узел, если компьютер в одной из сетей.')),
       ),
-      h('span', { class: 'net-label' }, 'Домен'),
+      h('span', { class: 'net-label' }, t('Домен')),
       h(
         'div',
         {},
-        input(draft, 'domainName', { class: 'mono host', placeholder: 'как узел проверки домена', 'aria-label': 'Домен для ввода компьютеров' }),
-        h('small', { class: 'muted hint' }, 'В него программа вводит компьютеры (раздел «Домен»). Пусто — берётся узел проверки домена.'),
+        input(draft, 'domainName', { class: 'mono host', placeholder: t('как узел проверки домена'), 'aria-label': t('Домен для ввода компьютеров') }),
+        h('small', { class: 'muted hint' }, t('В него программа вводит компьютеры (раздел «Домен»). Пусто — берётся узел проверки домена.')),
       ),
     ),
     problemList(() => generalProblems(draft)),
@@ -180,12 +184,12 @@ function draw(context, setting, history, draft, view, errorText) {
     };
     const status = liveText(() => (problemsOf(location).length > 0 ? '!' : ''), {
       class: 'row-problem',
-      title: 'Есть ошибки: откройте корпус',
+      title: t('Есть ошибки: откройте корпус'),
     });
     const summary = h(
       'tr',
       { class: editing ? 'location-row open' : 'location-row', onclick: toggle },
-      h('td', { class: 'name' }, liveText(() => String(location.name ?? '').trim() || `Корпус ${index + 1}`), status),
+      h('td', { class: 'name' }, liveText(() => String(location.name ?? '').trim() || f('Корпус {0}', index + 1)), status),
       h('td', {}, liveText(() => String(location.tk ?? '').trim() || '—')),
       h(
         'td',
@@ -200,18 +204,18 @@ function draw(context, setting, history, draft, view, errorText) {
       h(
         'td',
         { class: 'mono dns' },
-        liveText(() => parseAddressList(location.dnsServers).join(', ') || 'общие'),
+        liveText(() => parseAddressList(location.dnsServers).join(', ') || t('общие')),
       ),
       h(
         'td',
         { class: 'row-actions' },
-        h('button', { class: 'button small', type: 'button', title: 'Выше в меню консоли', disabled: index === 0, onclick: stop(() => move(index, -1)) }, '↑'),
+        h('button', { class: 'button small', type: 'button', title: t('Выше в меню консоли'), disabled: index === 0, onclick: stop(() => move(index, -1)) }, '↑'),
         h(
           'button',
-          { class: 'button small', type: 'button', title: 'Ниже в меню консоли', disabled: index === draft.locations.length - 1, onclick: stop(() => move(index, 1)) },
+          { class: 'button small', type: 'button', title: t('Ниже в меню консоли'), disabled: index === draft.locations.length - 1, onclick: stop(() => move(index, 1)) },
           '↓',
         ),
-        h('button', { class: 'button small', type: 'button', onclick: stop(toggle) }, editing ? 'Свернуть' : 'Изменить'),
+        h('button', { class: 'button small', type: 'button', onclick: stop(toggle) }, editing ? t('Свернуть') : t('Изменить')),
       ),
     );
     return editing ? [summary, h('tr', { class: 'editor-row' }, h('td', { colspan: '7' }, editor(location, index)))] : [summary];
@@ -221,31 +225,31 @@ function draw(context, setting, history, draft, view, errorText) {
     const prefix = h(
       'select',
       {
-        'aria-label': 'Маска',
+        'aria-label': t('Маска'),
         onchange: (event) => {
           location.prefixLength = Number(event.target.value);
           refresh();
         },
       },
       PREFIXES.map((length) =>
-        h('option', { value: String(length), selected: Number(location.prefixLength) === length }, `/${length} — ${subnetMask(length)}, ${2 ** (32 - length) - 2} адр.`),
+        h('option', { value: String(length), selected: Number(location.prefixLength) === length }, f('/{0} — {1}, {2} адр.', length, subnetMask(length), 2 ** (32 - length) - 2)),
       ),
     );
 
     const range = location.autoRange
       ? liveText(() => {
           const auto = autoHostRange(location);
-          if (!auto) return 'Шлюз должен быть первым или последним адресом подсети — или задайте диапазон вручную.';
-          return `${base(location)}.${auto.firstHostOctet} – ${base(location)}.${auto.lastHostOctet}  (${auto.lastHostOctet - auto.firstHostOctet + 1} адр.)`;
+          if (!auto) return t('Шлюз должен быть первым или последним адресом подсети — или задайте диапазон вручную.');
+          return f('{0}.{1} – {2}.{3}  ({4} адр.)', base(location), auto.firstHostOctet, base(location), auto.lastHostOctet, auto.lastHostOctet - auto.firstHostOctet + 1);
         }, { class: 'mono' })
       : h(
           'span',
           { class: 'ip mono' },
           liveText(() => base(location) + '.'),
-          octetInput(location, 'firstHostOctet', 'Первый адрес'),
+          octetInput(location, 'firstHostOctet', t('Первый адрес')),
           h('span', { class: 'dash' }, '–'),
           liveText(() => base(location) + '.'),
-          octetInput(location, 'lastHostOctet', 'Последний адрес'),
+          octetInput(location, 'lastHostOctet', t('Последний адрес')),
         );
 
     return h(
@@ -254,35 +258,35 @@ function draw(context, setting, history, draft, view, errorText) {
       h(
         'div',
         { class: 'net-grid' },
-        h('span', { class: 'net-label' }, 'Название'),
-        input(location, 'name', { maxlength: '60', class: 'name-input', 'aria-label': 'Название корпуса' }),
+        h('span', { class: 'net-label' }, t('Название')),
+        input(location, 'name', { maxlength: '60', class: 'name-input', 'aria-label': t('Название корпуса') }),
 
-        h('span', { class: 'net-label' }, 'ТК'),
-        input(location, 'tk', { maxlength: '20', class: 'mono segments', placeholder: 'ТК1000', 'aria-label': 'Номер ТК корпуса' }),
+        h('span', { class: 'net-label' }, t('ТК')),
+        input(location, 'tk', { maxlength: '20', class: 'mono segments', placeholder: t('ТК1000'), 'aria-label': t('Номер ТК корпуса') }),
 
-        h('span', { class: 'net-label' }, 'Подсеть'),
+        h('span', { class: 'net-label' }, t('Подсеть')),
         h(
           'div',
           { class: 'net-inline' },
-          h('span', { class: 'ip mono' }, liveText(() => `${show(draft.firstOctet)}.${firstSegment(location)}.`), octetInput(location, 'thirdOctet', 'Третий октет'), '.x'),
+          h('span', { class: 'ip mono' }, liveText(() => `${show(draft.firstOctet)}.${firstSegment(location)}.`), octetInput(location, 'thirdOctet', t('Третий октет')), '.x'),
           prefix,
         ),
 
-        h('span', { class: 'net-label' }, 'Шлюз'),
+        h('span', { class: 'net-label' }, t('Шлюз')),
         h(
           'div',
           { class: 'net-inline' },
-          h('span', { class: 'ip mono' }, liveText(() => base(location) + '.'), octetInput(location, 'gatewayOctet', 'Шлюз, последний октет')),
+          h('span', { class: 'ip mono' }, liveText(() => base(location) + '.'), octetInput(location, 'gatewayOctet', t('Шлюз, последний октет'))),
           liveText(
             () => {
               const info = subnetInfo(location.gatewayOctet, location.prefixLength);
-              return info ? `подсеть ${base(location)}.${info.network}/${location.prefixLength}, адреса .${info.network + 1}–.${info.broadcast - 1}` : '';
+              return info ? f('подсеть {0}.{1}/{2}, адреса .{3}–.{4}', base(location), info.network, location.prefixLength, info.network + 1, info.broadcast - 1) : '';
             },
             { class: 'muted small' },
           ),
         ),
 
-        h('span', { class: 'net-label' }, 'Адреса ПК'),
+        h('span', { class: 'net-label' }, t('Адреса ПК')),
         h(
           'div',
           { class: 'net-inline' },
@@ -299,7 +303,7 @@ function draw(context, setting, history, draft, view, errorText) {
                 redraw();
               },
             }),
-            'задать вручную',
+            t('задать вручную'),
           ),
         ),
 
@@ -307,16 +311,16 @@ function draw(context, setting, history, draft, view, errorText) {
         h(
           'div',
           {},
-          input(location, 'dnsServers', { class: 'mono wide', placeholder: 'общие', 'aria-label': 'Свои DNS-серверы' }),
-          h('small', { class: 'muted hint' }, 'Пусто — общие DNS. Свои — если в корпусе другие серверы.'),
+          input(location, 'dnsServers', { class: 'mono wide', placeholder: t('общие'), 'aria-label': t('Свои DNS-серверы') }),
+          h('small', { class: 'muted hint' }, t('Пусто — общие DNS. Свои — если в корпусе другие серверы.')),
         ),
 
-        h('span', { class: 'net-label' }, 'Сегменты'),
+        h('span', { class: 'net-label' }, t('Сегменты')),
         h(
           'div',
           {},
-          input(location, 'segments', { class: 'mono segments', placeholder: 'общие', 'aria-label': 'Свои сегменты' }),
-          h('small', { class: 'muted hint' }, 'Пусто — общие сегменты. Свои — если у корпуса другой второй октет.'),
+          input(location, 'segments', { class: 'mono segments', placeholder: t('общие'), 'aria-label': t('Свои сегменты') }),
+          h('small', { class: 'muted hint' }, t('Пусто — общие сегменты. Свои — если у корпуса другой второй октет.')),
         ),
       ),
       problemList(() => problemsOf(location)),
@@ -333,7 +337,7 @@ function draw(context, setting, history, draft, view, errorText) {
               redraw();
             },
           },
-          'Свернуть',
+          t('Свернуть'),
         ),
         h('span', { class: 'spacer' }),
         h(
@@ -342,15 +346,15 @@ function draw(context, setting, history, draft, view, errorText) {
             class: 'button danger',
             type: 'button',
             disabled: draft.locations.length === 1,
-            title: draft.locations.length === 1 ? 'Нужен хотя бы один корпус' : undefined,
+            title: draft.locations.length === 1 ? t('Нужен хотя бы один корпус') : undefined,
             onclick: () => {
-              if (!confirm(`Удалить корпус «${location.name || index + 1}»?`)) return;
+              if (!confirm(f('Удалить корпус «{0}»?', location.name || index + 1))) return;
               draft.locations.splice(index, 1);
               view.editing = null;
               redraw();
             },
           },
-          'Удалить корпус',
+          t('Удалить корпус'),
         ),
       ),
     );
@@ -359,44 +363,164 @@ function draw(context, setting, history, draft, view, errorText) {
   const locations = h(
     'section',
     { class: 'panel' },
-    h('h2', {}, `Корпуса (${draft.locations.length})`),
-    h('p', { class: 'muted small' }, 'Порядок — как в меню консоли. Нажмите на строку, чтобы изменить корпус.'),
+    h('h2', {}, f('Корпуса ({0})', draft.locations.length)),
+    h('p', { class: 'muted small' }, t('Порядок — как в меню консоли. Нажмите на строку, чтобы изменить корпус.')),
     h(
       'div',
       { class: 'table-wrap' },
       h(
         'table',
         { class: 'locations' },
-        h('thead', {}, h('tr', {}, h('th', {}, 'Корпус'), h('th', {}, 'ТК'), h('th', {}, 'Подсеть'), h('th', {}, 'Шлюз'), h('th', {}, 'Адреса ПК'), h('th', {}, 'DNS'), h('th', {}))),
+        h('thead', {}, h('tr', {}, h('th', {}, t('Корпус')), h('th', {}, t('ТК')), h('th', {}, t('Подсеть')), h('th', {}, t('Шлюз')), h('th', {}, t('Адреса ПК')), h('th', {}, 'DNS'), h('th', {}))),
         h('tbody', {}, rows),
       ),
     ),
   );
 
+  // Reserved addresses: one row per address or range. Enter adds the next row; lines pasted into an address
+  // field become rows ("10.0.0.5 — сервер", "10.0.0.20-29 камеры").
+  const reservedBody = h('tbody');
+  // Empty rows are left out of the check and of the saved list.
+  const reservedRowsChecked = () => checkReserved(draft.reserved);
+  const addReserved = (at, rows = [{ address: '', lastAddress: '', note: '' }]) => {
+    draft.reserved.splice(at, 0, ...rows.map((row) => ({ ...row })));
+    drawReserved();
+    refresh();
+    reservedBody.rows[at]?.querySelector('input')?.focus();
+  };
+  const reservedInput = (row, index, key, props) =>
+    h('input', {
+      value: row[key],
+      spellcheck: 'false',
+      oninput: (event) => {
+        row[key] = event.target.value;
+        refresh();
+      },
+      onkeydown: (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        addReserved(index + 1);
+      },
+      ...props,
+    });
+  function drawReserved() {
+    if (draft.reserved.length === 0) {
+      replace(reservedBody, h('tr', { class: 'empty-row' }, h('td', { colspan: '6', class: 'empty' }, t('Занятых адресов нет.'))));
+      return;
+    }
+    replace(
+      reservedBody,
+      draft.reserved.map((row, index) =>
+        h(
+          'tr',
+          {},
+          h('td', { class: 'muted number', 'data-col': 'number' }, String(index + 1)),
+          h(
+            'td',
+            { 'data-col': 'address' },
+            reservedInput(row, index, 'address', {
+              class: 'mono address',
+              inputmode: 'decimal',
+              placeholder: '10.0.0.5',
+              'aria-label': f('Адрес, строка {0}', index + 1),
+              // Several lines pasted: each becomes a row, this one first.
+              onpaste: (event) => {
+                const text = event.clipboardData?.getData('text') ?? '';
+                if (!/\n/.test(text.trim())) return;
+                event.preventDefault();
+                const pasted = parseReservedLines(text);
+                draft.reserved.splice(index, row.address.trim() || row.note.trim() ? 0 : 1);
+                addReserved(index, pasted);
+              },
+            }),
+          ),
+          h(
+            'td',
+            { 'data-col': 'last' },
+            h('span', { class: 'dash', 'aria-hidden': 'true' }, '–'),
+            reservedInput(row, index, 'lastAddress', {
+              class: 'mono address',
+              inputmode: 'decimal',
+              placeholder: t('один адрес'),
+              title: t('Конец диапазона: полный адрес или только последний октет'),
+              'aria-label': f('Конец диапазона, строка {0}', index + 1),
+            }),
+          ),
+          h(
+            'td',
+            { class: 'muted small nowrap size', 'data-col': 'size' },
+            liveText(() => {
+              const size = rangeSize(row);
+              return size > 1 ? f('{0} адр. (до {1})', size, rangeEnd(row.address, row.lastAddress)) : '';
+            }),
+          ),
+          h('td', { 'data-col': 'note' }, reservedInput(row, index, 'note', { class: 'note', maxlength: '200', placeholder: t('примечание'), 'aria-label': f('Примечание, строка {0}', index + 1) })),
+          h(
+            'td',
+            { class: 'row-actions' },
+            h(
+              'button',
+              {
+                class: 'button small danger',
+                type: 'button',
+                title: t('Удалить строку'),
+                'aria-label': f('Удалить строку {0}', index + 1),
+                onclick: () => {
+                  draft.reserved.splice(index, 1);
+                  drawReserved();
+                  refresh();
+                },
+              },
+              '✕',
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+  // Marks the rows with mistakes while typing.
+  live.push(() => {
+    const { marks } = reservedRowsChecked();
+    [...reservedBody.rows].forEach((tr, index) => {
+      const mark = marks.get(index);
+      tr.classList.toggle('invalid', Boolean(mark));
+      tr.title = mark ?? '';
+    });
+  });
+  drawReserved();
+
   const reserved = h(
     'section',
     { class: 'panel' },
-    h('h2', {}, liveText(() => `Занятые адреса (${parseReserved(draft.reserved).length})`)),
+    h(
+      'h2',
+      {},
+      liveText(() => {
+        const value = reservedValue(draft.reserved);
+        const addresses = draft.reserved.reduce((sum, row) => sum + (rangeSize(row) ?? 0), 0);
+        return f('Занятые адреса: строк {0}, адресов {1}', value.length, addresses);
+      }),
+    ),
     h(
       'p',
       { class: 'muted small' },
-      'Адреса без записи в базе: серверы, камеры, принтеры, компьютеры без серийного номера. Программа не предлагает их как свободные при вводе в домен. По одному в строке, примечание через тире.',
+      t('Адреса без записи в базе: серверы, камеры, принтеры, компьютеры без серийного номера. Программа не предлагает их как свободные при вводе в домен. Диапазон — начало и конец (конец можно указать одним последним октетом). Enter добавляет строку; несколько строк из буфера обмена вставляются в адрес как отдельные строки.'),
     ),
-    h('textarea', {
-      class: 'mono reserved',
-      rows: '10',
-      placeholder: '10.0.0.5 — сервер',
-      'aria-label': 'Занятые адреса',
-      value: draft.reserved,
-      oninput: (event) => {
-        draft.reserved = event.target.value;
-        refresh();
-      },
-    }),
-    problemList(() => reservedProblems(draft.reserved)),
+    h(
+      'div',
+      { class: 'table-wrap' },
+      h(
+        'table',
+        { class: 'reserved' },
+        h('thead', {}, h('tr', {}, h('th', {}, '№'), h('th', {}, t('Адрес')), h('th', {}, t('Конец диапазона')), h('th', {}), h('th', {}, t('Примечание')), h('th', {}))),
+        reservedBody,
+      ),
+    ),
+    h('div', { class: 'actions' }, h('button', { class: 'button', type: 'button', onclick: () => addReserved(draft.reserved.length) }, t('+ Адрес'))),
+    problemList(() => reservedRowsChecked().problems),
   );
 
-  const saveButton = h('button', { class: 'button primary', type: 'submit' }, 'Сохранить');
+  const saveButton = h('button', { class: 'button primary', type: 'submit' }, t('Сохранить'));
   const form = h(
     'form',
     {
@@ -406,28 +530,28 @@ function draw(context, setting, history, draft, view, errorText) {
         // Same checks as the server, so mistakes are shown next to the field.
         if (generalProblems(draft).length > 0) {
           view.editing = null;
-          redraw('Исправьте общую часть адреса.');
+          redraw(t('Исправьте общую часть адреса.'));
           return;
         }
-        if (reservedProblems(draft.reserved).length > 0) {
+        if (checkReserved(draft.reserved).problems.length > 0) {
           view.editing = null;
-          redraw('Исправьте список занятых адресов.');
+          redraw(t('Исправьте список занятых адресов.'));
           return;
         }
         const broken = draft.locations.findIndex((location) => locationProblems(location, names()).length > 0);
         if (broken >= 0) {
           view.editing = broken;
-          redraw(`Исправьте корпус «${draft.locations[broken].name || broken + 1}».`);
+          redraw(f('Исправьте корпус «{0}».', draft.locations[broken].name || broken + 1));
           return;
         }
         saveButton.disabled = true;
         try {
           await api('/settings/network', { method: 'PUT', body: { baseRevision: setting?.revision ?? null, value: toValue(draft) } });
-          toast('Настройки сети сохранены. Консоль получит их при следующей синхронизации.');
+          toast(t('Настройки сети сохранены. Консоль получит их при следующей синхронизации.'));
           await renderNetwork(context);
         } catch (error) {
           saveButton.disabled = false;
-          redraw(error.code === 'conflict' ? 'Настройки уже изменил другой администратор. Обновите страницу: ваши правки не сохранены.' : error.message);
+          redraw(error.code === 'conflict' ? t('Настройки уже изменил другой администратор. Обновите страницу: ваши правки не сохранены.') : error.message);
         }
       },
     },
@@ -449,31 +573,31 @@ function draw(context, setting, history, draft, view, errorText) {
             redraw();
           },
         },
-        '+ Корпус',
+        t('+ Корпус'),
       ),
       h('span', { class: 'spacer' }),
-      liveText(() => (dirty() ? 'Есть несохранённые изменения' : ''), { class: 'muted small' }),
+      liveText(() => (dirty() ? t('Есть несохранённые изменения') : ''), { class: 'muted small' }),
       saveButton,
     ),
   );
 
   replace(
     main,
-    h('h1', {}, 'Сеть'),
+    h('h1', {}, t('Сеть')),
     h(
       'p',
       { class: 'lead' },
-      'Корпуса и подсети для настройки LAN-адаптера и быстрого ping в консоли. Хранятся только в облаке; консоль скачивает их при синхронизации и дальше работает без интернета.',
+      t('Корпуса и подсети для настройки LAN-адаптера и быстрого ping в программе. Хранятся только в облаке; программа скачивает их при синхронизации и дальше работает без интернета.'),
     ),
     setting
-      ? h('p', { class: 'muted small', title: setting.updatedBy }, `Ревизия ${setting.revision}, изменено ${formatDate(setting.updatedAt)}, ${setting.updatedByName ?? setting.updatedBy}`)
-      : h('div', { class: 'notice' }, h('p', {}, 'Настройки сети ещё не заданы: заполните и сохраните.')),
+      ? h('p', { class: 'muted small', title: setting.updatedBy }, f('Ревизия {0}, изменено {1}, {2}', setting.revision, formatDate(setting.updatedAt), setting.updatedByName ?? setting.updatedBy))
+      : h('div', { class: 'notice' }, h('p', {}, t('Настройки сети ещё не заданы: заполните и сохраните.'))),
     form,
     history.length > 0 &&
       h(
         'details',
         { class: 'panel muted small' },
-        h('summary', {}, `История (${history.length})`),
+        h('summary', {}, f('История ({0})', history.length)),
         h('ul', {}, history.map((entry) => h('li', { title: entry.changedBy }, `#${entry.revision} — ${formatDate(entry.changedAt)}, ${entry.changedByName ?? entry.changedBy}`))),
       ),
   );
@@ -505,6 +629,6 @@ function toValue(draft) {
       if (tk) result.tk = tk;
       return result;
     }),
-    reservedAddresses: parseReserved(draft.reserved),
+    reservedAddresses: reservedValue(draft.reserved),
   };
 }

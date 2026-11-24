@@ -1,24 +1,27 @@
 import { api } from '../api.js';
 import { errorBox, h, replace, toast } from '../dom.js';
+import { f, t } from '../i18n.js';
+import { focusSearch, listToolbar, marked } from '../list-toolbar.js';
 import { formatDate, hasRole, isBlank, personLinks } from '../logic.js';
-import { looseKey, queryWords, splitMatches, textMatches } from '../search-logic.js';
+import { looseKey, queryWords, textMatches } from '../search-logic.js';
 import { invalidateDevices } from './devices.js';
 
 // Survives navigation to a device and back.
 const state = { query: '' };
 
-// People devices are linked to by number: the actual user and the person materially responsible (МВО).
+// О/С (особовий склад): people devices and property are linked to by number — the actual user and the person
+// materially responsible (МВО). The number stays: it tells namesakes apart in the forms («ПІБ · #12»).
 // personId: the card of one person (#/people/12), linked from devices, property and the journal.
 export async function renderPeople(context, personId = null) {
   const { main } = context;
-  replace(main, h('p', { class: 'muted' }, personId === null ? 'Загрузка списка людей…' : 'Загрузка…'));
+  replace(main, h('p', { class: 'muted' }, personId === null ? t('Загрузка О/С…') : t('Загрузка…')));
   let people;
   let devices;
   let items;
   try {
     [{ people }, { devices }, { items }] = await Promise.all([api('/people'), api('/devices'), api('/items')]);
   } catch (error) {
-    replace(main, h('h1', {}, 'Люди'), errorBox(error, () => renderPeople(context, personId)));
+    replace(main, h('h1', {}, 'О/С'), errorBox(error, () => renderPeople(context, personId)));
     return;
   }
   if (personId !== null) {
@@ -33,22 +36,33 @@ export async function renderPeople(context, personId = null) {
     const own = links.get(item.ownerId);
     own.items = (own.items ?? 0) + 1;
   }
-  draw(context, people, links, { editing: null });
+  draw(context, people, links, { editing: null, adding: false });
 }
+
+// Escape cancels the editing, as the «Отмена» button.
+const escapeTo = (cancel) => (event) => {
+  if (event.key !== 'Escape') return;
+  event.preventDefault();
+  cancel();
+};
+
+const DELETE_BLOCKED = () => t('Сначала уберите человека из карточек устройств и из майна');
 
 function draw(context, people, links, view) {
   const { me, main } = context;
   const redraw = (changes = {}) => draw(context, people, links, { ...view, ...changes });
   const reload = () => renderPeople(context);
   const editor = hasRole(me, 'editor');
+  const cancelEdit = () => redraw({ editing: null });
 
   const tbody = h('tbody');
   const count = h('p', { class: 'muted count' });
   const fill = () => {
     const words = queryWords(state.query);
     const shown = people.filter((person) => matches(person, words));
-    count.textContent = shown.length === people.length ? `Всего: ${people.length}` : `Найдено: ${shown.length} из ${people.length}`;
+    count.textContent = shown.length === people.length ? f('Всего: {0}', people.length) : f('Найдено: {0} из {1}', shown.length, people.length);
     replace(tbody, shown.map((person) => row(person, words)));
+    if (shown.length === 0) replace(tbody, h('tr', { class: 'empty-row' }, h('td', { colspan: '8', class: 'empty' }, t('Ничего не найдено.'))));
   };
 
   function row(person, words) {
@@ -57,40 +71,40 @@ function draw(context, people, links, view) {
     return h(
       'tr',
       { id: 'person-' + person.id },
-      h('td', { class: 'mono muted' }, '#' + person.id),
-      h('td', {}, h('a', { href: '#/people/' + person.id }, marked(person.name, words))),
-      h('td', { class: 'comment' }, marked(person.note, words)),
-      h('td', {}, deviceList(own.userId)),
-      h('td', {}, deviceList(own.ownerId)),
-      h('td', { class: 'nowrap' }, itemsLink(person.id, own.items)),
-      h('td', { class: 'muted small nowrap', title: person.updatedBy }, formatDate(person.updatedAt)),
+      h('td', { class: 'mono muted', 'data-col': 'id' }, marked('#' + person.id, words)),
+      h('td', { 'data-col': 'name' }, h('a', { href: '#/people/' + person.id }, marked(person.name, words))),
+      h('td', { class: 'comment', 'data-col': 'note' }, marked(person.note, words)),
+      h('td', { 'data-col': 'user', 'data-label': t('Пользователь') }, deviceList(own.userId)),
+      h('td', { 'data-col': 'owner', 'data-label': t('МВО компьютеров') }, deviceList(own.ownerId)),
+      h('td', { class: 'nowrap', 'data-col': 'items', 'data-label': t('МВО майна') }, itemsLink(person.id, own.items)),
+      h('td', { class: 'muted small nowrap', 'data-col': 'updated', title: person.updatedBy }, formatDate(person.updatedAt)),
       h(
         'td',
         { class: 'row-actions' },
-        editor && h('button', { class: 'button small', type: 'button', onclick: () => redraw({ editing: person.id }) }, 'Изменить'),
+        editor && h('button', { class: 'button small', type: 'button', onclick: () => redraw({ editing: person.id, adding: false }) }, t('Изменить')),
       ),
     );
   }
 
   function editRow(person, own) {
     const name = h('input', { value: person.name, maxlength: '200', 'aria-label': 'ПІБ' });
-    const note = h('input', { value: person.note, maxlength: '500', 'aria-label': 'Примечание', placeholder: 'підрозділ, посада…' });
+    const note = h('input', { value: person.note, maxlength: '500', 'aria-label': t('Примечание'), placeholder: t('підрозділ, посада…') });
     const linked = own.userId.length + own.ownerId.length + (own.items ?? 0);
     const save = async () => {
       try {
         await api('/people/' + person.id, { method: 'PATCH', body: { name: name.value, note: note.value } });
         invalidateDevices();
-        toast('Сохранено.');
+        toast(t('Сохранено.'));
         await reload();
       } catch (error) {
         toast(error.message, 'error');
       }
     };
     const remove = async () => {
-      if (!confirm(`Удалить «${person.name}» (#${person.id}) из списка? Номер больше не будет использован.`)) return;
+      if (!confirm(f('Удалить «{0}» (#{1}) из О/С? Номер больше не будет использован.', person.name, person.id))) return;
       try {
         await api('/people/' + person.id, { method: 'DELETE' });
-        toast('Удалено.');
+        toast(t('Удалено.'));
         await renderPeople(context);
       } catch (error) {
         toast(error.message, 'error');
@@ -98,87 +112,100 @@ function draw(context, people, links, view) {
     };
     return h(
       'tr',
-      { id: 'person-' + person.id, class: 'focused' },
-      h('td', { class: 'mono muted' }, '#' + person.id),
-      h('td', {}, name),
-      h('td', {}, note),
-      h('td', {}, deviceList(own.userId)),
-      h('td', {}, deviceList(own.ownerId)),
-      h('td', { class: 'nowrap' }, itemsLink(person.id, own.items)),
-      h('td'),
+      { id: 'person-' + person.id, class: 'focused', onkeydown: escapeTo(cancelEdit) },
+      h('td', { class: 'mono muted', 'data-col': 'id' }, '#' + person.id),
+      h('td', { 'data-col': 'name' }, name),
+      h('td', { 'data-col': 'note' }, note),
+      h('td', { 'data-col': 'user', 'data-label': t('Пользователь') }, deviceList(own.userId)),
+      h('td', { 'data-col': 'owner', 'data-label': t('МВО компьютеров') }, deviceList(own.ownerId)),
+      h('td', { class: 'nowrap', 'data-col': 'items', 'data-label': t('МВО майна') }, itemsLink(person.id, own.items)),
+      h('td', { 'data-col': 'updated' }),
       h(
         'td',
         { class: 'row-actions' },
-        h('button', { class: 'button small primary', type: 'button', onclick: save }, 'Сохранить'),
-        h('button', { class: 'button small', type: 'button', onclick: () => redraw({ editing: null }) }, 'Отмена'),
+        h('button', { class: 'button small primary', type: 'button', onclick: save }, t('Сохранить')),
+        h('button', { class: 'button small', type: 'button', title: t('Отмена (Esc)'), onclick: cancelEdit }, t('Отмена')),
         hasRole(me, 'admin') &&
           h(
             'button',
-            {
-              class: 'button small danger',
-              type: 'button',
-              disabled: linked > 0,
-              title: linked > 0 ? 'Сначала уберите человека из карточек устройств и из имущества' : undefined,
-              onclick: remove,
-            },
-            'Удалить',
+            { class: 'button small danger', type: 'button', disabled: linked > 0, title: linked > 0 ? DELETE_BLOCKED() : undefined, onclick: remove },
+            t('Удалить'),
           ),
       ),
     );
   }
 
-  const search = h('input', {
-    type: 'search',
-    class: 'search',
-    value: state.query,
-    placeholder: 'Поиск: ПІБ, примечание, номер',
-    'aria-label': 'Поиск людей',
-    oninput: (event) => {
-      state.query = event.target.value;
+  const { toolbar, search } = listToolbar({
+    name: 'people-filter',
+    placeholder: t('Поиск: ПІБ, примечание, номер'),
+    query: state.query,
+    onQuery: (query) => {
+      state.query = query;
       fill();
     },
+    actions: [
+      editor &&
+        !view.adding &&
+        h('button', { class: 'button primary', type: 'button', title: t('Добавить человека'), onclick: () => redraw({ adding: true, editing: null }) }, t('+ Добавить')),
+    ],
   });
 
+  const panel = editor && view.adding && h('section', { class: 'panel add-panel' }, h('h2', {}, t('Добавить человека')), addForm(reload, () => redraw({ adding: false })));
   replace(
     main,
-    h('h1', {}, 'Люди'),
+    h('h1', { class: 'list-title' }, t('О/С (особовий склад)')),
     h(
       'p',
-      { class: 'lead' },
-      'Справочник людей, к которым привязаны компьютеры и имущество по номеру: пользователь по факту и матеріально відповідальна особа (МВО) по ведомости. Номер не меняется и не используется повторно.',
+      { class: 'lead list-lead' },
+      t('Люди, к которым привязаны компьютеры и майно по номеру: пользователь по факту и матеріально відповідальна особа (МВО) по ведомости. Номер не меняется и не используется повторно.'),
     ),
-    editor && h('section', { class: 'panel' }, h('h2', {}, 'Добавить человека'), addForm(reload)),
+    panel,
+    toolbar,
+    count,
     h(
-      'section',
-      { class: 'panel' },
-      h('div', { class: 'toolbar' }, search),
-      count,
+      'div',
+      { class: 'table-wrap table-scroll' },
       h(
-        'div',
-        { class: 'table-wrap' },
+        'table',
+        { class: 'people' },
         h(
-          'table',
-          { class: 'people' },
+          'thead',
+          {},
           h(
-            'thead',
+            'tr',
             {},
-            h('tr', {}, h('th', {}, '№'), h('th', {}, 'ПІБ'), h('th', {}, 'Примечание'), h('th', {}, 'Пользователь компьютеров'), h('th', {}, 'МВО компьютеров'), h('th', {}, 'МВО имущества'), h('th', {}, 'Изменено'), h('th')),
+            h('th', {}, '№'),
+            h('th', {}, 'ПІБ'),
+            h('th', {}, t('Примечание')),
+            h('th', {}, t('Пользователь компьютеров')),
+            h('th', {}, t('МВО компьютеров')),
+            h('th', {}, t('МВО майна')),
+            h('th', {}, t('Изменено')),
+            h('th'),
           ),
-          tbody,
         ),
+        tbody,
       ),
     ),
   );
   fill();
+  if (panel) {
+    window.scrollTo(0, 0);
+    panel.querySelector('input')?.focus();
+  } else if (view.editing !== null) {
+    tbody.querySelector('tr.focused input')?.focus();
+  } else {
+    focusSearch(search, state.query);
+  }
 }
 
 // The card of one person: name and note, the computers where the person is the user or the МВО, the property.
 function drawPerson(context, people, devices, items, id, view) {
   const { me, main } = context;
-  const back = h('a', { class: 'back', href: '#/people' }, '← Все люди');
+  const back = h('a', { class: 'back', href: '#/people' }, t('← Весь О/С'));
   const person = people.find((p) => p.id === id);
   if (!person) {
-    replace(main, back, h('div', { class: 'notice notice-error' }, h('p', {}, `Человека #${id} нет в списке: его удалили или номер неверный.`)));
+    replace(main, back, h('div', { class: 'notice notice-error' }, h('p', {}, f('Человека #{0} нет в О/С: его удалили или номер неверный.', id))));
     return;
   }
   const redraw = (changes = {}) => drawPerson(context, people, devices, items, id, { ...view, ...changes });
@@ -189,10 +216,10 @@ function drawPerson(context, people, devices, items, id, view) {
   const linked = asUser.length + asOwner.length + own.length;
 
   const remove = async () => {
-    if (!confirm(`Удалить «${person.name}» (#${person.id}) из списка? Номер больше не будет использован.`)) return;
+    if (!confirm(f('Удалить «{0}» (#{1}) из О/С? Номер больше не будет использован.', person.name, person.id))) return;
     try {
       await api('/people/' + person.id, { method: 'DELETE' });
-      toast('Удалено.');
+      toast(t('Удалено.'));
       location.hash = '#/people';
     } catch (error) {
       toast(error.message, 'error');
@@ -201,18 +228,20 @@ function drawPerson(context, people, devices, items, id, view) {
 
   let head;
   if (view.editing) {
+    const cancel = () => redraw({ editing: false });
     const name = h('input', { value: person.name, maxlength: '200', 'aria-label': 'ПІБ' });
-    const note = h('input', { value: person.note, maxlength: '500', 'aria-label': 'Примечание', placeholder: 'підрозділ, посада…' });
+    const note = h('input', { value: person.note, maxlength: '500', 'aria-label': t('Примечание'), placeholder: t('підрозділ, посада…') });
     head = h(
       'form',
       {
         class: 'panel inline-form',
+        onkeydown: escapeTo(cancel),
         onsubmit: async (event) => {
           event.preventDefault();
           try {
             await api('/people/' + person.id, { method: 'PATCH', body: { name: name.value, note: note.value } });
             invalidateDevices();
-            toast('Сохранено.');
+            toast(t('Сохранено.'));
             await renderPeople(context, id);
           } catch (error) {
             toast(error.message, 'error');
@@ -221,8 +250,8 @@ function drawPerson(context, people, devices, items, id, view) {
       },
       name,
       note,
-      h('button', { class: 'button primary', type: 'submit' }, 'Сохранить'),
-      h('button', { class: 'button', type: 'button', onclick: () => redraw({ editing: false }) }, 'Отмена'),
+      h('button', { class: 'button primary', type: 'submit' }, t('Сохранить')),
+      h('button', { class: 'button', type: 'button', title: t('Отмена (Esc)'), onclick: cancel }, t('Отмена')),
     );
   } else {
     head = h(
@@ -232,18 +261,12 @@ function drawPerson(context, people, devices, items, id, view) {
       h(
         'div',
         { class: 'actions' },
-        hasRole(me, 'editor') && h('button', { class: 'button primary', type: 'button', onclick: () => redraw({ editing: true }) }, 'Изменить'),
+        hasRole(me, 'editor') && h('button', { class: 'button primary', type: 'button', onclick: () => redraw({ editing: true }) }, t('Изменить')),
         hasRole(me, 'admin') &&
           h(
             'button',
-            {
-              class: 'button danger',
-              type: 'button',
-              disabled: linked > 0,
-              title: linked > 0 ? 'Сначала уберите человека из карточек устройств и из имущества' : undefined,
-              onclick: remove,
-            },
-            'Удалить',
+            { class: 'button danger', type: 'button', disabled: linked > 0, title: linked > 0 ? DELETE_BLOCKED() : undefined, onclick: remove },
+            t('Удалить'),
           ),
       ),
     );
@@ -251,14 +274,14 @@ function drawPerson(context, people, devices, items, id, view) {
 
   const deviceTable = (list) =>
     list.length === 0
-      ? h('p', { class: 'muted' }, 'Нет.')
+      ? h('p', { class: 'muted' }, t('Нет.'))
       : h(
           'div',
           { class: 'table-wrap' },
           h(
             'table',
             {},
-            h('thead', {}, h('tr', {}, h('th', {}, 'Имя компьютера'), h('th', {}, 'Модель'), h('th', {}, 'Серийный номер'), h('th', {}, 'Комментарий'))),
+            h('thead', {}, h('tr', {}, h('th', {}, t('Имя компьютера')), h('th', {}, t('Модель')), h('th', {}, t('Серийный номер')), h('th', {}, t('Комментарий')))),
             h(
               'tbody',
               {},
@@ -280,21 +303,21 @@ function drawPerson(context, people, devices, items, id, view) {
     main,
     back,
     head,
-    h('section', { class: 'panel' }, h('h2', {}, `Пользователь компьютеров (${asUser.length})`), deviceTable(asUser)),
-    h('section', { class: 'panel' }, h('h2', {}, `МВО компьютеров (${asOwner.length})`), deviceTable(asOwner)),
+    h('section', { class: 'panel' }, h('h2', {}, f('Пользователь компьютеров ({0})', asUser.length)), deviceTable(asUser)),
+    h('section', { class: 'panel' }, h('h2', {}, f('МВО компьютеров ({0})', asOwner.length)), deviceTable(asOwner)),
     h(
       'section',
       { class: 'panel' },
-      h('h2', {}, `МВО имущества (${own.length})`, own.length > 0 ? ' ' : '', own.length > 0 && h('a', { class: 'small', href: '#/items/owner/' + id }, 'открыть в «Имуществе»')),
+      h('h2', {}, f('МВО майна ({0})', own.length), own.length > 0 ? ' ' : '', own.length > 0 && h('a', { class: 'small', href: '#/items/owner/' + id }, t('открыть в «Майне»'))),
       own.length === 0
-        ? h('p', { class: 'muted' }, 'Нет.')
+        ? h('p', { class: 'muted' }, t('Нет.'))
         : h(
             'div',
             { class: 'table-wrap' },
             h(
               'table',
               {},
-              h('thead', {}, h('tr', {}, h('th', {}, '№'), h('th', {}, 'Тип'), h('th', {}, 'Модель'), h('th', {}, 'Серийный номер'), h('th', {}, 'Место'), h('th', {}, 'Примечание'))),
+              h('thead', {}, h('tr', {}, h('th', {}, t('Тип')), h('th', {}, t('Модель')), h('th', {}, t('Серийный номер')), h('th', {}, t('Место')), h('th', {}, t('Примечание')))),
               h(
                 'tbody',
                 {},
@@ -302,7 +325,6 @@ function drawPerson(context, people, devices, items, id, view) {
                   h(
                     'tr',
                     {},
-                    h('td', { class: 'mono muted' }, '#' + item.id),
                     h('td', {}, item.type),
                     h('td', {}, item.model),
                     h('td', { class: 'mono' }, item.serial),
@@ -314,24 +336,25 @@ function drawPerson(context, people, devices, items, id, view) {
             ),
           ),
     ),
-    h('p', { class: 'muted small', title: person.updatedBy }, `Изменено ${formatDate(person.updatedAt)}`),
+    h('p', { class: 'muted small', title: person.updatedBy }, f('Изменено {0}', formatDate(person.updatedAt))),
   );
 }
 
-function addForm(reload) {
-  const name = h('input', { maxlength: '200', placeholder: 'Прізвище Ім\'я По батькові', 'aria-label': 'ПІБ', required: true });
-  const note = h('input', { maxlength: '500', placeholder: 'підрозділ, посада…', 'aria-label': 'Примечание' });
-  const save = h('button', { class: 'button primary', type: 'submit' }, 'Добавить');
+function addForm(reload, cancel) {
+  const name = h('input', { maxlength: '200', placeholder: 'Прізвище Ім’я По батькові', 'aria-label': 'ПІБ', required: true });
+  const note = h('input', { maxlength: '500', placeholder: t('підрозділ, посада…'), 'aria-label': t('Примечание') });
+  const save = h('button', { class: 'button primary', type: 'submit' }, t('Добавить'));
   return h(
     'form',
     {
       class: 'inline-form',
+      onkeydown: escapeTo(cancel),
       onsubmit: async (event) => {
         event.preventDefault();
         save.disabled = true;
         try {
           const { person } = await api('/people', { method: 'POST', body: { name: name.value, note: note.value } });
-          toast(`Добавлен: ${person.name}, №${person.id}.`);
+          toast(f('Добавлен: {0}, №{1}.', person.name, person.id));
           state.query = '';
           await reload();
         } catch (error) {
@@ -343,6 +366,7 @@ function addForm(reload) {
     name,
     note,
     save,
+    h('button', { class: 'button', type: 'button', title: t('Отмена (Esc)'), onclick: cancel }, t('Отмена')),
   );
 }
 
@@ -354,14 +378,9 @@ function matches(person, words) {
   return words.every((word) => textMatches(text, word, key));
 }
 
-function marked(text, words) {
-  if (isBlank(text)) return '';
-  return splitMatches(text, words).map((part) => (part.match ? h('mark', {}, part.text) : part.text));
-}
-
 function itemsLink(personId, count) {
   if (!count) return h('span', { class: 'muted' }, '—');
-  return h('a', { href: '#/items/owner/' + personId }, `${count} шт.`);
+  return h('a', { href: '#/items/owner/' + personId }, f('{0} шт.', count));
 }
 
 function deviceList(list) {

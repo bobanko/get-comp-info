@@ -1,5 +1,6 @@
 import { api } from '../api.js';
 import { errorBox, h, replace, toast } from '../dom.js';
+import { f, t } from '../i18n.js';
 import {
   ALWAYS_SHOWN_FIELDS,
   authorLabel,
@@ -21,7 +22,6 @@ import {
   formatDate,
   hasRole,
   HISTORY_ACTIONS,
-  HISTORY_SOURCES,
   isBlank,
   isRecent,
   PERSON_FIELDS,
@@ -36,7 +36,7 @@ let people = [];
 
 export async function renderDevice(context, id) {
   const { main } = context;
-  replace(main, h('p', { class: 'muted' }, 'Загрузка…'));
+  replace(main, h('p', { class: 'muted' }, t('Загрузка…')));
   let device;
   let history;
   try {
@@ -51,7 +51,7 @@ export async function renderDevice(context, id) {
 }
 
 function backLink() {
-  return h('a', { class: 'back', href: '#/devices' }, '← Все устройства');
+  return h('a', { class: 'back', href: '#/devices' }, t('← Все устройства'));
 }
 
 function draw(context, device, history, view) {
@@ -63,11 +63,11 @@ function draw(context, device, history, view) {
     'div',
     { class: 'actions' },
     !device.deleted && hasRole(me, 'editor') && !view.editing &&
-      h('button', { class: 'button primary', onclick: () => redraw({ editing: true, conflict: null }) }, 'Изменить'),
+      h('button', { class: 'button primary', onclick: () => redraw({ editing: true, conflict: null }) }, t('Изменить')),
     !device.deleted && hasRole(me, 'admin') && !view.editing &&
-      h('button', { class: 'button danger', onclick: () => setDeleted(context, device, true) }, 'Удалить'),
+      h('button', { class: 'button danger', onclick: () => setDeleted(context, device, true) }, t('Удалить')),
     device.deleted && hasRole(me, 'admin') &&
-      h('button', { class: 'button primary', onclick: () => setDeleted(context, device, false) }, 'Восстановить'),
+      h('button', { class: 'button primary', onclick: () => setDeleted(context, device, false) }, t('Восстановить')),
   );
 
   replace(
@@ -79,7 +79,7 @@ function draw(context, device, history, view) {
       h('div', {}, h('h1', {}, title), h('p', { class: 'muted mono small' }, device.id)),
       actions,
     ),
-    device.deleted && h('div', { class: 'notice notice-error' }, `Запись удалена в облаке: ${deviceAuthor(device)}, ${formatDate(device.updatedAt)}.`),
+    device.deleted && h('div', { class: 'notice notice-error' }, f('Запись удалена в облаке: {0}, {1}.', deviceAuthor(device), formatDate(device.updatedAt))),
     h(
       'div',
       { class: 'card-grid' },
@@ -100,17 +100,17 @@ function valueNode(name, value) {
       : h('span', { class: 'badge badge-muted' }, INVENTORY_LABELS.no);
   }
   if (PERSON_FIELDS.includes(name)) {
-    if (isBlank(value)) return h('span', { class: 'muted' }, 'не указан');
+    if (isBlank(value)) return h('span', { class: 'muted' }, t('не указан'));
     const person = findPerson(value);
     return h(
       'a',
       { href: '#/people/' + value, title: person?.note || undefined },
       person ? person.name : `#${value}`,
-      h('span', { class: 'muted small' }, person ? ` · #${value}` : ' (нет в списке людей)'),
+      h('span', { class: 'muted small' }, person ? ` · #${value}` : t(' (нет в О/С)')),
     );
   }
   if (/At$/.test(name) && !isBlank(value)) return h('span', { title: displayValue(value) }, formatDate(value));
-  if (isBlank(value)) return h('span', { class: 'muted' }, value === undefined ? '—' : 'не указано');
+  if (isBlank(value)) return h('span', { class: 'muted' }, value === undefined ? '—' : t('не указано'));
   return h('span', { class: ['ip', 'mac', 'serial', 'smbiosUuid', 'computerId'].includes(name) ? 'mono' : undefined }, displayValue(value));
 }
 
@@ -124,7 +124,7 @@ function orderedFields(data) {
 // When the field got its current value; a click shows that revision in the history.
 function ageNode(entry, view, redraw) {
   if (!entry) return null;
-  const author = authorLabel(entry.changedByName, entry.changedBy, entry.changedByKey);
+  const author = authorLabel(entry.changedByName, entry.changedBy, entry.changedByKey, entry.source);
   return h(
     'button',
     {
@@ -134,7 +134,7 @@ function ageNode(entry, view, redraw) {
         isRecent(entry.changedAt) ? 'recent' : '',
         entry.revision === view.selectedRevision ? 'active' : '',
       ].join(' ').trim(),
-      title: `Изменено ${formatDate(entry.changedAt)} · ${author} · ревизия #${entry.revision}`,
+      title: f('Изменено {0} · {1} · ревизия #{2}', formatDate(entry.changedAt), author, entry.revision),
       onclick: () => redraw({ selectedRevision: entry.revision }),
     },
     shortAge(entry.changedAt),
@@ -144,7 +144,7 @@ function ageNode(entry, view, redraw) {
 function dataList(device, history, view, redraw) {
   const changes = fieldChanges(history);
   return [
-    h('h2', {}, 'Данные'),
+    h('h2', {}, t('Данные')),
     h(
       'dl',
       { class: 'fields' },
@@ -152,10 +152,10 @@ function dataList(device, history, view, redraw) {
         h('dt', {}, fieldLabel(name)),
         h('dd', { class: 'with-age' }, h('span', { class: 'value' }, valueNode(name, device.data[name])), ageNode(changes[name], view, redraw)),
       ]),
-      h('dt', {}, 'Ревизия в облаке'),
+      h('dt', {}, t('Ревизия в облаке')),
       h('dd', {}, String(device.revision)),
-      h('dt', {}, 'Изменено в облаке'),
-      h('dd', { title: authorTitle(device.updatedByName, device.updatedBy, device.updatedByKey) }, `${formatDate(device.updatedAt)}, ${deviceAuthor(device)}`),
+      h('dt', {}, t('Изменено в облаке')),
+      h('dd', { title: authorTitle(device.updatedByName, device.updatedBy, device.updatedByKey, device.updatedSource) }, `${formatDate(device.updatedAt)}, ${deviceAuthor(device)}`),
     ),
   ];
 }
@@ -198,7 +198,7 @@ function editForm(context, device, history, view, redraw) {
             body: { baseRevision: device.revision, changes },
           });
           invalidateDevices();
-          toast(result.changed ? 'Изменения сохранены.' : 'Изменений нет.');
+          toast(result.changed ? t('Изменения сохранены.') : t('Изменений нет.'));
           await renderDevice(context, device.id);
         } catch (error) {
           save.disabled = false;
@@ -210,7 +210,7 @@ function editForm(context, device, history, view, redraw) {
         }
       },
     },
-    h('h2', {}, 'Правка'),
+    h('h2', {}, t('Правка')),
     view.conflict && conflictNotice(device, view.conflict, () => {
       invalidateDevices();
       renderDevice(context, device.id);
@@ -219,7 +219,7 @@ function editForm(context, device, history, view, redraw) {
       if (BOOLEAN_FIELDS.includes(name)) {
         const input = h('input', { type: 'checkbox', name, checked: view.draft?.[name] ?? device.data[name] === true });
         inputs[name] = input;
-        return h('label', { class: 'check' }, input, name === 'inventoried' ? 'Инвентаризировано' : fieldLabel(name));
+        return h('label', { class: 'check' }, input, name === 'inventoried' ? t('Инвентаризировано') : fieldLabel(name));
       }
       if (PERSON_FIELDS.includes(name)) {
         const input = personInput(name, view.draft?.[name] ?? personInputText(device.data[name]));
@@ -235,14 +235,14 @@ function editForm(context, device, history, view, redraw) {
       return h('label', { class: 'field' }, h('span', {}, fieldLabel(name)), input);
     }),
   );
-  const save = h('button', { class: 'button primary', type: 'submit' }, 'Сохранить');
+  const save = h('button', { class: 'button primary', type: 'submit' }, t('Сохранить'));
   form.append(
     peopleDatalist(people),
     h(
       'div',
       { class: 'actions' },
       save,
-      h('button', { class: 'button', type: 'button', onclick: () => redraw({ editing: false, conflict: null, draft: null }) }, 'Отмена'),
+      h('button', { class: 'button', type: 'button', onclick: () => redraw({ editing: false, conflict: null, draft: null }) }, t('Отмена')),
     ),
   );
   return form;
@@ -253,9 +253,9 @@ function conflictNotice(device, current, onReload) {
   return h(
     'div',
     { class: 'notice notice-error' },
-    h('p', {}, `Пока вы редактировали, запись изменил(а) ${deviceAuthor(current)} (${formatDate(current.updatedAt)}). Ваши правки не сохранены.`),
+    h('p', {}, f('Пока вы редактировали, запись изменил(а) {0} ({1}). Ваши правки не сохранены.', deviceAuthor(current), formatDate(current.updatedAt))),
     changes.length > 0 && h('ul', {}, changes.map((change) => h('li', {}, `${fieldLabel(change.name)}: ${fieldValueText(change.name, change.after) || '—'}`))),
-    h('button', { class: 'button', type: 'button', onclick: onReload }, 'Открыть актуальную версию'),
+    h('button', { class: 'button', type: 'button', onclick: onReload }, t('Открыть актуальную версию')),
   );
 }
 
@@ -264,7 +264,7 @@ function historyPanel(history, view, redraw) {
   const selected = history[selectedIndex];
   const previous = history[selectedIndex + 1] ?? null;
   return [
-    h('h2', {}, 'История'),
+    h('h2', {}, t('История')),
     h(
       'ol',
       { class: 'history' },
@@ -282,11 +282,9 @@ function historyPanel(history, view, redraw) {
             h('span', {}, HISTORY_ACTIONS[entry.action] ?? entry.action),
             h(
               'span',
-              { class: 'muted small', title: authorTitle(entry.changedByName, entry.changedBy, entry.changedByKey) },
+              { class: 'muted small', title: authorTitle(entry.changedByName, entry.changedBy, entry.changedByKey, entry.source) },
               `${formatDate(entry.changedAt)} · `,
-              h('b', { class: 'author' }, authorLabel(entry.changedByName, entry.changedBy, entry.changedByKey)),
-              // A key already means the console.
-              entry.changedByKey ? '' : ` · ${HISTORY_SOURCES[entry.source] ?? entry.source}`,
+              h('b', { class: 'author' }, authorLabel(entry.changedByName, entry.changedBy, entry.changedByKey, entry.source)),
             ),
           ),
         ),
@@ -298,14 +296,14 @@ function historyPanel(history, view, redraw) {
 
 function diffTable(selected, previous) {
   if (selected.action === 'delete' || selected.action === 'restore') {
-    return h('p', { class: 'muted' }, 'Данные в этой ревизии не менялись.');
+    return h('p', { class: 'muted' }, t('Данные в этой ревизии не менялись.'));
   }
   const changes = diffRecords(previous?.data ?? null, selected.data);
-  if (changes.length === 0) return h('p', { class: 'muted' }, 'Данные в этой ревизии не менялись.');
+  if (changes.length === 0) return h('p', { class: 'muted' }, t('Данные в этой ревизии не менялись.'));
   return h(
     'table',
     { class: 'diff' },
-    h('thead', {}, h('tr', {}, h('th', {}, 'Поле'), h('th', {}, previous ? `Было (#${previous.revision})` : 'Было'), h('th', {}, `Стало (#${selected.revision})`))),
+    h('thead', {}, h('tr', {}, h('th', {}, t('Поле')), h('th', {}, previous ? f('Было (#{0})', previous.revision) : t('Было')), h('th', {}, f('Стало (#{0})', selected.revision)))),
     h(
       'tbody',
       {},
@@ -315,7 +313,7 @@ function diffTable(selected, previous) {
           {},
           h('td', {}, fieldLabel(change.name)),
           h('td', { class: 'before' }, change.kind === 'added' ? h('span', { class: 'muted' }, '—') : fieldValueText(change.name, change.before)),
-          h('td', { class: 'after' }, change.kind === 'removed' ? h('span', { class: 'muted' }, 'поле удалено') : fieldValueText(change.name, change.after)),
+          h('td', { class: 'after' }, change.kind === 'removed' ? h('span', { class: 'muted' }, t('поле удалено')) : fieldValueText(change.name, change.after)),
         ),
       ),
     ),
@@ -324,12 +322,12 @@ function diffTable(selected, previous) {
 
 async function setDeleted(context, device, deleted) {
   const name = isBlank(device.data.hostname) ? device.id : device.data.hostname;
-  if (deleted && !confirm(`Удалить запись «${name}»? Её можно будет восстановить, история сохранится.`)) return;
+  if (deleted && !confirm(f('Удалить запись «{0}»? Её можно будет восстановить, история сохранится.', name))) return;
   try {
     const path = '/devices/' + encodeURIComponent(device.id);
     await api(deleted ? path : path + '/restore', { method: deleted ? 'DELETE' : 'POST' });
     invalidateDevices();
-    toast(deleted ? 'Запись удалена.' : 'Запись восстановлена.');
+    toast(deleted ? t('Запись удалена.') : t('Запись восстановлена.'));
     if (deleted) location.hash = '#/devices';
     else await renderDevice(context, device.id);
   } catch (error) {

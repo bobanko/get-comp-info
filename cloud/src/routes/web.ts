@@ -119,13 +119,31 @@ webApi.get('/keys', async (c) => {
   return c.json({ keys: results.map(toKey) });
 });
 
-webApi.post('/keys', async (c) => {
-  requireRole(c, 'harvester');
-  const body = await readJsonObject(c);
+function keyLabel(body: Record<string, unknown>): string {
   const label = typeof body.label === 'string' ? body.label.trim() : '';
   if (label === '' || label.length > MAX_LABEL_LENGTH) {
     fail(400, 'invalid_label', `A key name is required, up to ${MAX_LABEL_LENGTH} characters.`, { maxLength: MAX_LABEL_LENGTH });
   }
+  return label;
+}
+
+// A key of the signed-in user; admins may reach the keys of everybody. Others' keys answer 404.
+async function ownKey(c: Context<AppEnv>, id: string): Promise<KeyRow> {
+  const user = c.get('user');
+  const row = await c.env.DB.prepare(
+    'SELECT id, user_email, label, created_at, last_used_at, revoked_at FROM api_keys WHERE id = ?',
+  )
+    .bind(id)
+    .first<KeyRow>();
+  if (!row || (row.user_email !== user.email && !hasRole(user, 'admin'))) {
+    fail(404, 'not_found', 'Key not found.');
+  }
+  return row;
+}
+
+webApi.post('/keys', async (c) => {
+  requireRole(c, 'harvester');
+  const label = keyLabel(await readJsonObject(c));
   const key = generateApiKey();
   const row: KeyRow = {
     id: crypto.randomUUID(),
@@ -143,17 +161,22 @@ webApi.post('/keys', async (c) => {
   return c.json({ ...toKey(row), key }, 201);
 });
 
+// Renames a key. The journal and the device history show key names by a join, so they follow the new name.
+webApi.patch('/keys/:id', async (c) => {
+  requireRole(c, 'harvester');
+  const label = keyLabel(await readJsonObject(c));
+  const row = await ownKey(c, c.req.param('id'));
+  if (row.label !== label) {
+    await c.env.DB.prepare('UPDATE api_keys SET label = ? WHERE id = ?').bind(label, row.id).run();
+    await audit(c, 'key.rename', row.id, { label: [row.label, label], owner: row.user_email });
+    row.label = label;
+  }
+  return c.json(toKey(row));
+});
+
 webApi.delete('/keys/:id', async (c) => {
   requireRole(c, 'harvester');
-  const user = c.get('user');
-  const row = await c.env.DB.prepare(
-    'SELECT id, user_email, label, created_at, last_used_at, revoked_at FROM api_keys WHERE id = ?',
-  )
-    .bind(c.req.param('id'))
-    .first<KeyRow>();
-  if (!row || (row.user_email !== user.email && !hasRole(user, 'admin'))) {
-    fail(404, 'not_found', 'Key not found.');
-  }
+  const row = await ownKey(c, c.req.param('id'));
   if (row.revoked_at === null) {
     row.revoked_at = nowIso();
     await c.env.DB.prepare('UPDATE api_keys SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL')

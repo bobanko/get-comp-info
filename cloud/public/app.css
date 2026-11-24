@@ -128,8 +128,25 @@ code, .mono { font-family: var(--mono); font-size: 13px; }
 .rainbow .c4 { color: var(--brand-blue); }
 .rainbow .c5 { color: var(--brand-magenta); }
 .nav-icon { margin-right: 6px; }
-#nav { display: flex; gap: 4px; flex-wrap: wrap; }
-#nav a { padding: 6px 10px; border-radius: 6px; color: var(--muted); text-decoration: none; }
+#nav { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+#nav a, .nav-admin summary { padding: 6px 10px; border-radius: 6px; color: var(--muted); text-decoration: none; }
+/* Groups: records | the tools of everyone | the admin submenu, split by a thin line. */
+.nav-group { display: flex; gap: 4px; flex-wrap: wrap; }
+.nav-group + .nav-group, .nav-group + .nav-admin { margin-left: 6px; padding-left: 10px; border-left: 1px solid var(--border); }
+.nav-admin { position: relative; }
+.nav-admin summary { display: flex; align-items: center; list-style: none; cursor: pointer; white-space: nowrap; }
+.nav-admin summary::-webkit-details-marker { display: none; }
+.nav-admin summary::after { content: '▾'; margin-left: 6px; font-size: 11px; }
+.nav-admin summary:hover { background: var(--surface-2); color: var(--text); }
+.nav-admin.active summary { color: var(--accent); font-weight: 600; }
+.nav-admin[open] summary { background: var(--surface-2); color: var(--text); }
+.nav-admin-body {
+  position: absolute; z-index: 20; top: calc(100% + 6px); left: 0;
+  display: grid; gap: 2px; min-width: 220px; padding: 6px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
+}
+.nav-admin-body a { white-space: nowrap; }
+.lang-select { padding: 2px 6px; font-size: 12px; color: var(--muted); }
 /* Pending access requests next to "Пользователи". */
 .nav-count { display: inline-block; min-width: 18px; margin-left: 6px; padding: 0 5px; border-radius: 999px; background: var(--danger); color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
 .no-access { max-width: 560px; margin: 40px auto; }
@@ -462,7 +479,38 @@ table.items td.comment { max-width: 280px; overflow: hidden; text-overflow: elli
 table.items td.row-actions { width: 1%; white-space: nowrap; text-align: right; }
 table.items td.row-actions .button { margin-left: 4px; }
 .items-form input { flex: 1 1 160px; }
+/* The type as a tag that filters the list; a computer's name under it. */
+.tag {
+  display: inline-block; padding: 1px 8px; border: 1px solid var(--border); border-radius: 999px;
+  background: var(--surface-2); color: var(--text); font: inherit; font-size: 12px; line-height: 18px; cursor: pointer; white-space: nowrap;
+}
+.tag::before { content: '#'; color: var(--muted); margin-right: 1px; }
+.tag:hover { border-color: var(--accent); color: var(--accent); }
+.tag.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.tag:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+table.items td.type { white-space: nowrap; }
+table.items td.type .host { display: block; margin-top: 3px; font-weight: 600; }
+table.items td.empty, table.people td.empty { padding: 24px; }
+.toolbar-actions { display: flex; gap: 8px; }
+.add-panel h2 { margin-bottom: 10px; }
 details.panel ul { margin: 8px 0 0; }
+/* «Ключи»: the rename form in the name cell. */
+table.keys td { vertical-align: middle; }
+table.keys td.row-actions { width: 1%; white-space: nowrap; text-align: right; }
+table.keys td.row-actions .button { margin-left: 4px; }
+.rename-form { flex-wrap: nowrap; }
+.rename-form input { min-width: 160px; }
+/* «Сеть»: reserved addresses and ranges. */
+table.reserved td { vertical-align: middle; padding-top: 4px; padding-bottom: 4px; }
+table.reserved td.number { width: 3ch; text-align: right; }
+table.reserved input.address { width: 16ch; }
+table.reserved td[data-col='last'] { white-space: nowrap; }
+table.reserved td[data-col='last'] .dash { margin-right: 6px; color: var(--muted); }
+table.reserved input.note { width: 100%; min-width: 160px; }
+table.reserved td.size { width: 1%; }
+table.reserved td.row-actions { width: 1%; text-align: right; }
+table.reserved tr.invalid input { border-color: var(--danger); background: var(--danger-soft); }
+table.reserved + .actions, .panel .table-wrap + .actions { margin-top: 10px; }
 
 @media (max-width: 640px) {
   .net-grid { grid-template-columns: 1fr; gap: 4px; }
@@ -520,33 +568,37 @@ details summary { cursor: pointer; }
   .menu-toggle .burger { font-size: 16px; line-height: 1; color: var(--muted); }
   .menu-toggle .nav-icon { margin-right: 4px; }
   .topbar #nav, .topbar .whoami { display: none; }
-  .topbar.open #nav { display: flex; flex-direction: column; gap: 2px; width: 100%; }
-  .topbar.open #nav a { padding: 10px 12px; }
+  .topbar.open #nav { display: flex; flex-direction: column; align-items: stretch; gap: 2px; width: 100%; }
+  .topbar.open #nav a, .topbar.open .nav-admin summary { padding: 10px 12px; }
+  .nav-group { flex-direction: column; gap: 2px; }
+  .nav-group + .nav-group, .nav-group + .nav-admin { margin: 4px 0 0; padding: 4px 0 0; border-left: 0; border-top: 1px solid var(--border); }
+  /* The admin pages open in place under their heading. */
+  .nav-admin-body { position: static; min-width: 0; padding: 0 0 0 16px; border: 0; box-shadow: none; background: none; }
   .topbar.open .whoami { display: flex; width: 100%; margin: 0; padding: 8px 12px 4px; border-top: 1px solid var(--border); }
 
   /* Device list: the search row sticks to the top; the rest is behind "Фильтры". */
-  .devices-title { display: none; }
-  .devices-toolbar {
+  .list-title { display: none; }
+  .list-toolbar {
     position: sticky; top: 0; z-index: 8;
     margin: 0 -16px; padding: 8px 16px; background: var(--bg); border-bottom: 1px solid var(--border);
   }
   /* Search at the bottom (the default; a checkbox in "Фильтры" moves it back up): fixed above the keyboard,
      the filters open above the search row. */
-  .devices-toolbar.at-bottom {
+  .list-toolbar.at-bottom {
     position: fixed; top: auto; left: 0; right: 0; bottom: var(--keyboard, 0px);
     margin: 0; padding-bottom: calc(8px + env(safe-area-inset-bottom));
     flex-wrap: wrap-reverse;
     border-bottom: 0; border-top: 1px solid var(--border); box-shadow: 0 -6px 18px rgb(0 0 0 / 12%);
   }
-  .devices-toolbar.at-bottom.open .toolbar-extra { padding: 0 0 4px; }
-  .devices-toolbar.at-bottom .menu-body { top: auto; bottom: calc(100% + 4px); }
-  main:has(.devices-toolbar.at-bottom) { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
+  .list-toolbar.at-bottom.open .toolbar-extra { padding: 0 0 4px; }
+  .list-toolbar.at-bottom .menu-body { top: auto; bottom: calc(100% + 4px); }
+  main:has(.list-toolbar.at-bottom) { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
   .toolbar-extra label.mobile-only { display: inline-flex; }
   .toolbar .search-box { flex: 1 1 auto; min-width: 0; }
   .filters-toggle { display: inline-flex; padding: 8px 12px; }
   .filters-toggle[aria-expanded='true'] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
   .toolbar-extra { display: none; }
-  .devices-toolbar.open .toolbar-extra { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; padding-top: 4px; }
+  .list-toolbar.open .toolbar-extra { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; padding-top: 4px; }
   .toolbar-extra select { flex: 1 1 100%; }
   .toolbar-extra .mobile-only { display: block; }
   .toolbar-extra .segmented { flex: 1 1 100%; }
@@ -572,7 +624,7 @@ details summary { cursor: pointer; }
   table.devices td[data-col='updatedAt']::before { content: attr(data-label) ': '; font-weight: 400; color: var(--muted); }
   table.devices td[data-col='serial']::before { content: 'S/N '; font-family: system-ui, sans-serif; color: var(--muted); }
   table.devices td[data-col='eset']::before { content: 'ESET '; }
-  table.devices td[data-col='inventoried']::before { content: 'Инв. '; }
+  table.devices td[data-col='inventoried']::before { content: attr(data-short) ' '; }
   /* No mark means not inventoried: only the "yes" is worth the space on a phone. */
   table.devices td.not-inventoried { display: none; }
   table.devices td[data-col='updatedAt'] div { display: inline; margin-left: 4px; }
@@ -584,4 +636,92 @@ details summary { cursor: pointer; }
   .fields dd { margin-bottom: 8px; }
   .history-item { grid-template-columns: 40px 1fr; }
   .history-item .small { grid-column: 1 / -1; }
+}
+
+/* ---------- Phones: the other lists as cards ---------- */
+
+@media (max-width: 640px) {
+  .list-lead { display: none; }
+  /* Search row: search, «Фильтры», then «+ Добавить»; the folded filters go on their own line. */
+  .list-toolbar .search-box { flex: 1 1 0; }
+  .list-toolbar .toolbar-actions { order: 1; }
+  .list-toolbar .toolbar-extra { order: 2; }
+  .list-toolbar .toolbar-actions .button { padding: 8px 12px; }
+
+  /* Property: the type tag and the computer name first, then model, serial, place and МВО, the note last. */
+  table.items thead, table.people thead, table.journal thead, table.keys thead, table.reserved thead { display: none; }
+  table.items, table.items tbody, table.people, table.people tbody, table.journal, table.journal tbody,
+  table.keys, table.keys tbody, table.reserved, table.reserved tbody { display: block; }
+  table.items tbody tr, table.people tbody tr, table.journal tbody tr, table.keys tbody tr, table.reserved tbody tr {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 10px; padding: 10px 12px; border-bottom: 1px solid var(--border);
+  }
+  table.items tbody tr:last-child, table.people tbody tr:last-child, table.journal tbody tr:last-child,
+  table.keys tbody tr:last-child, table.reserved tbody tr:last-child { border-bottom: 0; }
+  table.items td, table.people td, table.journal td, table.keys td, table.reserved td { display: block; padding: 0; border: 0; max-width: 100%; }
+  table.items td:empty, table.people td:empty { display: none; }
+  table.items tr.empty-row td, table.people tr.empty-row td { flex-basis: 100%; padding: 24px; }
+
+  table.items td[data-col='type'] { order: 0; flex-basis: 100%; white-space: normal; }
+  table.items td.type .host { display: inline; margin: 0 0 0 8px; font-size: 15px; }
+  table.items td[data-col='model'] { order: 1; font-weight: 600; }
+  table.items td[data-col='serial'] { order: 2; }
+  table.items td[data-col='serial']:not(:empty)::before { content: 'S/N '; font-family: system-ui, sans-serif; color: var(--muted); }
+  table.items td[data-col='location'] { order: 3; color: var(--muted); font-size: 12px; }
+  table.items td[data-col='owner'] { order: 4; font-size: 13px; }
+  table.items td[data-col='owner']::before { content: 'МВО '; color: var(--muted); font-size: 12px; }
+  table.items td[data-col='owner']:has(> span.muted:only-child) { display: none; }
+  table.items td.comment {
+    order: 5; flex-basis: 100%; max-width: none; white-space: normal; color: var(--muted);
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  table.items td.comment:empty { display: none; }
+  table.items td[data-col='updated'] { display: none; }
+  table.items td.row-actions, table.people td.row-actions { order: 9; margin-left: auto; width: auto; }
+
+  /* People: number and name first, the note, then what they are linked to. */
+  table.people td[data-col='id'] { order: 0; width: auto; }
+  table.people td[data-col='name'] { order: 1; flex: 1 1 auto; font-size: 15px; font-weight: 600; }
+  table.people td[data-col='note'] { order: 2; flex-basis: 100%; color: var(--muted); font-size: 13px; }
+  table.people td[data-col='user'], table.people td[data-col='owner'], table.people td[data-col='items'] { order: 3; font-size: 13px; }
+  table.people td[data-col='user']::before, table.people td[data-col='owner']::before, table.people td[data-col='items']::before {
+    content: attr(data-label) ': '; color: var(--muted); font-size: 12px;
+  }
+  table.people td:is([data-col='user'], [data-col='owner'], [data-col='items']):has(> span.muted:only-child) { display: none; }
+  table.people td[data-col='updated'] { display: none; }
+
+  /* Editing a row on a phone: one field per line. */
+  table.items tbody tr.focused td[data-col], table.people tbody tr.focused td[data-col] { order: 0; flex-basis: 100%; }
+  table.items tbody tr.focused td[data-col]::before, table.people tbody tr.focused td[data-col]::before { content: none; }
+  table.items tr.focused td.row-actions, table.people tr.focused td.row-actions { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 0; }
+  table.items tr.focused td.row-actions .button, table.people tr.focused td.row-actions .button { margin: 0; padding: 8px 12px; font-size: 14px; }
+
+  /* Journal: when and who on the first line, what happened under it. */
+  .segmented.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; width: 100%; background: var(--border); }
+  .segmented.tabs button { justify-content: center; border: 0; background: var(--surface); white-space: normal; text-align: center; }
+  .journal-panel { padding: 0; border: 0; background: none; box-shadow: none; }
+  table.journal td.when { order: 0; color: var(--muted); font-size: 12px; }
+  table.journal td.who { order: 1; font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+  table.journal td.what { order: 2; flex-basis: 100%; }
+  table.journal td.object { order: 3; flex-basis: 100%; overflow-wrap: anywhere; color: var(--muted); }
+  .journal-panel > .actions { padding: 12px 0; }
+
+  /* Keys: the name, then dates and status, the buttons at the end. */
+  table.keys td.key-name { flex-basis: 100%; font-size: 15px; font-weight: 600; }
+  table.keys td.key-owner { flex-basis: 100%; color: var(--muted); font-size: 12px; }
+  table.keys td[data-label] { font-size: 12px; color: var(--muted); }
+  table.keys td[data-label]::before { content: attr(data-label) ': '; }
+  table.keys td.row-actions { margin-left: auto; width: auto; }
+  .rename-form { flex-wrap: wrap; }
+  .rename-form input { flex: 1 1 100%; min-width: 0; }
+
+  /* Reserved addresses: the address and the range end on one line, the note under them. */
+  table.reserved td.number { display: none; }
+  table.reserved td[data-col='address'], table.reserved td[data-col='last'] { flex: 1 1 40%; }
+  table.reserved td[data-col='last'] { display: flex; align-items: center; }
+  table.reserved input.address { width: 100%; }
+  table.reserved td.size { order: 5; flex-basis: 100%; width: auto; }
+  table.reserved td.size:has(span:empty) { display: none; }
+  table.reserved td[data-col='note'] { flex: 1 1 70%; }
+  table.reserved input.note { min-width: 0; }
+  table.reserved td.row-actions { width: auto; margin-left: auto; }
 }

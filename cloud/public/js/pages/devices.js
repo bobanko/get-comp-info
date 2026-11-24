@@ -1,5 +1,7 @@
 import { api } from '../api.js';
 import { downloadText, errorBox, h, readSetting, replace, toast, writeSetting } from '../dom.js';
+import { f, t } from '../i18n.js';
+import { focusSearch, listToolbar, marked } from '../list-toolbar.js';
 import {
   authorTitle,
   csvFileName,
@@ -24,22 +26,22 @@ import {
   setPeople,
   sortDevices,
 } from '../logic.js';
-import { queryWords, splitMatches } from '../search-logic.js';
+import { queryWords } from '../search-logic.js';
 
 const COLUMNS = [
-  { key: 'hostname', label: 'Имя компьютера', always: true },
+  { key: 'hostname', label: t('Имя компьютера'), always: true },
   { key: 'ip', label: 'IP' },
-  { key: 'userId', label: 'Пользователь' },
+  { key: 'userId', label: t('Пользователь') },
   { key: 'ownerId', label: 'МВО', hidden: true },
-  { key: 'username', label: 'Учётная запись Windows' },
-  { key: 'serial', label: 'Серийный номер' },
-  { key: 'model', label: 'Модель' },
+  { key: 'username', label: t('Учётная запись Windows') },
+  { key: 'serial', label: t('Серийный номер') },
+  { key: 'model', label: t('Модель') },
   { key: 'windows', label: 'Windows', hidden: true },
   { key: 'eset', label: 'ESET' },
-  { key: 'inventoried', label: 'Инвентаризация' },
-  { key: 'collectedAt', label: 'Собрано' },
-  { key: 'comment', label: 'Комментарий' },
-  { key: 'updatedAt', label: 'Изменено в облаке', hidden: true },
+  { key: 'inventoried', label: t('Инвентаризация') },
+  { key: 'collectedAt', label: t('Собрано') },
+  { key: 'comment', label: t('Комментарий') },
+  { key: 'updatedAt', label: t('Изменено в облаке'), hidden: true },
 ];
 
 // Survives navigation to a device card and back.
@@ -70,7 +72,7 @@ function savedColumns() {
 
 export async function renderDevices({ me, main }, { reload = false } = {}) {
   if (!state.devices || reload) {
-    replace(main, h('p', { class: 'muted' }, 'Загрузка устройств…'));
+    replace(main, h('p', { class: 'muted' }, t('Загрузка устройств…')));
     try {
       const path = state.showDeleted ? '/devices?deleted=1' : '/devices';
       const [{ devices }, { people }] = await Promise.all([api(path), api('/people')]);
@@ -86,7 +88,7 @@ export async function renderDevices({ me, main }, { reload = false } = {}) {
   const tableHost = h('div', { class: 'table-wrap table-scroll' });
   const redraw = () => {
     drawTable(tableHost, count);
-    updateFiltersToggle();
+    updateFilters();
   };
 
   // Fetches the list again and redraws only the table and the repeat counters: the toolbar
@@ -113,73 +115,12 @@ export async function renderDevices({ me, main }, { reload = false } = {}) {
     redraw();
   };
 
-  const clear = h(
-    'button',
-    {
-      type: 'button',
-      class: 'search-clear',
-      'aria-label': 'Очистить поиск',
-      hidden: state.query === '',
-      onclick: () => {
-        search.value = '';
-        state.query = '';
-        clear.hidden = true;
-        redraw();
-        search.focus();
-      },
-    },
-    '×',
-  );
-  const search = h('input', {
-    type: 'search',
-    class: 'search',
-    placeholder: 'Поиск по всем полям',
-    value: state.query,
-    'aria-label': 'Поиск по всем полям',
-    // Phone keyboards: a "search" Enter key, no capitals or autocorrection in host names and serials.
-    enterkeyhint: 'search',
-    autocomplete: 'off',
-    autocapitalize: 'off',
-    autocorrect: 'off',
-    spellcheck: 'false',
-    // A plain search field, not a login, card or address: browsers (Chrome on iPhone) then offer no
-    // passwords, cards or locations above the keyboard. A neutral name avoids "user"/"email"-like guesses.
-    name: 'device-filter',
-    inputmode: 'search',
-    'aria-autocomplete': 'none',
-    'data-form-type': 'other',
-    oninput: (event) => {
-      state.query = event.target.value;
-      clear.hidden = state.query === '';
-      redraw();
-    },
-    // The list is already filtered while typing: Enter only hides the phone keyboard to show the results.
-    onkeydown: (event) => {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        search.blur();
-      }
-    },
-  });
-
-  // Phones: everything but the search is behind this button; the number counts the active filters.
-  const filtersToggle = h('button', {
-    type: 'button',
-    class: 'button filters-toggle',
-    'aria-expanded': 'false',
-    onclick: () => filtersToggle.setAttribute('aria-expanded', String(toolbar.classList.toggle('open'))),
-  });
-  function updateFiltersToggle() {
-    const active = [state.eset !== 'all', state.inventory !== 'all', Boolean(state.duplicatesOf), state.showDeleted].filter(Boolean).length;
-    replace(filtersToggle, 'Фильтры', active > 0 && h('span', { class: 'n' }, String(active)));
-  }
-
   // Phones have no table header to sort by.
   const sortSelect = h(
     'select',
     {
       class: 'mobile-only',
-      'aria-label': 'Сортировка',
+      'aria-label': t('Сортировка'),
       onchange: (event) => {
         const [key, direction] = event.target.value.split(':');
         state.sort = { key, direction };
@@ -192,7 +133,7 @@ export async function renderDevices({ me, main }, { reload = false } = {}) {
         h(
           'option',
           { value: `${column.key}:${direction}`, selected: state.sort.key === column.key && state.sort.direction === direction },
-          `Сортировка: ${column.label} ${direction === 'asc' ? '↑' : '↓'}`,
+          f('Сортировка: {0} {1}', column.label, direction === 'asc' ? '↑' : '↓'),
         ),
       ),
     ),
@@ -201,63 +142,46 @@ export async function renderDevices({ me, main }, { reload = false } = {}) {
   const esetSelect = h(
     'select',
     {
-      'aria-label': 'Фильтр по ESET',
+      'aria-label': t('Фильтр по ESET'),
       onchange: (event) => {
         state.eset = event.target.value;
         redraw();
       },
     },
-    h('option', { value: 'all' }, 'ESET: все'),
+    h('option', { value: 'all' }, t('ESET: все')),
     Object.entries(ESET_LABELS).map(([value, label]) => h('option', { value, selected: state.eset === value }, `ESET: ${label.toLowerCase()}`)),
   );
 
   const inventorySelect = h(
     'select',
     {
-      'aria-label': 'Фильтр по инвентаризации',
+      'aria-label': t('Фильтр по инвентаризации'),
       onchange: (event) => {
         state.inventory = event.target.value;
         redraw();
       },
     },
-    h('option', { value: 'all' }, 'Инвентаризация: все'),
+    h('option', { value: 'all' }, t('Инвентаризация: все')),
     Object.entries(INVENTORY_LABELS).map(([value, label]) =>
-      h('option', { value, selected: state.inventory === value }, `Инвентаризация: ${label.toLowerCase()}`),
+      h('option', { value, selected: state.inventory === value }, f('Инвентаризация: {0}', label.toLowerCase())),
     ),
   );
 
   let duplicates = duplicateFilter(redraw);
-  // Phones: the search row at the bottom of the screen, within reach of the thumb (default), or at the top.
-  const searchAtBottom = h('label', { class: 'check mobile-only' },
-    h('input', {
-      type: 'checkbox',
-      checked: readSetting('devices.searchBottom', true),
-      onchange: (event) => {
-        writeSetting('devices.searchBottom', event.target.checked);
-        toolbar.classList.toggle('at-bottom', event.target.checked);
-      },
-    }),
-    'Поиск внизу экрана',
-  );
 
-  const toolbar = h(
-    'div',
-    { class: readSetting('devices.searchBottom', true) ? 'toolbar devices-toolbar at-bottom' : 'toolbar devices-toolbar' },
-    // A search form (never submitted): autofill treats its field as a search box.
-    h(
-      'form',
-      { class: 'search-box', role: 'search', autocomplete: 'off', onsubmit: (event) => event.preventDefault() },
-      search,
-      clear,
-    ),
-    filtersToggle,
-    h(
-      'div',
-      { class: 'toolbar-extra' },
+  const { toolbar, search, updateFilters } = listToolbar({
+    name: 'device-filter',
+    placeholder: t('Поиск по всем полям'),
+    query: state.query,
+    onQuery: (query) => {
+      state.query = query;
+      redraw();
+    },
+    activeFilters: () => [state.eset !== 'all', state.inventory !== 'all', Boolean(state.duplicatesOf), state.showDeleted].filter(Boolean).length,
+    extra: [
       esetSelect,
       inventorySelect,
       sortSelect,
-      searchAtBottom,
       duplicates,
       hasRole(me, 'admin') &&
         h(
@@ -271,36 +195,18 @@ export async function renderDevices({ me, main }, { reload = false } = {}) {
               reloadList();
             },
           }),
-          'Удалённые',
+          t('Удалённые'),
         ),
       columnPicker(redraw),
       h('span', { class: 'spacer' }),
-      h('button', { class: 'button', onclick: reloadList }, 'Обновить'),
-      h('button', { class: 'button', onclick: () => exportCsv() }, 'Экспорт CSV'),
-    ),
-  );
+      h('button', { class: 'button', onclick: reloadList }, t('Обновить')),
+      h('button', { class: 'button', onclick: () => exportCsv() }, t('Экспорт CSV')),
+    ],
+  });
 
-  replace(main, h('h1', { class: 'devices-title' }, 'Устройства'), toolbar, count, tableHost);
-  trackKeyboard();
+  replace(main, h('h1', { class: 'list-title' }, t('Устройства')), toolbar, count, tableHost);
   redraw();
-  // Not on touch screens: the keyboard would cover the list on the way back from a device card.
-  if (state.query && !matchMedia('(pointer: coarse)').matches) search.focus();
-}
-
-// The search row at the bottom must stay above the on-screen keyboard. Browsers that do not shrink the page
-// for the keyboard (iOS Safari) only shrink the visual viewport: --keyboard is the part it covers (app.css).
-let keyboardTracked = false;
-function trackKeyboard() {
-  const viewport = window.visualViewport;
-  if (keyboardTracked || !viewport) return;
-  keyboardTracked = true;
-  const update = () => {
-    const covered = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
-    document.documentElement.style.setProperty('--keyboard', `${Math.round(covered)}px`);
-  };
-  viewport.addEventListener('resize', update);
-  viewport.addEventListener('scroll', update);
-  update();
+  focusSearch(search, state.query);
 }
 
 function visibleColumns() {
@@ -324,7 +230,7 @@ function duplicateFilter(redraw) {
         type: 'button',
         'aria-pressed': String(state.duplicatesOf === field),
         disabled: size === 0,
-        title: size === 0 ? `Повторов нет: ${label}` : `Показать только устройства с повторами: ${label}`,
+        title: size === 0 ? f('Повторов нет: {0}', label) : f('Показать только устройства с повторами: {0}', label),
         onclick: () => {
           state.duplicatesOf = state.duplicatesOf === field ? null : field;
           buttons.forEach((button, index) => button.setAttribute('aria-pressed', String(Object.keys(DUPLICATE_FIELDS)[index] === state.duplicatesOf)));
@@ -335,7 +241,7 @@ function duplicateFilter(redraw) {
       h('span', { class: 'n' }, String(size)),
     );
   });
-  return h('div', { class: 'segmented', role: 'group', 'aria-label': 'Повторы' }, h('span', {}, 'Повторы'), buttons);
+  return h('div', { class: 'segmented', role: 'group', 'aria-label': t('Повторы') }, h('span', {}, t('Повторы')), buttons);
 }
 
 function currentRows() {
@@ -344,6 +250,7 @@ function currentRows() {
     eset: state.eset,
     inventory: state.inventory,
     duplicatesOf: state.duplicatesOf,
+    authors: state.columns.includes('updatedAt'),
   });
   return sortDevices(filtered, state.sort.key, state.sort.direction);
 }
@@ -351,18 +258,18 @@ function currentRows() {
 function exportCsv() {
   const rows = currentRows();
   if (rows.length === 0) {
-    toast('Нет устройств для экспорта.', 'error');
+    toast(t('Нет устройств для экспорта.'), 'error');
     return;
   }
   downloadText(csvFileName(), devicesToCsv(rows), 'text/csv;charset=utf-8');
-  toast(`Экспортировано устройств: ${rows.length}`);
+  toast(f('Экспортировано устройств: {0}', rows.length));
 }
 
 function columnPicker(redraw) {
   return h(
     'details',
     { class: 'menu' },
-    h('summary', { class: 'button' }, 'Колонки'),
+    h('summary', { class: 'button' }, t('Колонки')),
     h(
       'div',
       { class: 'menu-body' },
@@ -395,7 +302,7 @@ function drawTable(host, count) {
   const now = new Date();
   const words = queryWords(state.query);
 
-  replace(count, `Показано ${rows.length} из ${state.devices.length}`);
+  replace(count, f('Показано {0} из {1}', rows.length, state.devices.length));
 
   const header = h(
     'tr',
@@ -450,16 +357,10 @@ function drawTable(host, count) {
   });
 
   if (rows.length === 0) {
-    replace(host, h('p', { class: 'empty' }, state.devices.length === 0 ? 'В облаке пока нет устройств.' : 'Ничего не найдено.'));
+    replace(host, h('p', { class: 'empty' }, state.devices.length === 0 ? t('В облаке пока нет устройств.') : t('Ничего не найдено.')));
     return;
   }
   replace(host, h('table', { class: 'devices' }, h('thead', {}, header), h('tbody', {}, body)));
-}
-
-// Text with the parts found by the search wrapped in <mark>.
-function marked(text, words) {
-  if (words.length === 0) return text;
-  return splitMatches(text, words).map((part) => (part.match ? h('mark', {}, part.text) : part.text));
 }
 
 function cell(key, device, duplicates, now, words = []) {
@@ -470,25 +371,29 @@ function cell(key, device, duplicates, now, words = []) {
       const issue = hostnameIssue(data.hostname);
       const nameless = isBlank(data.hostname);
       const notes = [
-        nameless && 'Имени нет: программа этот компьютер ещё не собирала. Показан идентификатор записи (серийный номер или MAC)',
-        repeated('hostname') && 'Это имя есть у нескольких устройств',
-        issue === 'default' && 'Имя по умолчанию от Windows: переименуйте по правилам',
-        issue === 'pattern' && 'Имя не по правилам (ожидается вид АА-000-…)',
+        nameless && t('Имени нет: программа этот компьютер ещё не собирала. Показан идентификатор записи (серийный номер или MAC)'),
+        repeated('hostname') && t('Это имя есть у нескольких устройств'),
+        issue === 'default' && t('Имя по умолчанию от Windows: переименуйте по правилам'),
+        issue === 'pattern' && t('Имя не по правилам (ожидается вид АА-000-…)'),
       ].filter(Boolean);
       const classes = ['host', issue && 'off-policy', repeated('hostname') && 'dup'].filter(Boolean).join(' ');
       return h(
         'td',
         { class: classes, title: notes.join('\n') || undefined },
         nameless ? [h('span', { class: 'muted nameless' }, marked(device.id, words)), h('span', { class: 'nameless-mark' }, '*')] : marked(data.hostname, words),
-        device.deleted && h('span', { class: 'badge badge-danger' }, 'удалено'),
+        device.deleted && h('span', { class: 'badge badge-danger' }, t('удалено')),
       );
     }
     case 'ip': {
       const ip = String(data.ip ?? '').trim();
-      return h('td', { class: repeated('ip') ? 'mono dup' : 'mono', title: repeated('ip') ? 'Этот IP есть у нескольких устройств' : undefined }, marked(ip, words));
+      return h('td', { class: repeated('ip') ? 'mono dup' : 'mono', title: repeated('ip') ? t('Этот IP есть у нескольких устройств') : undefined }, marked(ip, words));
     }
     case 'serial':
-      return h('td', { class: repeated('serial') ? 'mono dup' : 'mono', title: repeated('serial') ? 'Этот серийный номер есть у нескольких устройств' : undefined }, marked(displayValue(data.serial), words));
+      return h(
+        'td',
+        { class: repeated('serial') ? 'mono dup' : 'mono', title: repeated('serial') ? t('Этот серийный номер есть у нескольких устройств') : undefined },
+        marked(displayValue(data.serial), words),
+      );
     case 'userId':
     case 'ownerId': {
       if (!Number.isInteger(data[key])) return h('td');
@@ -509,17 +414,26 @@ function cell(key, device, duplicates, now, words = []) {
     case 'inventoried':
       return h(
         'td',
-        { class: isInventoried(device) ? undefined : 'not-inventoried' },
+        { class: isInventoried(device) ? undefined : 'not-inventoried', 'data-short': t('Инв.') },
         isInventoried(device)
           ? h('span', { class: 'badge badge-ok' }, INVENTORY_LABELS.yes)
           : h('span', { class: 'badge badge-muted' }, INVENTORY_LABELS.no),
       );
     case 'collectedAt':
-      return h('td', { class: isRecent(data.collectedAt, now) ? 'nowrap recent' : 'nowrap', title: isRecent(data.collectedAt, now) ? 'Собрано за последние 7 дней' : undefined }, formatDate(data.collectedAt));
+      return h(
+        'td',
+        { class: isRecent(data.collectedAt, now) ? 'nowrap recent' : 'nowrap', title: isRecent(data.collectedAt, now) ? t('Собрано за последние 7 дней') : undefined },
+        formatDate(data.collectedAt),
+      );
     case 'comment':
       return h('td', { class: 'comment', title: displayValue(data.comment) }, marked(displayValue(data.comment), words));
     case 'updatedAt':
-      return h('td', { class: 'nowrap' }, formatDate(device.updatedAt), h('div', { class: 'muted small', title: authorTitle(device.updatedByName, device.updatedBy, device.updatedByKey) }, deviceAuthor(device)));
+      return h(
+        'td',
+        { class: 'nowrap' },
+        formatDate(device.updatedAt),
+        h('div', { class: 'muted small', title: authorTitle(device.updatedByName, device.updatedBy, device.updatedByKey, device.updatedSource) }, marked(deviceAuthor(device), words)),
+      );
     default:
       return h('td', {}, marked(displayValue(data[key]), words));
   }

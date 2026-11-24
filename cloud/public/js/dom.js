@@ -1,3 +1,5 @@
+import { t } from './i18n.js';
+
 // Tiny DOM helpers: h('div', { class: 'x', onclick }, child, ...) builds elements.
 
 export function h(tag, props = {}, ...children) {
@@ -47,8 +49,8 @@ export function errorBox(error, onRetry) {
     { class: 'notice notice-error', role: 'alert' },
     h('p', {}, error?.message ?? String(error)),
     expired
-      ? h('button', { class: 'button', onclick: () => location.reload() }, 'Обновить страницу')
-      : onRetry && h('button', { class: 'button', onclick: onRetry }, 'Повторить'),
+      ? h('button', { class: 'button', onclick: () => location.reload() }, t('Обновить страницу'))
+      : onRetry && h('button', { class: 'button', onclick: onRetry }, t('Повторить')),
   );
 }
 

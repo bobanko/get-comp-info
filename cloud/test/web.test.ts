@@ -178,6 +178,29 @@ describe('personal keys', () => {
     expect((await consoleRequest(created.body.key, 'GET', '/me')).status).toBe(401);
   });
 
+  it('renames a key; the device history and the journal follow the new name', async () => {
+    const harvester = await addUser('harvester');
+    const created = (await webRequest(harvester, 'POST', '/keys', { label: 'Старое' })).body;
+    const id = await createDevice(created.key);
+
+    const renamed = await webRequest(harvester, 'PATCH', `/keys/${created.id}`, { label: '  Новое ' });
+    expect(renamed.status).toBe(200);
+    expect(renamed.body).toMatchObject({ id: created.id, label: 'Новое' });
+    expect(renamed.body).not.toHaveProperty('key');
+    expect((await consoleRequest(created.key, 'GET', '/me')).body).toMatchObject({ keyLabel: 'Новое' });
+    expect((await webRequest(harvester, 'GET', `/devices/${encodeURIComponent(id)}`)).body).toMatchObject({ updatedByKey: 'Новое', updatedSource: 'console' });
+    expect((await webRequest(harvester, 'PATCH', `/keys/${created.id}`, { label: ' ' })).status).toBe(400);
+
+    const admin = await addUser('admin');
+    const journal = await webRequest(admin, 'GET', '/audit?category=access');
+    const entry = journal.body.entries.find((e: { action: string; target: string }) => e.action === 'key.rename' && e.target === created.id);
+    expect(entry.details).toEqual({ label: ['Старое', 'Новое'], owner: harvester });
+
+    const other = await addUser('harvester');
+    expect((await webRequest(other, 'PATCH', `/keys/${created.id}`, { label: 'Чужое' })).status).toBe(404);
+    expect((await webRequest(admin, 'PATCH', `/keys/${created.id}`, { label: 'Админ' })).body.label).toBe('Админ');
+  });
+
   it('validates the label', async () => {
     const harvester = await addUser('harvester');
     expect((await webRequest(harvester, 'POST', '/keys', { label: '  ' })).status).toBe(400);

@@ -7,6 +7,7 @@ import type { AppEnv } from './types';
 export type AuditAction =
   | 'key.create'
   | 'key.revoke'
+  | 'key.rename'
   | 'user.create'
   | 'user.update'
   | 'access.reject'

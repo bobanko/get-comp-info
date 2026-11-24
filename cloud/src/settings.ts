@@ -20,13 +20,21 @@ export interface NetworkLocation {
 }
 
 // An address taken by something without a device record (a server, a camera, a computer that cannot be identified,
-// or one found by a scan): the program does not offer it as a free one.
+// or one found by a scan): the program does not offer it as a free one. With lastAddress it is the whole range
+// address..lastAddress (a pool of printers, cameras); programs that know only `address` reserve its first address.
 export interface ReservedAddress {
   address: string;
+  lastAddress?: string;
   note: string;
 }
 
 export const MAX_RESERVED_ADDRESSES = 1000;
+// Largest range of one entry: a /22.
+export const MAX_RESERVED_RANGE = 1024;
+
+function ipNumber(address: string): number {
+  return address.split('.').reduce((sum, part) => sum * 256 + Number(part), 0);
+}
 
 export interface NetworkSettings {
   firstOctet: number;
@@ -154,15 +162,25 @@ export function validateNetworkSettings(value: unknown): NetworkSettings {
     if (!Array.isArray(value.reservedAddresses) || value.reservedAddresses.length > MAX_RESERVED_ADDRESSES) {
       fail(400, 'invalid_settings', `Reserved addresses: a list of up to ${MAX_RESERVED_ADDRESSES} is required.`);
     }
-    const seen = new Set<string>();
+    const spans: [number, number, string][] = [];
     value.reservedAddresses.forEach((raw: unknown, index: number) => {
       const address = isPlainObject(raw) && typeof raw.address === 'string' ? raw.address.trim() : '';
       if (!IPV4.test(address)) fail(400, 'invalid_settings', `Reserved address ${index + 1}: an IPv4 address is required.`);
-      if (seen.has(address)) fail(400, 'invalid_settings', `Reserved address ${address} repeats.`);
-      seen.add(address);
+      const last = isPlainObject(raw) && typeof raw.lastAddress === 'string' ? raw.lastAddress.trim() : '';
+      if (last !== '' && !IPV4.test(last)) fail(400, 'invalid_settings', `Reserved range ${address}: the last address is not IPv4.`);
+      const from = ipNumber(address);
+      const to = last === '' ? from : ipNumber(last);
+      if (to < from) fail(400, 'invalid_settings', `Reserved range ${address}–${last}: the last address is before the first.`);
+      if (to - from + 1 > MAX_RESERVED_RANGE) {
+        fail(400, 'invalid_settings', `Reserved range ${address}–${last}: up to ${MAX_RESERVED_RANGE} addresses.`);
+      }
+      const name = to > from ? `${address}–${last}` : address;
+      const other = spans.find(([start, end]) => from <= end && to >= start);
+      if (other) fail(400, 'invalid_settings', `Reserved address ${name} repeats ${other[2]}.`);
+      spans.push([from, to, name]);
       const note = isPlainObject(raw) && typeof raw.note === 'string' ? raw.note.trim() : '';
-      if (note.length > 200) fail(400, 'invalid_settings', `Reserved address ${address}: the note is up to 200 characters.`);
-      reservedAddresses.push({ address, note });
+      if (note.length > 200) fail(400, 'invalid_settings', `Reserved address ${name}: the note is up to 200 characters.`);
+      reservedAddresses.push(to > from ? { address, lastAddress: last, note } : { address, note });
     });
   }
   return { firstOctet, segments, domainCheckHost, domainName, locations, reservedAddresses };

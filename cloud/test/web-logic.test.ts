@@ -29,14 +29,17 @@ import {
 } from '../public/js/logic.js';
 import {
   commonDns,
-  formatReserved,
+  checkReserved,
   generalProblems,
   isAutoRange,
   locationProblems,
   parseNumberList,
   parseOctet,
-  parseReserved,
-  reservedProblems,
+  parseReservedLines,
+  rangeEnd,
+  rangeSize,
+  reservedRows,
+  reservedValue,
   subnetInfo,
   subnetMask,
   suggestHostRange,
@@ -91,7 +94,10 @@ describe('filtering', () => {
     expect(ids(filterDevices(devices, { query: 'бухгалт' }))).toEqual(['a']);
     expect(ids(filterDevices(devices, { query: 'sn-77' }))).toEqual(['c']);
     expect(ids(filterDevices(devices, { query: 'pc иванов' }))).toEqual(['a']);
-    expect(filterDevices(devices, { query: 'h@example' })).toHaveLength(4);
+    // The author of the last change only while its column is shown: one admin who edited every record
+    // would otherwise be found everywhere.
+    expect(filterDevices(devices, { query: 'h@example' })).toEqual([]);
+    expect(filterDevices(devices, { query: 'h@example', authors: true })).toHaveLength(4);
   });
 
   it('filters by ESET state and duplicate IPs', () => {
@@ -278,17 +284,21 @@ describe('error texts', () => {
 
 describe('change authors', () => {
   it('shows the console key, otherwise the nickname', () => {
-    expect(authorLabel('bob', 'b@example.com', 'kostya')).toBe('ключ «kostya»');
+    expect(authorLabel('bob', 'b@example.com', 'kostya')).toBe('🔑 kostya');
     expect(authorLabel('bob', 'b@example.com', null)).toBe('bob');
+    expect(authorLabel('bob', 'b@example.com', null, 'web')).toBe('🌐 bob');
+    expect(authorLabel('bob', 'b@example.com', 'kostya', 'console')).toBe('🔑 kostya');
     expect(authorLabel('', 'b@example.com', null)).toBe('b@example.com');
     expect(authorTitle('bob', 'b@example.com', 'kostya')).toBe('Ключ пользователя bob (b@example.com)');
     expect(authorTitle('bob', 'b@example.com', null)).toBe('b@example.com');
     expect(deviceAuthor({ updatedBy: 'b@example.com', updatedByName: 'bob', updatedByKey: null })).toBe('bob');
+    expect(deviceAuthor({ updatedBy: 'b@example.com', updatedByName: 'bob', updatedByKey: null, updatedSource: 'web' })).toBe('🌐 bob');
   });
 
   it('finds devices by the key name', () => {
     const devices = [device('A', {}, { updatedByKey: 'kostya' }), device('B', {})];
-    expect(filterDevices(devices, { query: 'kostya' }).map((d: { id: string }) => d.id)).toEqual(['A']);
+    expect(filterDevices(devices, { query: 'kostya', authors: true }).map((d: { id: string }) => d.id)).toEqual(['A']);
+    expect(filterDevices(devices, { query: 'kostya' })).toEqual([]);
   });
 });
 
@@ -415,30 +425,59 @@ describe('journal lines', () => {
   });
 
   it('names the console key before the person', () => {
-    expect(journalActor({ ...base, actorKey: 'Флешка' })).toBe('ключ «Флешка»');
-    expect(journalActor(base)).toBe('Аня');
-    expect(journalActor({ ...base, actor: 'GitHub Actions', actorName: null })).toBe('GitHub Actions');
+    expect(journalActor({ ...base, actorKey: 'Флешка', source: 'console' })).toBe('🔑 Флешка');
+    expect(journalActor(base)).toBe('🌐 Аня');
+    expect(journalActor({ ...base, source: 'console' })).toBe('Аня');
+    expect(journalActor({ ...base, actor: 'GitHub Actions', actorName: null, source: 'github' })).toBe('GitHub Actions');
+  });
+
+  it('shows renamed keys', () => {
+    expect(journalLine({ ...base, kind: 'audit', action: 'key.rename', target: 'k1', details: { label: ['Флешка', 'Флешка Сергея'], owner: 'a@example.com' } }))
+      .toMatchObject({ what: 'Переименован ключ', object: '«Флешка» → «Флешка Сергея»' });
   });
 });
 
 describe('reserved addresses', () => {
-  it('are one per line with an optional note', () => {
-    const list = parseReserved('10.0.0.5 — сервер\n\n 10.0.0.6\n10.0.0.7: камера - двор\n10.0.0.8 - принтер');
-    expect(list).toEqual([
-      { address: '10.0.0.5', note: 'сервер' },
+  const row = (address: string, lastAddress = '', note = '') => ({ address, lastAddress, note });
+
+  it('are table rows of addresses and ranges, sorted by address', () => {
+    const rows = reservedRows([{ address: '10.0.0.20', lastAddress: '10.0.0.29', note: 'камеры' }, { address: '10.0.0.5', note: 'сервер' }]);
+    expect(rows).toEqual([row('10.0.0.5', '', 'сервер'), row('10.0.0.20', '10.0.0.29', 'камеры')]);
+    expect(reservedRows(undefined)).toEqual([]);
+    // The end may be only the last octet; a one-address range and empty rows are saved as one address / dropped.
+    expect(reservedValue([row(' 10.0.0.40 ', '49', ' принтеры '), row('10.0.0.6', '10.0.0.6'), row(''), row('10.0.0.7')])).toEqual([
+      { address: '10.0.0.40', lastAddress: '10.0.0.49', note: 'принтеры' },
       { address: '10.0.0.6', note: '' },
-      { address: '10.0.0.7', note: 'камера - двор' },
-      { address: '10.0.0.8', note: 'принтер' },
+      { address: '10.0.0.7', note: '' },
     ]);
-    expect(parseReserved(formatReserved(list))).toEqual(list);
-    expect(formatReserved(undefined)).toBe('');
+    expect(rangeEnd('10.0.0.40', '49')).toBe('10.0.0.49');
+    expect(rangeSize(row('10.0.0.40', '49'))).toBe(10);
+    expect(rangeSize(row('10.0.0.40'))).toBe(1);
+    expect(rangeSize(row('10.0.0.40', '30'))).toBeNull();
+  });
+
+  it('come from pasted lines', () => {
+    expect(parseReservedLines('10.0.0.5 — сервер\n\n 10.0.0.6\n10.0.0.7: камера - двор\n10.0.0.20-10.0.0.29 камеры\n10.0.0.40 - 49: принтеры\n10.0.0.8 - принтер')).toEqual([
+      row('10.0.0.5', '', 'сервер'),
+      row('10.0.0.6'),
+      row('10.0.0.7', '', 'камера - двор'),
+      row('10.0.0.20', '10.0.0.29', 'камеры'),
+      row('10.0.0.40', '49', 'принтеры'),
+      row('10.0.0.8', '', 'принтер'),
+    ]);
   });
 
   it('show the same mistakes as the server', () => {
-    expect(reservedProblems('10.0.0.5 — a\n10.0.0.6')).toEqual([]);
-    expect(reservedProblems('10.0.0.256')).toHaveLength(1);
-    expect(reservedProblems('10.0.0.5\n10.0.0.5')).toHaveLength(1);
-    expect(reservedProblems('10.0.0.5 ' + 'x'.repeat(201))).toHaveLength(1);
+    const problems = (rows: ReturnType<typeof row>[]) => checkReserved(rows).problems;
+    expect(problems([row('10.0.0.5', '', 'a'), row('10.0.0.6'), row(''), row('10.0.1.0', '255')])).toEqual([]);
+    expect(problems([row('10.0.0.256')])).toHaveLength(1);
+    expect(problems([row('10.0.0.5'), row('10.0.0.5')])).toHaveLength(1);
+    expect(problems([row('10.0.0.5', '', 'x'.repeat(201))])).toHaveLength(1);
+    expect(problems([row('10.0.0.9', '5')])).toHaveLength(1);
+    expect(problems([row('10.0.0.0', '10.0.4.0')])).toHaveLength(1);
+    expect(problems([row('10.0.0.5', '10.0.0.9'), row('10.0.0.1', '5')])).toEqual(['Строка 2: Пересекается со строкой 1.']);
+    expect(problems([row('', '', 'без адреса')])).toHaveLength(1);
+    expect(checkReserved([row('10.0.0.5'), row('x')]).marks).toEqual(new Map([[1, '«x» — не IPv4-адрес.']]));
   });
 });
 
@@ -504,16 +543,15 @@ describe('property items', () => {
     expect(ids(filterItems(items, { ownerId: 2 }))).toEqual([2]);
     expect(ids(filterItems(items, { query: 'лукашик dell' }))).toEqual([1]);
     expect(ids(filterItems(items, { query: 'тоц' }))).toEqual([3]);
-    expect(ids(filterItems(items, { query: '#2' }))).toEqual([2]);
     const computer = { id: 'PF1', kind: 'device', hostname: 'IF-042-A208-SUK', type: 'Комп’ютер', model: 'LENOVO 82YU', serial: 'PF1', location: '', ownerId: 1, note: '' };
     expect(filterItems([...items, computer], { query: 'a208' }).map((i: { id: unknown }) => i.id)).toEqual(['PF1']);
   });
 
   it('show up in the journal', () => {
     const entry = { kind: 'audit', category: 'devices', actor: 'a@example.com', actorName: 'Аня', actorKey: null, source: 'web', at: '' };
-    expect(journalLine({ ...entry, action: 'item.create', target: '7', details: { type: 'Монітор', model: 'Dell', serial: 'CN1' } }).object).toBe('Монітор Dell, CN1 · #7');
+    expect(journalLine({ ...entry, action: 'item.create', target: '7', details: { type: 'Монітор', model: 'Dell', serial: 'CN1' } }).object).toBe('Монітор Dell, CN1');
     expect(journalLine({ ...entry, action: 'item.update', target: '7', details: { type: 'Монітор', ownerId: [1, null], note: ['', 'x'] } }).object)
-      .toBe('Монітор #7: МВО Лукашик → —, примечание «» → «x»');
+      .toBe('Монітор: МВО Лукашик → —, примечание «» → «x»');
     setPeople([]);
   });
 });

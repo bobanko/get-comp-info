@@ -3,11 +3,13 @@
 // the list in the program: one word or phrase per line; [высокий], [средний], [низкий] (also Ukrainian and English
 // names) start a level; # starts a comment; words before the first level are medium; a repeat (any case) counts once.
 
+import { f, t } from './i18n.js';
+
 export const HIGH = 3;
 export const MEDIUM = 2;
 export const LOW = 1;
 
-export const LEVEL_LABELS = { [HIGH]: 'Высокий', [MEDIUM]: 'Средний', [LOW]: 'Низкий' };
+export const LEVEL_LABELS = { [HIGH]: t('Высокий'), [MEDIUM]: t('Средний'), [LOW]: t('Низкий') };
 
 const LEVEL_NAMES = {
   высокий: HIGH,
@@ -34,32 +36,32 @@ export function parseTriggerWords(text) {
   const repeats = [];
   const seen = new Map();
   let level = MEDIUM;
-  if (source.length > MAX_TEXT_LENGTH) problems.push(`Список длиннее ${MAX_TEXT_LENGTH} символов.`);
+  if (source.length > MAX_TEXT_LENGTH) problems.push(f('Список длиннее {0} символов.', MAX_TEXT_LENGTH));
   source.split(/\r?\n/).forEach((raw, index) => {
     const line = raw.trim();
-    const where = `Строка ${index + 1}`;
+    const where = f('Строка {0}', index + 1);
     if (line === '' || line.startsWith('#')) return;
     if (line.startsWith('[') && line.endsWith(']')) {
       const named = LEVEL_NAMES[line.slice(1, -1).trim().toLowerCase()];
       if (named) level = named;
-      else problems.push(`${where}: неизвестный уровень ${line}. Нужен [высокий], [средний] или [низкий].`);
+      else problems.push(f('{0}: неизвестный уровень {1}. Нужен [высокий], [средний] или [низкий].', where, line));
       return;
     }
     const word = line.replace(/\s+/g, ' ');
     if (word.length > MAX_WORD_LENGTH) {
-      problems.push(`${where}: слово или фраза длиннее ${MAX_WORD_LENGTH} символов.`);
+      problems.push(f('{0}: слово или фраза длиннее {1} символов.', where, MAX_WORD_LENGTH));
       return;
     }
     const key = word.toLowerCase();
     if (seen.has(key)) {
-      repeats.push(`${where}: «${word}» уже есть в строке ${seen.get(key)}, второй раз не учитывается.`);
+      repeats.push(f('{0}: «{1}» уже есть в строке {2}, второй раз не учитывается.', where, word, seen.get(key)));
       return;
     }
     seen.set(key, index + 1);
     words.push({ text: word, level, line: index + 1 });
   });
-  if (words.length === 0) problems.push('В списке нет ни одного слова.');
-  if (words.length > MAX_WORDS) problems.push(`Слов больше ${MAX_WORDS}.`);
+  if (words.length === 0) problems.push(t('В списке нет ни одного слова.'));
+  if (words.length > MAX_WORDS) problems.push(f('Слов больше {0}.', MAX_WORDS));
   return { words, problems, repeats };
 }
 
@@ -92,15 +94,15 @@ export function checkWordRows(rows) {
     const word = row.text.trim().replace(/\s+/g, ' ');
     if (word === '') return;
     count++;
-    if (word.length > MAX_WORD_LENGTH) marks.set(index, `Длиннее ${MAX_WORD_LENGTH} символов.`);
-    else if (word.startsWith('#') || (word.startsWith('[') && word.endsWith(']'))) marks.set(index, 'Слово не может начинаться с # или быть целиком в квадратных скобках.');
-    else if (seen.has(word.toLowerCase())) marks.set(index, `Повтор: «${word}» уже есть в строке ${seen.get(word.toLowerCase()) + 1}.`);
+    if (word.length > MAX_WORD_LENGTH) marks.set(index, f('Длиннее {0} символов.', MAX_WORD_LENGTH));
+    else if (word.startsWith('#') || (word.startsWith('[') && word.endsWith(']'))) marks.set(index, t('Слово не может начинаться с # или быть целиком в квадратных скобках.'));
+    else if (seen.has(word.toLowerCase())) marks.set(index, f('Повтор: «{0}» уже есть в строке {1}.', word, seen.get(word.toLowerCase()) + 1));
     else seen.set(word.toLowerCase(), index);
   });
   const problems = [];
-  if (marks.size > 0) problems.push(`Ошибок в строках: ${marks.size}. Они отмечены в таблице.`);
-  if (count === 0) problems.push('В списке нет ни одного слова.');
-  if (count > MAX_WORDS) problems.push(`Слов больше ${MAX_WORDS}.`);
+  if (marks.size > 0) problems.push(f('Ошибок в строках: {0}. Они отмечены в таблице.', marks.size));
+  if (count === 0) problems.push(t('В списке нет ни одного слова.'));
+  if (count > MAX_WORDS) problems.push(f('Слов больше {0}.', MAX_WORDS));
   return { rows: marks, problems };
 }
 

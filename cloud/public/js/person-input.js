@@ -1,6 +1,7 @@
 // A person field of a form: pick «ПІБ · #12» from the list, or type a new name that is added to the list on save.
 import { api } from './api.js';
 import { h } from './dom.js';
+import { f, t } from './i18n.js';
 import { findPerson, isBlank, parsePerson, personOption } from './logic.js';
 
 export const PEOPLE_LIST_ID = 'people-options';
@@ -22,11 +23,11 @@ export function personInputText(id) {
 }
 
 export function personInput(name, value, props = {}) {
-  return h('input', { name, value, list: PEOPLE_LIST_ID, autocomplete: 'off', placeholder: 'ПІБ из списка или новый', ...props });
+  return h('input', { name, value, list: PEOPLE_LIST_ID, autocomplete: 'off', placeholder: t('ПІБ из списка или новый'), ...props });
 }
 
 // Texts of person fields ({ field: { label, text } }) -> { field: number | null }. New names are added to the people
-// list after one confirmation. Returns null when the user declines; throws an Error with a message to show.
+// list (О/С) after one confirmation. Returns null when the user declines; throws an Error with a message to show.
 export async function resolvePeople(fields, people) {
   const result = {};
   const newNames = {};
@@ -38,7 +39,7 @@ export async function resolvePeople(fields, people) {
   }
   const added = [...new Set(Object.values(newNames))];
   if (added.length === 0) return result;
-  if (!confirm(`Добавить в список людей: ${added.join(', ')}?`)) return null;
+  if (!confirm(f('Добавить в О/С: {0}?', added.join(', ')))) return null;
   const ids = {};
   for (const name of added) ids[name] = (await api('/people', { method: 'POST', body: { name } })).person.id;
   for (const [field, name] of Object.entries(newNames)) result[field] = ids[name];

@@ -1,5 +1,6 @@
 // Pure helpers for the network settings page; covered by test/web-logic.test.ts.
 // Form values may be strings (while typing) or numbers (as saved).
+import { f, t } from './i18n.js';
 
 const IPV4 = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
 
@@ -7,35 +8,98 @@ export function emptyLocation() {
   return { name: '', tk: '', thirdOctet: '', prefixLength: 25, gatewayOctet: '', firstHostOctet: '', lastHostOctet: '', dnsServers: [], segments: [] };
 }
 
-// Reserved addresses as the page shows them: one per line, "10.0.0.5 — note".
-export function formatReserved(list) {
-  return (list ?? []).map((item) => (item.note ? `${item.address} — ${item.note}` : item.address)).join('\n');
+// ---------- Reserved addresses ----------
+// The page edits them as table rows { address, lastAddress, note } of strings; lastAddress is the end of a range
+// (empty for one address) and may be only its last octet: "10.0.0.20" or "20".
+
+export const MAX_RESERVED = 1000;
+export const MAX_RESERVED_RANGE = 1024;
+
+// IPv4 as a number, or null.
+export function ipNumber(address) {
+  const text = String(address ?? '').trim();
+  if (!IPV4.test(text)) return null;
+  return text.split('.').reduce((sum, part) => sum * 256 + Number(part), 0);
 }
 
-// The textarea back to [{ address, note }]; the dash or colon after the address is optional.
-export function parseReserved(text) {
+// The full end address of a row: "20" becomes "10.0.0.20" after the address 10.0.0.5; '' when there is none.
+export function rangeEnd(address, last) {
+  const end = String(last ?? '').trim();
+  const start = String(address ?? '').trim();
+  if (/^\d{1,3}$/.test(end) && IPV4.test(start)) return start.replace(/\d+$/, end);
+  return end;
+}
+
+// The saved list as table rows, by address.
+export function reservedRows(list) {
+  return [...(list ?? [])]
+    .sort((a, b) => (ipNumber(a.address) ?? Infinity) - (ipNumber(b.address) ?? Infinity))
+    .map((item) => ({ address: item.address, lastAddress: item.lastAddress ?? '', note: item.note ?? '' }));
+}
+
+// The rows to save: empty rows left out, a range end written in full, a one-address range as one address.
+export function reservedValue(rows) {
+  return (rows ?? [])
+    .filter((row) => String(row.address ?? '').trim() !== '' || String(row.note ?? '').trim() !== '')
+    .map((row) => {
+      const address = String(row.address ?? '').trim();
+      const last = rangeEnd(address, row.lastAddress);
+      const note = String(row.note ?? '').trim();
+      return last !== '' && last !== address ? { address, lastAddress: last, note } : { address, note };
+    });
+}
+
+// How many addresses a row takes; null while it is not valid.
+export function rangeSize(row) {
+  const from = ipNumber(row.address);
+  const last = rangeEnd(row.address, row.lastAddress);
+  const to = last === '' ? from : ipNumber(last);
+  if (from === null || to === null || to < from) return null;
+  return to - from + 1;
+}
+
+// Pasted lines as rows: "10.0.0.5 — сервер", "10.0.0.20-10.0.0.29 камеры", "10.0.0.40 - 49: принтеры".
+export function parseReservedLines(text) {
   return String(text ?? '')
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => {
-      const match = /^([^\s:—–]+)\s*(?:[—–:-]\s*)?(.*)$/.exec(line);
-      return { address: match[1], note: match[2].trim() };
+      const match = /^([\d.]+)(?:\s*[-–]\s*([\d.]+)(?![\d.]))?\s*(?:[—–:-]\s*)?(.*)$/.exec(line);
+      if (!match) return { address: line, lastAddress: '', note: '' };
+      return { address: match[1], lastAddress: match[2] ?? '', note: match[3].trim() };
     });
 }
 
-// Same rules as validateNetworkSettings on the server.
-export function reservedProblems(text) {
-  const problems = [];
-  const seen = new Set();
-  for (const { address, note } of parseReserved(text)) {
-    if (!IPV4.test(address)) problems.push(`«${address}» — не IPv4-адрес.`);
-    else if (seen.has(address)) problems.push(`${address} повторяется.`);
-    if (note.length > 200) problems.push(`${address}: примечание длиннее 200 символов.`);
-    seen.add(address);
-  }
-  if (seen.size > 1000) problems.push('Не больше 1000 адресов.');
-  return problems;
+// Same rules as validateNetworkSettings on the server: { marks: Map(row index → text), problems: [text] }.
+export function checkReserved(rows) {
+  const marks = new Map();
+  const spans = [];
+  let count = 0;
+  (rows ?? []).forEach((row, index) => {
+    const address = String(row.address ?? '').trim();
+    const last = rangeEnd(address, row.lastAddress);
+    const note = String(row.note ?? '').trim();
+    if (address === '' && note === '' && last === '') return;
+    count++;
+    const from = ipNumber(address);
+    const to = last === '' ? from : ipNumber(last);
+    let mark = null;
+    if (from === null) mark = address === '' ? t('Укажите адрес.') : f('«{0}» — не IPv4-адрес.', address);
+    else if (to === null) mark = f('Конец диапазона «{0}» — не IPv4-адрес и не последний октет.', last);
+    else if (to < from) mark = t('Конец диапазона меньше начала.');
+    else if (to - from + 1 > MAX_RESERVED_RANGE) mark = f('Диапазон больше {0} адресов.', MAX_RESERVED_RANGE);
+    else {
+      const other = spans.find((span) => from <= span.to && to >= span.from);
+      if (other) mark = f('Пересекается со строкой {0}.', other.index + 1);
+      else spans.push({ from, to, index });
+    }
+    if (!mark && note.length > 200) mark = t('Примечание длиннее 200 символов.');
+    if (mark) marks.set(index, mark);
+  });
+  const problems = [...marks].map(([index, text]) => f('Строка {0}: {1}', index + 1, text));
+  if (count > MAX_RESERVED) problems.push(f('Не больше {0} строк.', MAX_RESERVED));
+  return { marks, problems };
 }
 
 // "111, 112 113" -> [111, 112, 113]; anything that is not a number becomes NaN for the server to reject.
@@ -109,8 +173,8 @@ export function isAutoRange(location) {
 
 function dnsProblem(text, where) {
   const servers = parseAddressList(text);
-  if (servers.length === 0 || servers.length > 4) return `${where}: от 1 до 4 адресов.`;
-  if (servers.some((server) => !IPV4.test(server))) return `${where}: нужны IPv4-адреса вида 10.0.0.1.`;
+  if (servers.length === 0 || servers.length > 4) return f('{0}: от 1 до 4 адресов.', where);
+  if (servers.some((server) => !IPV4.test(server))) return f('{0}: нужны IPv4-адреса вида 10.0.0.1.', where);
   return null;
 }
 
@@ -128,17 +192,17 @@ export function commonDns(locations) {
 
 function segmentProblem(text, where) {
   const segments = parseNumberList(text);
-  if (segments.length === 0 || segments.length > 16) return `${where}: от 1 до 16 чисел через запятую.`;
-  if (segments.some((segment) => !Number.isInteger(segment) || segment > 255)) return `${where}: числа от 0 до 255.`;
-  if (new Set(segments).size !== segments.length) return `${where}: числа повторяются.`;
+  if (segments.length === 0 || segments.length > 16) return f('{0}: от 1 до 16 чисел через запятую.', where);
+  if (segments.some((segment) => !Number.isInteger(segment) || segment > 255)) return f('{0}: числа от 0 до 255.', where);
+  if (new Set(segments).size !== segments.length) return f('{0}: числа повторяются.', where);
   return null;
 }
 
 // Same rules as validateNetworkSettings on the server, as messages for the form.
 export function generalProblems(draft) {
   const problems = [];
-  if (parseOctet(draft.firstOctet) === null) problems.push('Первый октет: число от 0 до 255.');
-  const segments = segmentProblem(draft.segments, 'Сегменты');
+  if (parseOctet(draft.firstOctet) === null) problems.push(t('Первый октет: число от 0 до 255.'));
+  const segments = segmentProblem(draft.segments, t('Сегменты'));
   if (segments) problems.push(segments);
   const dns = dnsProblem(draft.dnsServers, 'DNS');
   if (dns) problems.push(dns);
@@ -148,40 +212,40 @@ export function generalProblems(draft) {
 export function locationProblems(location, allNames = []) {
   const problems = [];
   const name = String(location.name ?? '').trim();
-  if (name === '') problems.push('Укажите название.');
-  else if (name.length > 60) problems.push('Название длиннее 60 символов.');
+  if (name === '') problems.push(t('Укажите название.'));
+  else if (name.length > 60) problems.push(t('Название длиннее 60 символов.'));
   else if (allNames.filter((other) => String(other ?? '').trim().toLowerCase() === name.toLowerCase()).length > 1) {
-    problems.push('Такое название уже есть.');
+    problems.push(t('Такое название уже есть.'));
   }
 
-  if (String(location.tk ?? '').trim().length > 20) problems.push('Номер ТК длиннее 20 символов.');
-  if (parseOctet(location.thirdOctet) === null) problems.push('Третий октет подсети: число от 0 до 255.');
+  if (String(location.tk ?? '').trim().length > 20) problems.push(t('Номер ТК длиннее 20 символов.'));
+  if (parseOctet(location.thirdOctet) === null) problems.push(t('Третий октет подсети: число от 0 до 255.'));
 
   const info = subnetInfo(location.gatewayOctet, location.prefixLength);
   const gateway = parseOctet(location.gatewayOctet);
-  if (gateway === null) problems.push('Шлюз: число от 0 до 255.');
+  if (gateway === null) problems.push(t('Шлюз: число от 0 до 255.'));
   else if (info && (gateway === info.network || gateway === info.broadcast)) {
-    problems.push(`Шлюз не может быть адресом сети или широковещательным (.${info.network}, .${info.broadcast}).`);
+    problems.push(f('Шлюз не может быть адресом сети или широковещательным (.{0}, .{1}).', info.network, info.broadcast));
   }
 
   const first = parseOctet(location.firstHostOctet);
   const last = parseOctet(location.lastHostOctet);
-  if (first === null || last === null) problems.push('Адреса компьютеров: числа от 0 до 255.');
-  else if (first > last) problems.push('Первый адрес больше последнего.');
+  if (first === null || last === null) problems.push(t('Адреса компьютеров: числа от 0 до 255.'));
+  else if (first > last) problems.push(t('Первый адрес больше последнего.'));
   else if (info && (first <= info.network || last >= info.broadcast)) {
-    problems.push(`Адреса компьютеров должны быть внутри подсети шлюза: от .${info.network + 1} до .${info.broadcast - 1}.`);
+    problems.push(f('Адреса компьютеров должны быть внутри подсети шлюза: от .{0} до .{1}.', info.network + 1, info.broadcast - 1));
   } else if (gateway !== null && gateway >= first && gateway <= last) {
-    problems.push('Шлюз попадает в диапазон адресов компьютеров.');
+    problems.push(t('Шлюз попадает в диапазон адресов компьютеров.'));
   }
 
   // Empty means the shared DNS, checked with the shared part of the address.
   if (String(location.dnsServers ?? '').trim() !== '') {
-    const dns = dnsProblem(location.dnsServers, 'Свои DNS');
+    const dns = dnsProblem(location.dnsServers, t('Свои DNS'));
     if (dns) problems.push(dns);
   }
 
   if (String(location.segments ?? '').trim() !== '') {
-    const segments = segmentProblem(location.segments, 'Свои сегменты');
+    const segments = segmentProblem(location.segments, t('Свои сегменты'));
     if (segments) problems.push(segments);
   }
   return problems;

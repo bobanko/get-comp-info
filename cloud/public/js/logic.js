@@ -1,12 +1,13 @@
 // Pure helpers for the web interface: no DOM access, covered by tests in test/web-logic.test.ts.
 
+import { f, LANG, t } from './i18n.js';
 import { looseKey, queryWords, textMatches } from './search-logic.js';
 
 export const ROLE_LABELS = {
-  viewer: 'Просмотр',
-  harvester: 'Сборщик',
-  editor: 'Редактор',
-  admin: 'Администратор',
+  viewer: t('Просмотр'),
+  harvester: t('Сборщик'),
+  editor: t('Редактор'),
+  admin: t('Администратор'),
 };
 
 const ROLE_ORDER = ['viewer', 'harvester', 'editor', 'admin'];
@@ -17,27 +18,27 @@ export function hasRole(user, minimum) {
 
 // Same labels as the console (sync-merge.ps1, Get-SyncFieldLabel).
 export const FIELD_LABELS = {
-  computerId: 'Идентификатор компьютера',
-  computerIdSource: 'Источник идентификатора',
-  hostname: 'Имя компьютера',
-  ip: 'IP-адрес',
-  mac: 'MAC-адрес',
-  serial: 'Серийный номер',
+  computerId: t('Идентификатор компьютера'),
+  computerIdSource: t('Источник идентификатора'),
+  hostname: t('Имя компьютера'),
+  ip: t('IP-адрес'),
+  mac: t('MAC-адрес'),
+  serial: t('Серийный номер'),
   smbiosUuid: 'UUID',
-  windowsMachineGuid: 'ID установки Windows',
-  partOfDomain: 'Член домена',
-  domain: 'Домен / рабочая группа',
-  manufacturer: 'Производитель',
-  model: 'Модель',
-  userId: 'Пользователь (по факту)',
-  ownerId: 'МВО (по ведомости)',
-  username: 'Учётная запись Windows',
-  comment: 'Комментарий',
+  windowsMachineGuid: t('ID установки Windows'),
+  partOfDomain: t('Член домена'),
+  domain: t('Домен / рабочая группа'),
+  manufacturer: t('Производитель'),
+  model: t('Модель'),
+  userId: t('Пользователь (по факту)'),
+  ownerId: t('МВО (по ведомости)'),
+  username: t('Учётная запись Windows'),
+  comment: t('Комментарий'),
   windows: 'Windows',
-  esetInstalled: 'ESET установлен',
-  inventoried: 'Инвентаризация',
-  collectedAt: 'Дата сбора',
-  createdAt: 'Дата создания',
+  esetInstalled: t('ESET установлен'),
+  inventoried: t('Инвентаризация'),
+  collectedAt: t('Дата сбора'),
+  createdAt: t('Дата создания'),
 };
 
 export const FIELD_ORDER = Object.keys(FIELD_LABELS);
@@ -85,11 +86,11 @@ export function parsePerson(text, people) {
   const number = /#(\d+)$/.exec(value);
   if (number) {
     const id = Number(number[1]);
-    return live.some((person) => person.id === id) ? { id } : { error: `Человека #${id} нет в списке.` };
+    return live.some((person) => person.id === id) ? { id } : { error: f('Человека #{0} нет в списке.', id) };
   }
   const same = live.filter((person) => person.name.toLowerCase() === value.toLowerCase());
   if (same.length === 1) return { id: same[0].id };
-  if (same.length > 1) return { error: `Несколько людей «${value}»: выберите нужного из списка, с номером.` };
+  if (same.length > 1) return { error: f('Несколько людей «{0}»: выберите нужного из списка, с номером.', value) };
   return { newName: value };
 }
 
@@ -129,7 +130,7 @@ export function filterItems(items, options = {}) {
     if (type && item.type !== type) return false;
     if (ownerId !== null && item.ownerId !== ownerId) return false;
     if (words.length === 0) return true;
-    const text = ['#' + item.id, item.hostname, item.type, item.model, item.serial, item.location, item.note, personName(item.ownerId)]
+    const text = [item.hostname, item.type, item.model, item.serial, item.location, item.note, personName(item.ownerId)]
       .filter((value) => !isBlank(value))
       .join('\n')
       .toLowerCase();
@@ -148,7 +149,7 @@ export function isInventoried(device) {
   return device.data.inventoried === true;
 }
 
-export const INVENTORY_LABELS = { yes: 'Да', no: 'Нет' };
+export const INVENTORY_LABELS = { yes: t('Да'), no: t('Нет') };
 
 export function fieldLabel(name) {
   return FIELD_LABELS[name] ?? name;
@@ -171,7 +172,7 @@ export function esetState(value) {
   return 'unknown';
 }
 
-export const ESET_LABELS = { installed: 'Установлен', missing: 'Не установлен', unknown: 'Не проверено' };
+export const ESET_LABELS = { installed: t('Установлен'), missing: t('Не установлен'), unknown: t('Не проверено') };
 
 // IPv4 as a number so 10.0.0.9 sorts before 10.0.0.10; anything else sorts last.
 export function ipSortValue(value) {
@@ -204,13 +205,13 @@ export function shortAge(value, now = new Date()) {
   const date = parseDate(value);
   if (!date) return '';
   const minutes = Math.max(0, Math.floor((now.getTime() - date.getTime()) / 60_000));
-  if (minutes < 60) return `${Math.max(1, minutes)} мин`;
+  if (minutes < 60) return f('{0} мин', Math.max(1, minutes));
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} ч`;
+  if (hours < 24) return f('{0} ч', hours);
   const days = Math.floor(hours / 24);
-  if (days < 30) return `${days} д`;
-  if (days < 365) return `${Math.floor(days / 30)} мес`;
-  return `${Math.floor(days / 365)} г`;
+  if (days < 30) return f('{0} д', days);
+  if (days < 365) return f('{0} мес', Math.floor(days / 30));
+  return f('{0} г', Math.floor(days / 365));
 }
 
 // For every field: the history entry (newest first, as the API returns it) that last set its value.
@@ -238,9 +239,9 @@ const PLACEHOLDER_SERIALS = new Set(['TO BE FILLED BY O.E.M.', 'DEFAULT STRING',
 // Fields checked for repeats; the key is compared, empty keys are ignored.
 export const DUPLICATE_FIELDS = {
   ip: { label: 'IP', key: (device) => String(device.data.ip ?? '').trim() },
-  hostname: { label: 'имена', key: (device) => String(device.data.hostname ?? '').trim().toUpperCase() },
+  hostname: { label: t('имена'), key: (device) => String(device.data.hostname ?? '').trim().toUpperCase() },
   serial: {
-    label: 'серийники',
+    label: t('серийники'),
     key: (device) => {
       const serial = String(device.data.serial ?? '').trim().toUpperCase();
       return PLACEHOLDER_SERIALS.has(serial) ? '' : serial;
@@ -284,11 +285,12 @@ let searchCache = new WeakMap();
 function searchText(device) {
   let cached = searchCache.get(device);
   if (!cached) {
-    const values = [device.id, device.updatedBy, device.updatedByName, device.updatedByKey];
+    const values = [device.id];
     for (const value of Object.values(device.data)) values.push(displayValue(value));
     for (const field of PERSON_FIELDS) values.push(personName(device.data[field]));
     const text = values.join('\n').toLowerCase();
-    cached = { text, key: looseKey(text).key };
+    const author = [device.updatedBy, device.updatedByName, device.updatedByKey].filter(Boolean).join('\n').toLowerCase();
+    cached = { text, key: looseKey(text).key, author, authorKey: looseKey(author).key };
     searchCache.set(device, cached);
   }
   return cached;
@@ -297,7 +299,9 @@ function searchText(device) {
 // Every word of the query must occur somewhere in the record, as typed or in another alphabet (search-logic.js).
 // duplicatesOf: a DUPLICATE_FIELDS name to keep only devices repeating that field (empty: all).
 // inventory: 'all' | 'yes' | 'no'.
-export function filterDevices(devices, { query = '', eset = 'all', inventory = 'all', duplicatesOf = '' } = {}) {
+// authors: also search the author of the last change. Only while its column is shown: one admin who edited
+// every record would otherwise be found in all of them, with nothing visible highlighted.
+export function filterDevices(devices, { query = '', eset = 'all', inventory = 'all', duplicatesOf = '', authors = false } = {}) {
   const words = queryWords(query);
   const duplicates = duplicatesOf ? duplicateValues(devices, duplicatesOf) : null;
   return devices.filter((device) => {
@@ -305,12 +309,12 @@ export function filterDevices(devices, { query = '', eset = 'all', inventory = '
     if (inventory !== 'all' && isInventoried(device) !== (inventory === 'yes')) return false;
     if (duplicates && !isDuplicate(device, duplicatesOf, duplicates)) return false;
     if (words.length === 0) return true;
-    const { text, key } = searchText(device);
-    return words.every((word) => textMatches(text, word, key));
+    const { text, key, author, authorKey } = searchText(device);
+    return words.every((word) => textMatches(text, word, key) || (authors && textMatches(author, word, authorKey)));
   });
 }
 
-const collator = new Intl.Collator('ru', { numeric: true, sensitivity: 'base' });
+const collator = new Intl.Collator(LANG, { numeric: true, sensitivity: 'base' });
 
 function compareValues(a, b) {
   const aEmpty = a === null || a === undefined || a === '' || a === Number.POSITIVE_INFINITY;
@@ -421,29 +425,35 @@ export function csvFileName(now = new Date()) {
   return `devices_${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}.csv`;
 }
 
-export const HISTORY_ACTIONS = { create: 'Создана', update: 'Изменена', delete: 'Удалена', restore: 'Восстановлена' };
-export const HISTORY_SOURCES = { console: 'консоль', web: 'веб' };
 
-// Who made a change: the console key name when it is known (one user may hand keys to colleagues),
-// otherwise the nickname. The email goes to the tooltip.
-export function authorLabel(name, email, key) {
-  return key ? `ключ «${key}»` : name || email || '—';
+export const HISTORY_ACTIONS = { create: t('Создана'), update: t('Изменена'), delete: t('Удалена'), restore: t('Восстановлена') };
+
+// Who made a change: 🔑 and the console key name when it is known (one user may hand keys to colleagues),
+// 🌐 and the nickname for a change made on this site, the bare nickname otherwise (old console rows, GitHub).
+// The email goes to the tooltip.
+/** @param {string | null} [source] console, web or github */
+export function authorLabel(name, email, key, source = null) {
+  if (key) return `🔑 ${key}`;
+  const who = name || email || '—';
+  return source === 'web' ? `🌐 ${who}` : who;
 }
 
-export function authorTitle(name, email, key) {
-  return key ? `Ключ пользователя ${name || email} (${email})` : email;
+/** @param {string | null} [source] */
+export function authorTitle(name, email, key, source = null) {
+  if (key) return f('Ключ пользователя {0} ({1})', name || email, email);
+  return source === 'web' ? f('{0}, на сайте', email) : email;
 }
 
 // The author of the last change of a device.
 export function deviceAuthor(device) {
-  return authorLabel(device.updatedByName, device.updatedBy, device.updatedByKey);
+  return authorLabel(device.updatedByName, device.updatedBy, device.updatedByKey, device.updatedSource);
 }
 
 // ---------- Journal ----------
 
 // Keys of the settings table (src/settings.ts, src/trigger-words.ts) and their names in the journal.
-const SETTINGS_NAMES = { network: 'Сеть', 'suspector-trigger-words': 'Слова SUSpector' };
-const ACTIVE_LABELS = { true: 'включён', false: 'отключён' };
+const SETTINGS_NAMES = { network: t('Сеть'), 'suspector-trigger-words': t('Слова SUSpector') };
+const ACTIVE_LABELS = { true: t('включён'), false: t('отключён') };
 
 // One journal entry as text: what was done and to what, with a link to the device card when there is one.
 export function journalLine(entry) {
@@ -455,56 +465,60 @@ export function journalLine(entry) {
     case 'device:delete':
     case 'device:restore': {
       const name = d.hostname || entry.target;
-      return { what: `Запись ${HISTORY_ACTIONS[entry.action].toLowerCase()}`, ...object(name, '#/devices/' + encodeURIComponent(entry.target)) };
+      return { what: f('Запись {0}', HISTORY_ACTIONS[entry.action].toLowerCase()), ...object(name, '#/devices/' + encodeURIComponent(entry.target)) };
     }
     case 'settings:update':
-      return { what: 'Изменены настройки', ...object(SETTINGS_NAMES[entry.target] ?? entry.target) };
+      return { what: t('Изменены настройки'), ...object(SETTINGS_NAMES[entry.target] ?? entry.target) };
     case 'release:publish':
-      return { what: 'Опубликована версия Тулбокса', ...object(entry.target) };
+      return { what: t('Опубликована версия Тулбокса'), ...object(entry.target) };
     case 'suspector-release:publish':
-      return { what: 'Опубликована версия SUSpector', ...object(entry.target) };
+      return { what: t('Опубликована версия SUSpector'), ...object(entry.target) };
     case 'audit:release.current':
-      return { what: 'Текущая версия Тулбокса', ...object(entry.target) };
+      return { what: t('Текущая версия Тулбокса'), ...object(entry.target) };
     case 'audit:suspector-release.current':
-      return { what: 'Текущая версия SUSpector', ...object(entry.target) };
+      return { what: t('Текущая версия SUSpector'), ...object(entry.target) };
     case 'audit:key.create':
-      return { what: 'Создан ключ', ...object(keyName(d, entry.actor)) };
+      return { what: t('Создан ключ'), ...object(keyName(d.label, d, entry.actor)) };
     case 'audit:key.revoke':
-      return { what: 'Отозван ключ', ...object(keyName(d, entry.actor)) };
+      return { what: t('Отозван ключ'), ...object(keyName(d.label, d, entry.actor)) };
+    case 'audit:key.rename': {
+      const [before, after] = Array.isArray(d.label) ? d.label : ['', ''];
+      return { what: t('Переименован ключ'), ...object(keyName(`${before}» → «${after}`, d, entry.actor)) };
+    }
     case 'audit:user.create':
-      return { what: 'Добавлен пользователь', ...object(`${d.name ?? ''} (${ROLE_LABELS[d.role] ?? d.role}), ${entry.target}`) };
+      return { what: t('Добавлен пользователь'), ...object(`${d.name ?? ''} (${ROLE_LABELS[d.role] ?? d.role}), ${entry.target}`) };
     case 'audit:user.update':
-      return { what: 'Изменён пользователь', ...object(`${entry.target}: ${userChanges(d)}`) };
+      return { what: t('Изменён пользователь'), ...object(`${entry.target}: ${userChanges(d)}`) };
     case 'audit:access.reject':
-      return { what: 'Отклонён запрос доступа', ...object(entry.target) };
+      return { what: t('Отклонён запрос доступа'), ...object(entry.target) };
     case 'audit:person.create':
-      return { what: 'Добавлен человек', ...object(`${d.name ?? ''} · #${entry.target}`, '#/people/' + entry.target) };
+      return { what: t('Добавлен человек'), ...object(`${d.name ?? ''} · #${entry.target}`, '#/people/' + entry.target) };
     case 'audit:person.update': {
       const parts = [];
       if (d.name) parts.push(`${d.name[0]} → ${d.name[1]}`);
-      if (d.note) parts.push(`примечание «${d.note[0]}» → «${d.note[1]}»`);
-      return { what: 'Изменён человек', ...object(`#${entry.target}: ${parts.join(', ')}`, '#/people/' + entry.target) };
+      if (d.note) parts.push(f('примечание «{0}» → «{1}»', d.note[0], d.note[1]));
+      return { what: t('Изменён человек'), ...object(`#${entry.target}: ${parts.join(', ')}`, '#/people/' + entry.target) };
     }
     case 'audit:person.delete':
-      return { what: 'Удалён человек', ...object(`${d.name ?? ''} · #${entry.target}`) };
+      return { what: t('Удалён человек'), ...object(`${d.name ?? ''} · #${entry.target}`) };
     case 'audit:item.create':
-      return { what: 'Добавлено имущество', ...object(itemName(d, entry.target), '#/items') };
+      return { what: t('Добавлено майно'), ...object(itemName(d), '#/items') };
     case 'audit:item.update':
-      return { what: 'Изменено имущество', ...object(`${d.type ?? ''} #${entry.target}: ${itemChangeText(d)}`, '#/items') };
+      return { what: t('Изменено майно'), ...object(`${d.type ?? ''}: ${itemChangeText(d)}`, '#/items') };
     case 'audit:item.delete':
-      return { what: 'Удалено имущество', ...object(itemName(d, entry.target)) };
+      return { what: t('Удалено майно'), ...object(itemName(d)) };
     default:
       return { what: `${entry.kind} ${entry.action}`, ...object(entry.target) };
   }
 }
 
-// «Монітор Dell P2217H, CN-0RH81R · #7»
-function itemName(details, id) {
+// «Монітор Dell P2217H, CN-0RH81R»
+function itemName(details) {
   const text = [details.type, details.model].filter((v) => !isBlank(v)).join(' ');
-  return `${text}${details.serial ? ', ' + details.serial : ''} · #${id}`;
+  return `${text}${details.serial ? ', ' + details.serial : ''}`;
 }
 
-const ITEM_FIELD_NAMES = { type: 'тип', model: 'модель', serial: 'серийный номер', location: 'место', ownerId: 'МВО', note: 'примечание' };
+const ITEM_FIELD_NAMES = { type: t('тип'), model: t('модель'), serial: t('серийный номер'), location: t('место'), ownerId: 'МВО', note: t('примечание') };
 
 // "МВО Лукашик → —, примечание «» → «під сходами»"
 function itemChangeText(details) {
@@ -518,22 +532,27 @@ function itemChangeText(details) {
     .join(', ');
 }
 
-// «Флешка», and whose it is when an admin revoked a key of another user.
-function keyName(details, actor) {
-  const label = `«${details.label ?? ''}»`;
-  return details.owner && details.owner !== actor ? `${label}, ${details.owner}` : label;
+// «Флешка», and whose it is when an admin changed a key of another user.
+function keyName(label, details, actor) {
+  const text = `«${label ?? ''}»`;
+  return details.owner && details.owner !== actor ? `${text}, ${details.owner}` : text;
 }
 
 // "роль Просмотр → Редактор, отключён"
 function userChanges(details) {
   const parts = [];
-  if (details.name) parts.push(`имя ${details.name[0]} → ${details.name[1]}`);
-  if (details.role) parts.push(`роль ${ROLE_LABELS[details.role[0]] ?? details.role[0]} → ${ROLE_LABELS[details.role[1]] ?? details.role[1]}`);
+  if (details.name) parts.push(f('имя {0} → {1}', details.name[0], details.name[1]));
+  if (details.role) parts.push(f('роль {0} → {1}', ROLE_LABELS[details.role[0]] ?? details.role[0], ROLE_LABELS[details.role[1]] ?? details.role[1]));
   if (details.active) parts.push(ACTIVE_LABELS[String(details.active[1])]);
   return parts.join(', ');
 }
 
-// Who did it: the console key, the nickname, or GitHub Actions for published releases.
+// Who did it: 🔑 the console key, 🌐 the nickname on the site, or GitHub Actions for published releases.
 export function journalActor(entry) {
-  return authorLabel(entry.actorName, entry.actor, entry.actorKey);
+  return authorLabel(entry.actorName, entry.actor, entry.actorKey, entry.source);
+}
+
+export function journalActorTitle(entry) {
+  if (entry.kind === 'release' || entry.kind === 'suspector-release') return '';
+  return authorTitle(entry.actorName, entry.actor, entry.actorKey, entry.source);
 }

@@ -1,5 +1,6 @@
 import { api } from './api.js';
 import { errorBox, h, replace } from './dom.js';
+import { f, LANG, LANGUAGES, languageChoice, setLanguageChoice, t } from './i18n.js';
 import { hasRole, ROLE_LABELS } from './logic.js';
 import { renderDevice } from './pages/device.js';
 import { renderDevices } from './pages/devices.js';
@@ -13,6 +14,8 @@ import { renderReleases } from './pages/releases.js';
 import { renderTriggerWords } from './pages/trigger-words.js';
 import { renderUsers } from './pages/users.js';
 
+document.documentElement.lang = LANG;
+
 const main = document.getElementById('main');
 const nav = document.getElementById('nav');
 const whoami = document.getElementById('whoami');
@@ -20,28 +23,40 @@ const topbar = document.querySelector('.topbar');
 const menuToggle = document.getElementById('menu-toggle');
 const menuCurrent = document.getElementById('menu-current');
 
+menuToggle.setAttribute('aria-label', t('Меню'));
+nav.setAttribute('aria-label', t('Разделы'));
+
 function setMenuOpen(open) {
   topbar.classList.toggle('open', open);
   menuToggle.setAttribute('aria-expanded', String(open));
 }
 
 menuToggle.addEventListener('click', () => setMenuOpen(!topbar.classList.contains('open')));
-// A tap on the section already open changes no hash: close the menu anyway.
+// A tap on the section already open changes no hash: close the menus anyway.
 nav.addEventListener('click', (event) => {
-  if (event.target.closest('a')) setMenuOpen(false);
+  if (!event.target.closest('a')) return;
+  setMenuOpen(false);
+  nav.querySelector('details[open]')?.removeAttribute('open');
+});
+// The admin submenu of wide screens closes on a click anywhere else.
+document.addEventListener('click', (event) => {
+  const open = nav.querySelector('details[open]');
+  if (open && !open.contains(event.target)) open.removeAttribute('open');
 });
 
+// Groups: the records (devices, property, people), the tools of every user, and the admin pages, used much
+// less often, in a submenu.
 const PAGES = [
-  { hash: '#/devices', icon: '💻', label: 'Устройства', role: 'viewer' },
-  { hash: '#/items', icon: '🗃️', label: 'Имущество', role: 'viewer' },
-  { hash: '#/people', icon: '🧑', label: 'Люди', role: 'viewer' },
-  { hash: '#/keys', icon: '🔑', label: 'Мои ключи', role: 'harvester' },
-  { hash: '#/downloads', icon: '📥', label: 'Загрузки', role: 'viewer' },
-  { hash: '#/users', icon: '👥', label: 'Пользователи', role: 'admin' },
-  { hash: '#/network', icon: '🌐', label: 'Сеть', role: 'admin' },
-  { hash: '#/trigger-words', icon: '🔎', label: 'Слова SUSpector', role: 'admin' },
-  { hash: '#/releases', icon: '📦', label: 'Версии программ', role: 'admin' },
-  { hash: '#/journal', icon: '📜', label: 'Журнал', role: 'admin' },
+  { hash: '#/devices', icon: '💻', label: t('Устройства'), role: 'viewer', group: 'records' },
+  { hash: '#/items', icon: '🗃️', label: t('Майно'), role: 'viewer', group: 'records' },
+  { hash: '#/people', icon: '🧑', label: 'О/С', title: t('Особовий склад'), role: 'viewer', group: 'records' },
+  { hash: '#/keys', icon: '🔑', label: t('Ключи'), role: 'harvester', group: 'tools' },
+  { hash: '#/downloads', icon: '📥', label: t('Загрузки'), role: 'viewer', group: 'tools' },
+  { hash: '#/users', icon: '👥', label: t('Пользователи'), role: 'admin', group: 'admin' },
+  { hash: '#/network', icon: '🌐', label: t('Сеть'), role: 'admin', group: 'admin' },
+  { hash: '#/trigger-words', icon: '🔎', label: t('Слова SUSpector'), role: 'admin', group: 'admin' },
+  { hash: '#/releases', icon: '📦', label: t('Версии программ'), role: 'admin', group: 'admin' },
+  { hash: '#/journal', icon: '📜', label: t('Журнал'), role: 'admin', group: 'admin' },
 ];
 
 let me = null;
@@ -51,25 +66,44 @@ let pendingRequests = 0;
 
 // Signed in through Cloudflare Access, but not (yet) let in by the app.
 const NO_ACCESS = {
-  access_pending: 'Запрос отправлен',
-  access_denied: 'Нет доступа',
-  user_disabled: 'Доступ отключён',
-  access_requests_full: 'Нет доступа',
+  access_pending: t('Запрос отправлен'),
+  access_denied: t('Нет доступа'),
+  user_disabled: t('Доступ отключён'),
+  access_requests_full: t('Нет доступа'),
 };
 // Position in the device list, restored when coming back from a device card.
 let listScroll = 0;
 
 async function start() {
-  replace(main, h('p', { class: 'muted' }, 'Загрузка…'));
+  replace(main, h('p', { class: 'muted' }, t('Загрузка…')));
   try {
     me = await api('/me');
   } catch (error) {
     replace(main, NO_ACCESS[error.code] ? noAccess(error) : errorBox(error, start));
     return;
   }
-  replace(whoami, h('span', {}, me.name), h('span', { class: 'role' }, ROLE_LABELS[me.role] ?? me.role));
+  replace(whoami, h('span', {}, me.name), h('span', { class: 'role' }, ROLE_LABELS[me.role] ?? me.role), languageSelect());
   if (hasRole(me, 'admin')) await refreshPendingRequests();
   route();
+}
+
+// The interface language: as the browser (the default) or chosen; a change reloads the page.
+function languageSelect() {
+  const choice = languageChoice();
+  return h(
+    'select',
+    {
+      class: 'lang-select',
+      'aria-label': t('Язык интерфейса'),
+      title: t('Язык интерфейса'),
+      onchange: (event) => {
+        setLanguageChoice(event.target.value);
+        location.reload();
+      },
+    },
+    h('option', { value: 'system', selected: choice === 'system' }, f('Язык браузера ({0})', LANG.toUpperCase())),
+    Object.entries(LANGUAGES).map(([code, name]) => h('option', { value: code, selected: choice === code }, name)),
+  );
 }
 
 function noAccess(error) {
@@ -81,10 +115,11 @@ function noAccess(error) {
     h(
       'div',
       { class: 'actions' },
-      h('button', { class: 'button primary', onclick: start }, 'Проверить снова'),
+      h('button', { class: 'button primary', onclick: start }, t('Проверить снова')),
       // Ends the Cloudflare Access session, e.g. to sign in with another email.
-      h('a', { class: 'button', href: '/cdn-cgi/access/logout' }, 'Войти с другой почтой'),
+      h('a', { class: 'button', href: '/cdn-cgi/access/logout' }, t('Войти с другой почтой')),
     ),
+    h('p', {}, languageSelect()),
   );
 }
 
@@ -96,25 +131,40 @@ async function refreshPendingRequests() {
   }
 }
 
+function requestsBadge() {
+  return pendingRequests > 0 && h('span', { class: 'nav-count', title: t('Запросы на доступ') }, String(pendingRequests));
+}
+
 function renderNav(current) {
   const page = PAGES.find((p) => current.startsWith(p.hash));
   replace(
     menuCurrent,
     page && h('span', { class: 'nav-icon', 'aria-hidden': 'true' }, page.icon),
-    page?.label ?? 'Меню',
-    pendingRequests > 0 && h('span', { class: 'nav-count', title: 'Запросы на доступ' }, String(pendingRequests)),
+    page?.label ?? t('Меню'),
+    requestsBadge(),
   );
+  const link = (p) =>
+    h(
+      'a',
+      { href: p.hash, title: p.title, class: current.startsWith(p.hash) ? 'active' : undefined },
+      h('span', { class: 'nav-icon', 'aria-hidden': 'true' }, p.icon),
+      p.label,
+      p.hash === '#/users' && requestsBadge(),
+    );
+  const allowed = PAGES.filter((p) => hasRole(me, p.role));
+  const group = (name) => allowed.filter((p) => p.group === name);
+  const admin = group('admin');
   replace(
     nav,
-    PAGES.filter((page) => hasRole(me, page.role)).map((page) =>
+    h('div', { class: 'nav-group' }, group('records').map(link)),
+    group('tools').length > 0 && h('div', { class: 'nav-group' }, group('tools').map(link)),
+    admin.length > 0 &&
       h(
-        'a',
-        { href: page.hash, class: current.startsWith(page.hash) ? 'active' : undefined },
-        h('span', { class: 'nav-icon', 'aria-hidden': 'true' }, page.icon),
-        page.label,
-        page.hash === '#/users' && pendingRequests > 0 && h('span', { class: 'nav-count', title: 'Запросы на доступ' }, String(pendingRequests)),
+        'details',
+        { class: admin.some((p) => current.startsWith(p.hash)) ? 'nav-admin active' : 'nav-admin' },
+        h('summary', {}, h('span', { class: 'nav-icon', 'aria-hidden': 'true' }, '⚙️'), t('Админка'), requestsBadge()),
+        h('div', { class: 'nav-admin-body' }, admin.map(link)),
       ),
-    ),
   );
 }
 

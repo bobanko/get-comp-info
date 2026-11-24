@@ -273,6 +273,13 @@ namespace CompInfo
             book.AddReserved(p);
             Check(book.FirstFree(p, l, 111, -1, null) == 131, "a reserved address is not free");
             Check(book.Owner("10.111.171.130").Contains("камера") && book.Owner("10.112.171.130") == "FR-042-A", "a record names its address before the reserved list");
+            File.WriteAllText(path, "{\"value\":{\"locations\":[{\"name\":\"A\",\"thirdOctet\":1}],\"reservedAddresses\":[" +
+                "{\"address\":\"10.1.1.254\",\"lastAddress\":\"10.1.2.1\",\"note\":\"принтеры\"}," +
+                "{\"address\":\"10.1.3.1\",\"lastAddress\":\"10.1.9.1\",\"note\":\"too long\"},{\"address\":\"10.1.4.5\",\"lastAddress\":\"x\"}]}}", Encoding.UTF8);
+            NetworkProfiles ranges = NetworkProfiles.Read(path);
+            Check(ranges.Reserved.Count == 6 && ranges.Reserved["10.1.2.0"] == "принтеры" && ranges.Reserved.ContainsKey("10.1.2.1") &&
+                ranges.Reserved.ContainsKey("10.1.3.1") && !ranges.Reserved.ContainsKey("10.1.3.2") && ranges.Reserved.ContainsKey("10.1.4.5"),
+                "a reserved range takes all its addresses; a broken one only its first: " + string.Join(",", ranges.Reserved.Keys));
             book.Add("10.112.171.132, 10.112.171.133", "X");
             Check(book.FirstFree(p, l, 112, -1, null) == -1, "whole range taken");
             Check(AddressBook.Read(Path.Combine(dir, "none"), null).Used.Count == 0, "no data folder");
