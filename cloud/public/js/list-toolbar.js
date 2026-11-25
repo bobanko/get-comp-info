@@ -127,6 +127,33 @@ function trackKeyboard() {
 
 // Text with the parts found by the search wrapped in <mark>.
 
+// One setting for every list: whether the explanation under the title is open.
+const LEAD_SETTING = 'lists.leadOpen';
+
+// The title of a list page with its explanation folded behind an «i» button: the text is read once,
+// the rows are needed every time. Phones hide both (app.css: .list-title, .list-lead).
+export function listTitle(title, text) {
+  const lead = h('p', { class: 'lead list-lead', id: 'list-lead', hidden: !readSetting(LEAD_SETTING, false) }, text);
+  const toggle = h(
+    'button',
+    {
+      type: 'button',
+      class: 'info-toggle',
+      title: t('Что здесь'),
+      'aria-label': t('Что здесь'),
+      'aria-controls': 'list-lead',
+      'aria-expanded': String(!lead.hidden),
+      onclick: () => {
+        lead.hidden = !lead.hidden;
+        toggle.setAttribute('aria-expanded', String(!lead.hidden));
+        writeSetting(LEAD_SETTING, !lead.hidden);
+      },
+    },
+    'i',
+  );
+  return [h('h1', { class: 'list-title' }, title, toggle), lead];
+}
+
 export function marked(text, words) {
   const value = text === null || text === undefined ? '' : String(text);
   if (value === '' || words.length === 0) return value;

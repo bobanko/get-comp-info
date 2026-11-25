@@ -1,7 +1,7 @@
 import { api } from '../api.js';
 import { errorBox, h, replace, toast } from '../dom.js';
 import { f, t } from '../i18n.js';
-import { focusSearch, listToolbar, marked } from '../list-toolbar.js';
+import { focusSearch, listTitle, listToolbar, marked } from '../list-toolbar.js';
 import { addItemPanel, itemDatalists } from '../item-form.js';
 import { formatDate, hasRole, isBlank, personLinks, setPeople } from '../logic.js';
 import { looseKey, queryWords, textMatches } from '../search-logic.js';
@@ -156,10 +156,8 @@ function draw(context, people, links, view) {
   const panel = editor && view.adding && h('section', { class: 'panel add-panel' }, h('h2', {}, t('Добавить человека')), addForm(reload, () => redraw({ adding: false })));
   replace(
     main,
-    h('h1', { class: 'list-title' }, t('Особовий склад')),
-    h(
-      'p',
-      { class: 'lead list-lead' },
+    listTitle(
+      t('Особовий склад'),
       t('Люди, к которым привязаны компьютеры и майно по номеру: пользователь по факту и матеріально відповідальна особа (МВО) по ведомости. Номер не меняется и не используется повторно.'),
     ),
     panel,

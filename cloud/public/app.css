@@ -101,6 +101,16 @@ code, .mono { font-family: var(--mono); font-size: 13px; }
 .nowrap { white-space: nowrap; }
 .right { text-align: right; }
 .lead { max-width: 70ch; color: var(--muted); }
+/* «i» next to a list title: opens the explanation under it. */
+.info-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; margin-left: 8px; padding: 0; vertical-align: 3px;
+  border: 1px solid var(--border); border-radius: 50%; background: var(--surface); color: var(--muted);
+  font: italic 600 12px/1 Georgia, serif; cursor: pointer;
+}
+.info-toggle:hover { color: var(--text); background: var(--surface-2); }
+.info-toggle[aria-expanded='true'] { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.list-title + .list-lead { margin-top: -6px; }
 .section-title { font-size: 18px; margin: 28px 0 8px; }
 .section-title.first { margin-top: 8px; }
 .copy-link { margin-left: 8px; vertical-align: baseline; }

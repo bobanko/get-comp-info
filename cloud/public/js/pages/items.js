@@ -1,7 +1,7 @@
 import { api } from '../api.js';
 import { errorBox, h, replace, toast } from '../dom.js';
 import { f, t } from '../i18n.js';
-import { focusSearch, listToolbar, marked } from '../list-toolbar.js';
+import { focusSearch, listTitle, listToolbar, marked } from '../list-toolbar.js';
 import { addItemPanel, escapeTo, ITEM_FIELDS as FIELDS, itemDatalists, itemInputs, itemTitle, itemValues } from '../item-form.js';
 import { filterItems, findPerson, formatDate, hasRole, isBlank, itemTypes, personName, setPeople } from '../logic.js';
 import { queryWords } from '../search-logic.js';
@@ -203,10 +203,8 @@ function draw(context, items, people, view) {
     addItemPanel({ items: propertyItems, people, defaults: { ownerId: view.ownerId, type: state.type }, onAdded: reload, onCancel: () => redraw({ adding: false }) });
   replace(
     main,
-    h('h1', { class: 'list-title' }, t('Майно')),
-    h(
-      'p',
-      { class: 'lead list-lead' },
+    listTitle(
+      t('Майно'),
       t('Вся техника по ведомости: компьютеры, мониторы, принтеры, зарядные станции, флешки, SIM-карты и прочее. Компьютеры — записи вкладки «Устройства»: имя под типом ведёт в их карточку, там же меняется их МВО. Нажмите на тип, чтобы оставить только его.'),
     ),
     view.ownerId !== null &&
