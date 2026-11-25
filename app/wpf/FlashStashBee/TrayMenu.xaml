@@ -1,0 +1,105 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- The tray icon's context menu, styled like Windows 11 menus and the program's own theme (same colours
+         and font as the settings window). The tray icon stays on the WinForms NotifyIcon, but the menu is a
+         WPF ContextMenu, so it looks like a part of the program rather than a system menu.
+
+         The drop shadow is cast from a SEPARATE backing border, never from the border that holds the text:
+         a DropShadowEffect over the content would push the whole subtree through an intermediate bitmap and
+         disable ClearType, making every label look blurred. -->
+
+    <!-- Inside a Menu/ContextMenu WPF styles separators through MenuItem.SeparatorStyleKey, not the implicit
+         Separator style; without this key the stock separator is indented past the icon column. Full width. -->
+    <Style x:Key="{x:Static MenuItem.SeparatorStyleKey}" TargetType="Separator">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Separator">
+                    <Border Height="1" Margin="0,4" Background="{DynamicResource Divider}" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- the same look for a separator outside a menu (e.g. the preview harness) -->
+    <Style TargetType="Separator" BasedOn="{StaticResource {x:Static MenuItem.SeparatorStyleKey}}" />
+
+    <Style TargetType="MenuItem">
+        <Setter Property="Foreground" Value="{DynamicResource Text}" />
+        <Setter Property="MinHeight" Value="34" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="MenuItem">
+                    <Grid>
+                        <Border x:Name="bg" Margin="4,2" CornerRadius="4" Background="Transparent" Padding="{TemplateBinding Padding}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="24" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <!-- fixed icon column so every text label lines up; icon centred in it -->
+                                <ContentPresenter Grid.Column="0" ContentSource="Icon" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                <ContentPresenter Grid.Column="1" ContentSource="Header" VerticalAlignment="Center" Margin="6,0,0,0" RecognizesAccessKey="True" />
+                                <TextBlock x:Name="arrow" Grid.Column="2" Text="&#xE76C;" FontFamily="{DynamicResource IconFont}"
+                                           FontSize="11" Margin="16,0,2,0" VerticalAlignment="Center" Visibility="Collapsed"
+                                           Foreground="{DynamicResource Muted}" />
+                            </Grid>
+                        </Border>
+                        <Popup x:Name="popup" Placement="Right" HorizontalOffset="-3" VerticalOffset="-5"
+                               IsOpen="{TemplateBinding IsSubmenuOpen}" AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
+                            <Grid Margin="0,0,10,10">
+                                <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}" BorderThickness="1" CornerRadius="8">
+                                    <Border.Effect>
+                                        <DropShadowEffect BlurRadius="14" ShadowDepth="2" Opacity="0.32" Color="#000000" />
+                                    </Border.Effect>
+                                </Border>
+                                <Border CornerRadius="8" Padding="3" TextOptions.TextFormattingMode="Display">
+                                    <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" />
+                                </Border>
+                            </Grid>
+                        </Popup>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="bg" Property="Background" Value="{DynamicResource FieldHover}" />
+                        </Trigger>
+                        <Trigger Property="HasItems" Value="True">
+                            <Setter TargetName="arrow" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="ContextMenu">
+        <Setter Property="Foreground" Value="{DynamicResource Text}" />
+        <Setter Property="FontFamily" Value="Segoe UI" />
+        <Setter Property="FontSize" Value="13.333" />
+        <Setter Property="HasDropShadow" Value="True" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ContextMenu">
+                    <Grid Margin="10">
+                        <!-- backing layer: carries the shadow and the fill, no text -->
+                        <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}" BorderThickness="1" CornerRadius="8">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.34" Color="#000000" />
+                            </Border.Effect>
+                        </Border>
+                        <!-- text layer: no effect, so ClearType stays on -->
+                        <Border CornerRadius="8" Padding="3" TextOptions.TextFormattingMode="Display">
+                            <ItemsPresenter />
+                        </Border>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+</ResourceDictionary>

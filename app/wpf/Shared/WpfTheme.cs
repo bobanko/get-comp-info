@@ -55,6 +55,8 @@ namespace CompInfo.Wpf
             { "AdminReady",  "#0B6E36", "#57C47F" },
             // violet of SUSpector; folders yellow-orange, as in Explorer
             { "Suspector",   "#6D3FD0", "#A585FF" },
+            // violet of FlashStashBee (its flash-drive icon and the coloured word of its name)
+            { "Violet",      "#7C3AED", "#A585FF" },
             { "Folder",      "#DE9200", "#FFC43D" },
             // location chips of found files (FileChips.ColorKey): Danger / Warn / Ok / Muted use the state colours
             { "ChipSupraWeedText", "#0E706A", "#5ED4C8" },

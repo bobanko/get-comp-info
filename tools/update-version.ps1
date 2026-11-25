@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
-    # Whose version to raise: the toolbox (console-ui.ps1, also the console version), SUSpector or youSBee.
-    [ValidateSet('toolbox', 'suspector', 'yousbee')]
+    # Whose version to raise: the toolbox (console-ui.ps1, also the console version), SUSpector, youSBee or FlashStashBee.
+    [ValidateSet('toolbox', 'suspector', 'yousbee', 'flashstashbee')]
     [string]$Program = 'toolbox'
 )
 
@@ -34,7 +34,7 @@ if ($Program -eq 'toolbox') {
     [IO.File]::WriteAllText($versionFile, $updated, [Text.UTF8Encoding]::new($true))
 }
 else {
-    $name = if ($Program -eq 'suspector') { 'SUSpector' } else { 'youSBee' }
+    $name = switch ($Program) { 'suspector' { 'SUSpector' } 'yousbee' { 'youSBee' } 'flashstashbee' { 'FlashStashBee' } }
     $versionFile = Join-Path $root "app\$name.version"
     $version = Get-NextVersion ([IO.File]::ReadAllText($versionFile).Trim())
     [IO.File]::WriteAllText($versionFile, "$version`r`n", [Text.UTF8Encoding]::new($false))

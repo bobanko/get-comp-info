@@ -1,0 +1,66 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- FlashStashBee: a background tray utility (FLASHSTASHBEE.md). When a flash drive is inserted, it copies its
+       contents to a folder (one folder per serial; a re-insert syncs into it instead of making a new backup).
+       The tray icon is a violet flash drive, with a status badge in the corner.
+       Runs on .NET Framework 4.8 out of the box; a .NET SDK is needed to build it (tools\build.BAT finds it).
+       tools\build.BAT copies the result to bin\FlashStashBee.exe. No third-party packages. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net481</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <!-- the tray icon is a System.Windows.Forms.NotifyIcon, the icons are drawn with System.Drawing -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>FlashStashBee</AssemblyName>
+    <RootNamespace>CompInfo.Wpf</RootNamespace>
+    <ApplicationIcon>..\..\flashstashbee.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Title, product, company and version come from obj\FlashStashBeeVersion.cs,
+         which tools\build.BAT writes from app\FlashStashBee.version. -->
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+    <GenerateSupportedRuntime>false</GenerateSupportedRuntime>
+    <DebugType>none</DebugType>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Management" />
+    <Reference Include="System.Web.Extensions" />
+    <Reference Include="System.Web" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
+    <Reference Include="System.DirectoryServices.AccountManagement" />
+  </ItemGroup>
+
+  <!-- the core, shared with comp-info.exe and the tests (C# 5) -->
+  <ItemGroup>
+    <Compile Include="..\..\..\obj\FlashStashBeeVersion.cs" Link="Core\FlashStashBeeVersion.cs" />
+    <Compile Include="..\..\src\Json.cs" Link="Core\Json.cs" />
+    <Compile Include="..\..\src\Store.cs" Link="Core\Store.cs" />
+    <Compile Include="..\..\src\Identity.cs" Link="Core\Identity.cs" />
+    <Compile Include="..\..\src\Machine.cs" Link="Core\Machine.cs" />
+    <Compile Include="..\..\src\Network.cs" Link="Core\Network.cs" />
+    <Compile Include="..\..\src\Shell.cs" Link="Core\Shell.cs" />
+    <Compile Include="..\..\src\IniSettings.cs" Link="Core\IniSettings.cs" />
+    <Compile Include="..\..\src\UsbList.cs" Link="Core\UsbList.cs" />
+    <Compile Include="..\..\src\Lang.cs" Link="Core\Lang.cs" />
+    <Compile Include="..\..\src\Strings.cs" Link="Core\Strings.cs" />
+  </ItemGroup>
+
+  <!-- the shared look of the WPF programs -->
+  <ItemGroup>
+    <Compile Include="..\Shared\*.cs" Link="Shared\%(Filename)%(Extension)" />
+    <Page Include="..\Shared\*.xaml" Link="Shared\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <!-- the About window picture -->
+  <ItemGroup>
+    <Resource Include="..\..\flashstashbee.png" Link="flashstashbee.png" />
+  </ItemGroup>
+
+</Project>

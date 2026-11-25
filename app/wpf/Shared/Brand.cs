@@ -22,6 +22,13 @@ namespace CompInfo.Wpf
             Export = "", Save = "", Back = "", Forward = "";
         public static readonly string Upload = ((char)0xE898).ToString();
         public static readonly string Document = ((char)0xE8A5).ToString();
+        // FlashStashBee: the tray menu and the settings window
+        public static readonly string Settings = ((char)0xE713).ToString();   // gear
+        public static readonly string Pause = ((char)0xE769).ToString();      // two vertical bars
+        public static readonly string Filter = ((char)0xE71C).ToString();
+        public static readonly string Blocked = ((char)0xE733).ToString();
+        public static readonly string Package = ((char)0xE7B8).ToString();   // archive
+        public static readonly string Add = ((char)0xE710).ToString();
         // «О программе» of SUSpector
         public const string Broom = "", Keyboard = "";
 

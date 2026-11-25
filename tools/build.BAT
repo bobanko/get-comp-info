@@ -1,10 +1,11 @@
 @echo off
 rem Builds the programs (WPF on .NET Framework 4.8, WINDOWS_APP.md) with the .NET SDK, then the checks of app\tests
 rem with the C# compiler that is part of Windows. The programs go to bin\ (not in Git), each with its own version:
-rem   comp-info.exe - the toolbox; version in console-ui.ps1, shared with the console version (scripts and BAT)
-rem   SUSpector.exe - standalone security check for users; version in app\SUSpector.version
-rem   youSBee.exe   - standalone USB serial numbers; version in app\youSBee.version
-rem Usage: tools\build.BAT [toolbox] [suspector] [yousbee]   - no arguments builds all three. The checks always run.
+rem   comp-info.exe    - the toolbox; version in console-ui.ps1, shared with the console version (scripts and BAT)
+rem   SUSpector.exe    - standalone security check for users; version in app\SUSpector.version
+rem   youSBee.exe      - standalone USB serial numbers; version in app\youSBee.version
+rem   FlashStashBee.exe - standalone tray utility: copies an inserted flash drive (one folder per serial); version in app\FlashStashBee.version
+rem Usage: tools\build.BAT [toolbox] [suspector] [yousbee] [flashstashbee]   - no arguments builds all four. The checks always run.
 rem The programs need nothing on the computers they run on; the computer that builds them needs the .NET SDK.
 rem bin\ is a copy of the program of its own, like a flash drive: comp-info.exe there keeps its data, key and settings in bin\
 rem (COMPINFO_ROOT points it at another copy).
@@ -21,17 +22,18 @@ if not exist bin mkdir bin
 
 :arguments
 if "%~1"=="" goto chosen
-if /i "%~1"=="toolbox" (set "BUILD_TOOLBOX=1") else if /i "%~1"=="suspector" (set "BUILD_SUSPECTOR=1") else if /i "%~1"=="yousbee" (set "BUILD_YOUSBEE=1") else (
-  echo Unknown program: %~1. Use toolbox, suspector or yousbee.
+if /i "%~1"=="toolbox" (set "BUILD_TOOLBOX=1") else if /i "%~1"=="suspector" (set "BUILD_SUSPECTOR=1") else if /i "%~1"=="yousbee" (set "BUILD_YOUSBEE=1") else if /i "%~1"=="flashstashbee" (set "BUILD_FLASHSTASHBEE=1") else (
+  echo Unknown program: %~1. Use toolbox, suspector, yousbee or flashstashbee.
   exit /b 1
 )
 shift
 goto arguments
 :chosen
-if not defined BUILD_TOOLBOX if not defined BUILD_SUSPECTOR if not defined BUILD_YOUSBEE (
+if not defined BUILD_TOOLBOX if not defined BUILD_SUSPECTOR if not defined BUILD_YOUSBEE if not defined BUILD_FLASHSTASHBEE (
   set "BUILD_TOOLBOX=1"
   set "BUILD_SUSPECTOR=1"
   set "BUILD_YOUSBEE=1"
+  set "BUILD_FLASHSTASHBEE=1"
 )
 
 rem The toolbox version is the one of the console version (console-ui.ps1), so both report the same release.
@@ -42,11 +44,14 @@ if "%VER%"=="" (
 )
 set /p SUSVER=<app\SUSpector.version
 set /p YSBVER=<app\youSBee.version
+set /p UAVER=<app\FlashStashBee.version
 if "%SUSVER%"=="" ( echo Could not read app\SUSpector.version. & exit /b 1 )
 if "%YSBVER%"=="" ( echo Could not read app\youSBee.version. & exit /b 1 )
+if "%UAVER%"=="" ( echo Could not read app\FlashStashBee.version. & exit /b 1 )
 call :version obj\Version.cs "CHAGEAR Toolbox" %VER%
 call :version obj\SuspectorVersion.cs "SUSpector" %SUSVER%
 call :version obj\YouSBeeVersion.cs "youSBee" %YSBVER%
+call :version obj\FlashStashBeeVersion.cs "FlashStashBee" %UAVER%
 
 rem The core (C# 5, no window code): built into the programs by their projects in app\wpf and into the checks here.
 set "REFS=/r:System.Management.dll /r:System.Web.Extensions.dll /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll /r:System.DirectoryServices.AccountManagement.dll"
@@ -56,6 +61,7 @@ call :dotnet || exit /b 1
 if defined BUILD_TOOLBOX call :wpf comp-info %VER% || exit /b 1
 if defined BUILD_SUSPECTOR call :wpf SUSpector %SUSVER% || exit /b 1
 if defined BUILD_YOUSBEE call :wpf youSBee %YSBVER% || exit /b 1
+if defined BUILD_FLASHSTASHBEE call :wpf FlashStashBee %UAVER% || exit /b 1
 
 "%CSC%" /nologo /optimize+ /codepage:65001 /target:exe /out:obj\tests.exe /resource:app\trigger-words.txt,CompInfo.trigger-words.txt %REFS% %CORE% app\src\SuspectorUpdate.cs app\tests\Tests.cs app\tests\FakeCloud.cs
 if errorlevel 1 exit /b 1
