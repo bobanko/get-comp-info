@@ -10,6 +10,7 @@ const ROLE_HINTS = {
   admin: t('плюс пользователи, роли и удаление'),
 };
 
+// Users and access requests as cards: a table of five columns did not fit a phone.
 export async function renderUsers(context) {
   const { main } = context;
   replace(main, h('p', { class: 'muted' }, t('Загрузка пользователей…')));
@@ -25,13 +26,16 @@ export async function renderUsers(context) {
   replace(
     main,
     h('h1', {}, t('Пользователи')),
-    requests.length > 0 &&
-      h('section', { class: 'panel requests' }, h('h2', {}, f('Запросы на доступ ({0})', requests.length)), requestsTable(context, requests)),
+    requests.length > 0 && [
+      h('h2', { class: 'section-title first' }, f('Запросы на доступ ({0})', requests.length)),
+      h('div', { class: 'user-cards' }, requests.map((request) => requestCard(context, request))),
+    ],
     h('section', { class: 'panel' }, h('h2', {}, t('Добавить пользователя')), addForm(context)),
-    h('section', { class: 'panel' }, h('h2', {}, f('Все пользователи ({0})', users.length)), usersTable(context, users)),
+    h('h2', { class: 'section-title' }, f('Все пользователи ({0})', users.length)),
+    h('div', { class: 'user-cards' }, users.map((user) => userCard(context, user))),
     h(
       'section',
-      { class: 'panel muted small' },
+      { class: 'panel muted small roles' },
       h('h2', {}, t('Роли')),
       h('ul', {}, Object.entries(ROLE_LABELS).map(([role, label]) => h('li', {}, h('b', {}, label), ` — ${ROLE_HINTS[role]}`))),
     ),
@@ -46,21 +50,13 @@ function roleSelect(value, props = {}) {
   );
 }
 
-// People who signed in with an unknown email: approve with a name and role, or reject.
-function requestsTable(context, requests) {
-  return h(
-    'div',
-    { class: 'table-wrap' },
-    h(
-      'table',
-      {},
-      h('thead', {}, h('tr', {}, h('th', {}, t('Почта')), h('th', {}, t('Запрошено')), h('th', {}, t('Имя')), h('th', {}, t('Роль')), h('th', {}))),
-      h('tbody', {}, requests.map((request) => requestRow(context, request))),
-    ),
-  );
+// A field of a card: a small caption over the control.
+function field(caption, control) {
+  return h('label', { class: 'card-field' }, h('span', { class: 'muted small' }, caption), control);
 }
 
-function requestRow(context, request) {
+// Someone who signed in with an unknown email: approve with a name and role, or reject.
+function requestCard(context, request) {
   const name = h('input', { value: request.email.split('@')[0], maxlength: '100', 'aria-label': f('Имя {0}', request.email) });
   const role = roleSelect('viewer', { 'aria-label': f('Роль {0}', request.email) });
   const buttons = [];
@@ -82,7 +78,7 @@ function requestRow(context, request) {
     h(
       'button',
       {
-        class: 'button small primary',
+        class: 'button primary',
         onclick: () =>
           act(
             () => api('/users', { method: 'POST', body: { email: request.email, name: name.value, role: role.value } }),
@@ -94,7 +90,7 @@ function requestRow(context, request) {
     h(
       'button',
       {
-        class: 'button small danger',
+        class: 'button danger',
         onclick: () => {
           if (!confirm(f('Отклонить запрос {0}? Пустить его можно будет позже, добавив вручную.', request.email))) return;
           act(() => api('/access-requests/' + encodeURIComponent(request.email), { method: 'DELETE' }), t('Запрос отклонён.'));
@@ -103,14 +99,19 @@ function requestRow(context, request) {
       t('Отклонить'),
     ),
   );
+  const seenLater = request.lastSeenAt !== request.requestedAt;
   return h(
-    'tr',
-    {},
-    h('td', {}, request.email),
-    h('td', { class: 'nowrap', title: f('Последний вход: {0}', formatDate(request.lastSeenAt)) }, formatDate(request.requestedAt)),
-    h('td', {}, name),
-    h('td', {}, role),
-    h('td', { class: 'nowrap' }, h('div', { class: 'actions' }, buttons)),
+    'article',
+    { class: 'panel user-card request' },
+    h('div', { class: 'user-card-title' }, request.email),
+    h(
+      'p',
+      { class: 'muted small' },
+      f('Запрошено {0}', formatDate(request.requestedAt)),
+      seenLater && ` · ${f('Последний вход: {0}', formatDate(request.lastSeenAt))}`,
+    ),
+    h('div', { class: 'card-fields' }, field(t('Имя'), name), field(t('Роль'), role)),
+    h('div', { class: 'actions' }, buttons),
   );
 }
 
@@ -154,63 +155,56 @@ async function updateUser(context, user, changes) {
   await renderUsers(context);
 }
 
-function usersTable(context, users) {
-  const self = context.me.email;
+// One user: the name (edited in place), the email, the role and the access switch.
+function userCard(context, user) {
+  const isSelf = user.email === context.me.email;
   return h(
-    'div',
-    { class: 'table-wrap' },
+    'article',
+    { class: user.active ? 'panel user-card' : 'panel user-card inactive' },
     h(
-      'table',
-      {},
-      h('thead', {}, h('tr', {}, h('th', {}, t('Почта')), h('th', {}, t('Имя')), h('th', {}, t('Роль')), h('th', {}, t('Доступ')), h('th', {}, t('Добавлен')))),
-      h(
-        'tbody',
-        {},
-        users.map((user) => {
-          const isSelf = user.email === self;
-          return h(
-            'tr',
-            { class: user.active ? undefined : 'inactive' },
-            h('td', {}, user.email, isSelf && h('span', { class: 'badge badge-muted' }, t('это вы'))),
-            h(
-              'td',
-              {},
-              h('input', {
-                value: user.name,
-                maxlength: '100',
-                'aria-label': f('Имя {0}', user.email),
-                onchange: (event) => updateUser(context, user, { name: event.target.value }),
-              }),
-            ),
-            h(
-              'td',
-              {},
-              roleSelect(user.role, {
-                disabled: isSelf,
-                title: isSelf ? t('Нельзя менять собственную роль') : undefined,
-                'aria-label': f('Роль {0}', user.email),
-                onchange: (event) => updateUser(context, user, { role: event.target.value }),
-              }),
-            ),
-            h(
-              'td',
-              {},
-              h(
-                'label',
-                { class: 'check' },
-                h('input', {
-                  type: 'checkbox',
-                  checked: user.active,
-                  disabled: isSelf,
-                  onchange: (event) => updateUser(context, user, { active: event.target.checked }),
-                }),
-                user.active ? t('включён') : t('отключён'),
-              ),
-            ),
-            h('td', { class: 'nowrap' }, formatDate(user.createdAt)),
-          );
+      'div',
+      { class: 'user-card-title' },
+      user.email,
+      isSelf && h('span', { class: 'badge badge-muted' }, t('это вы')),
+      !user.active && h('span', { class: 'badge badge-danger' }, t('отключён')),
+    ),
+    h(
+      'div',
+      { class: 'card-fields' },
+      field(
+        t('Имя'),
+        h('input', {
+          value: user.name,
+          maxlength: '100',
+          'aria-label': f('Имя {0}', user.email),
+          onchange: (event) => updateUser(context, user, { name: event.target.value }),
         }),
       ),
+      field(
+        t('Роль'),
+        roleSelect(user.role, {
+          disabled: isSelf,
+          title: isSelf ? t('Нельзя менять собственную роль') : undefined,
+          'aria-label': f('Роль {0}', user.email),
+          onchange: (event) => updateUser(context, user, { role: event.target.value }),
+        }),
+      ),
+    ),
+    h(
+      'div',
+      { class: 'user-card-foot' },
+      h(
+        'label',
+        { class: 'check', title: isSelf ? t('Нельзя снять с себя роль admin или отключить себя.') : undefined },
+        h('input', {
+          type: 'checkbox',
+          checked: user.active,
+          disabled: isSelf,
+          onchange: (event) => updateUser(context, user, { active: event.target.checked }),
+        }),
+        t('Доступ включён'),
+      ),
+      h('span', { class: 'muted small' }, f('Добавлен {0}', formatDate(user.createdAt))),
     ),
   );
 }

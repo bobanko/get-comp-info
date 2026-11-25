@@ -2,7 +2,8 @@ import { api } from '../api.js';
 import { errorBox, h, replace, toast } from '../dom.js';
 import { f, t } from '../i18n.js';
 import { focusSearch, listToolbar, marked } from '../list-toolbar.js';
-import { formatDate, hasRole, isBlank, personLinks } from '../logic.js';
+import { addItemPanel, itemDatalists } from '../item-form.js';
+import { formatDate, hasRole, isBlank, personLinks, setPeople } from '../logic.js';
 import { looseKey, queryWords, textMatches } from '../search-logic.js';
 import { invalidateDevices } from './devices.js';
 
@@ -14,18 +15,20 @@ const state = { query: '' };
 // personId: the card of one person (#/people/12), linked from devices, property and the journal.
 export async function renderPeople(context, personId = null) {
   const { main } = context;
-  replace(main, h('p', { class: 'muted' }, personId === null ? t('Загрузка О/С…') : t('Загрузка…')));
+  replace(main, h('p', { class: 'muted' }, t('Загрузка…')));
   let people;
   let devices;
   let items;
   try {
     [{ people }, { devices }, { items }] = await Promise.all([api('/people'), api('/devices'), api('/items')]);
   } catch (error) {
-    replace(main, h('h1', {}, 'О/С'), errorBox(error, () => renderPeople(context, personId)));
+    replace(main, h('h1', {}, t('Особовий склад')), errorBox(error, () => renderPeople(context, personId)));
     return;
   }
   if (personId !== null) {
-    drawPerson(context, people, devices, items, personId, { editing: false });
+    // The МВО field of the property form shows names by number.
+    setPeople(people);
+    drawPerson(context, people, devices, items, personId, { editing: false, addingItem: false });
     return;
   }
   const links = personLinks(devices);
@@ -101,7 +104,7 @@ function draw(context, people, links, view) {
       }
     };
     const remove = async () => {
-      if (!confirm(f('Удалить «{0}» (#{1}) из О/С? Номер больше не будет использован.', person.name, person.id))) return;
+      if (!confirm(f('Удалить «{0}» (#{1}) из особового склада? Номер больше не будет использован.', person.name, person.id))) return;
       try {
         await api('/people/' + person.id, { method: 'DELETE' });
         toast(t('Удалено.'));
@@ -153,7 +156,7 @@ function draw(context, people, links, view) {
   const panel = editor && view.adding && h('section', { class: 'panel add-panel' }, h('h2', {}, t('Добавить человека')), addForm(reload, () => redraw({ adding: false })));
   replace(
     main,
-    h('h1', { class: 'list-title' }, t('О/С (особовий склад)')),
+    h('h1', { class: 'list-title' }, t('Особовий склад')),
     h(
       'p',
       { class: 'lead list-lead' },
@@ -202,10 +205,10 @@ function draw(context, people, links, view) {
 // The card of one person: name and note, the computers where the person is the user or the МВО, the property.
 function drawPerson(context, people, devices, items, id, view) {
   const { me, main } = context;
-  const back = h('a', { class: 'back', href: '#/people' }, t('← Весь О/С'));
+  const back = h('a', { class: 'back', href: '#/people' }, t('← Особовий склад'));
   const person = people.find((p) => p.id === id);
   if (!person) {
-    replace(main, back, h('div', { class: 'notice notice-error' }, h('p', {}, f('Человека #{0} нет в О/С: его удалили или номер неверный.', id))));
+    replace(main, back, h('div', { class: 'notice notice-error' }, h('p', {}, f('Человека #{0} нет в особовом складе: его удалили или номер неверный.', id))));
     return;
   }
   const redraw = (changes = {}) => drawPerson(context, people, devices, items, id, { ...view, ...changes });
@@ -216,7 +219,7 @@ function drawPerson(context, people, devices, items, id, view) {
   const linked = asUser.length + asOwner.length + own.length;
 
   const remove = async () => {
-    if (!confirm(f('Удалить «{0}» (#{1}) из О/С? Номер больше не будет использован.', person.name, person.id))) return;
+    if (!confirm(f('Удалить «{0}» (#{1}) из особового склада? Номер больше не будет использован.', person.name, person.id))) return;
     try {
       await api('/people/' + person.id, { method: 'DELETE' });
       toast(t('Удалено.'));
@@ -261,7 +264,7 @@ function drawPerson(context, people, devices, items, id, view) {
       h(
         'div',
         { class: 'actions' },
-        hasRole(me, 'editor') && h('button', { class: 'button primary', type: 'button', onclick: () => redraw({ editing: true }) }, t('Изменить')),
+        hasRole(me, 'editor') && h('button', { class: 'button primary', type: 'button', onclick: () => redraw({ editing: true, addingItem: false }) }, t('Изменить')),
         hasRole(me, 'admin') &&
           h(
             'button',
@@ -299,6 +302,19 @@ function drawPerson(context, people, devices, items, id, view) {
           ),
         );
 
+  // Property is added right here: the form starts with this person as the МВО.
+  const editor = hasRole(me, 'editor');
+  const itemPanel =
+    editor &&
+    view.addingItem &&
+    addItemPanel({
+      items,
+      people,
+      defaults: { ownerId: id },
+      onAdded: () => renderPeople(context, id),
+      onCancel: () => redraw({ addingItem: false }),
+    });
+
   replace(
     main,
     back,
@@ -308,7 +324,15 @@ function drawPerson(context, people, devices, items, id, view) {
     h(
       'section',
       { class: 'panel' },
-      h('h2', {}, f('МВО майна ({0})', own.length), own.length > 0 ? ' ' : '', own.length > 0 && h('a', { class: 'small', href: '#/items/owner/' + id }, t('открыть в «Майне»'))),
+      h(
+        'div',
+        { class: 'panel-head' },
+        h('h2', {}, f('МВО майна ({0})', own.length), own.length > 0 ? ' ' : '', own.length > 0 && h('a', { class: 'small', href: '#/items/owner/' + id }, t('открыть в «Майне»'))),
+        editor &&
+          !view.addingItem &&
+          h('button', { class: 'button primary', type: 'button', title: t('Добавить майно'), onclick: () => redraw({ addingItem: true, editing: false }) }, t('+ Добавить')),
+      ),
+      itemPanel,
       own.length === 0
         ? h('p', { class: 'muted' }, t('Нет.'))
         : h(
@@ -337,7 +361,12 @@ function drawPerson(context, people, devices, items, id, view) {
           ),
     ),
     h('p', { class: 'muted small', title: person.updatedBy }, f('Изменено {0}', formatDate(person.updatedAt))),
+    itemPanel && itemDatalists(items, people),
   );
+  if (itemPanel) {
+    itemPanel.scrollIntoView({ block: 'center' });
+    itemPanel.querySelector('input')?.focus();
+  }
 }
 
 function addForm(reload, cancel) {

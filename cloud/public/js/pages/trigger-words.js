@@ -50,7 +50,7 @@ export async function renderTriggerWords(context) {
   try {
     [{ setting }, { history }] = await Promise.all([api('/settings/trigger-words'), api('/settings/trigger-words/history')]);
   } catch (error) {
-    replace(main, h('h1', {}, t('Слова SUSpector')), errorBox(error, () => renderTriggerWords(context)));
+    replace(main, h('h1', {}, t('Суспектор: слова-триггеры')), errorBox(error, () => renderTriggerWords(context)));
     return;
   }
 
@@ -215,7 +215,7 @@ export async function renderTriggerWords(context) {
 
   replace(
     main,
-    h('h1', {}, t('Слова SUSpector')),
+    h('h1', {}, t('Суспектор: слова-триггеры')),
     h(
       'p',
       { class: 'lead' },

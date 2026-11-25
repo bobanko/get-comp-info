@@ -44,19 +44,19 @@ document.addEventListener('click', (event) => {
   if (open && !open.contains(event.target)) open.removeAttribute('open');
 });
 
-// Groups: the records (devices, property, people), the tools of every user, and the admin pages, used much
-// less often, in a submenu.
+// Groups: the records (devices, property, people) in the bar, the rest, used much less often, in a submenu.
+// short: the label of the phone menu button, where the full one does not fit next to the brand.
 const PAGES = [
   { hash: '#/devices', icon: '💻', label: t('Устройства'), role: 'viewer', group: 'records' },
   { hash: '#/items', icon: '🗃️', label: t('Майно'), role: 'viewer', group: 'records' },
-  { hash: '#/people', icon: '🧑', label: 'О/С', title: t('Особовий склад'), role: 'viewer', group: 'records' },
-  { hash: '#/keys', icon: '🔑', label: t('Ключи'), role: 'harvester', group: 'tools' },
-  { hash: '#/downloads', icon: '📥', label: t('Загрузки'), role: 'viewer', group: 'tools' },
-  { hash: '#/users', icon: '👥', label: t('Пользователи'), role: 'admin', group: 'admin' },
-  { hash: '#/network', icon: '🌐', label: t('Сеть'), role: 'admin', group: 'admin' },
-  { hash: '#/trigger-words', icon: '🔎', label: t('Слова SUSpector'), role: 'admin', group: 'admin' },
-  { hash: '#/releases', icon: '📦', label: t('Версии программ'), role: 'admin', group: 'admin' },
-  { hash: '#/journal', icon: '📜', label: t('Журнал'), role: 'admin', group: 'admin' },
+  { hash: '#/people', icon: '🧑', label: t('Особовий склад'), short: 'О/С', role: 'viewer', group: 'records' },
+  { hash: '#/users', icon: '👥', label: t('Пользователи'), role: 'admin', group: 'more' },
+  { hash: '#/keys', icon: '🔑', label: t('Ключи'), role: 'harvester', group: 'more' },
+  { hash: '#/downloads', icon: '📥', label: t('Загрузки'), role: 'viewer', group: 'more' },
+  { hash: '#/network', icon: '🌐', label: t('Настройки сети'), role: 'admin', group: 'more' },
+  { hash: '#/trigger-words', icon: '🔎', label: t('Суспектор: слова-триггеры'), role: 'admin', group: 'more' },
+  { hash: '#/releases', icon: '📦', label: t('Версии программ'), role: 'admin', group: 'more' },
+  { hash: '#/journal', icon: '📜', label: t('Журнал'), role: 'admin', group: 'more' },
 ];
 
 let me = null;
@@ -131,6 +131,29 @@ async function refreshPendingRequests() {
   }
 }
 
+// Phones keep a tab open for days and bring it back without a reload, so the counter loaded at start-up goes
+// stale there. It is asked again on every section change, when the page is shown again and once a minute
+// while it is on screen; a change redraws the menu and the users page, where the requests are approved.
+const REQUESTS_POLL_MS = 60_000;
+let requestsCheck = null;
+
+function checkPendingRequests() {
+  if (!me || !hasRole(me, 'admin') || document.visibilityState !== 'visible') return;
+  requestsCheck ??= (async () => {
+    const before = pendingRequests;
+    await refreshPendingRequests();
+    if (pendingRequests === before) return;
+    renderNav(currentHash);
+    if (currentHash === '#/users') renderUsers(pageContext());
+  })().finally(() => {
+    requestsCheck = null;
+  });
+}
+
+document.addEventListener('visibilitychange', checkPendingRequests);
+window.addEventListener('pageshow', (event) => event.persisted && checkPendingRequests());
+setInterval(checkPendingRequests, REQUESTS_POLL_MS);
+
 function requestsBadge() {
   return pendingRequests > 0 && h('span', { class: 'nav-count', title: t('Запросы на доступ') }, String(pendingRequests));
 }
@@ -140,32 +163,44 @@ function renderNav(current) {
   replace(
     menuCurrent,
     page && h('span', { class: 'nav-icon', 'aria-hidden': 'true' }, page.icon),
-    page?.label ?? t('Меню'),
+    page ? page.short ?? page.label : t('Меню'),
     requestsBadge(),
   );
   const link = (p) =>
     h(
       'a',
-      { href: p.hash, title: p.title, class: current.startsWith(p.hash) ? 'active' : undefined },
+      { href: p.hash, class: current.startsWith(p.hash) ? 'active' : undefined },
       h('span', { class: 'nav-icon', 'aria-hidden': 'true' }, p.icon),
       p.label,
       p.hash === '#/users' && requestsBadge(),
     );
   const allowed = PAGES.filter((p) => hasRole(me, p.role));
   const group = (name) => allowed.filter((p) => p.group === name);
-  const admin = group('admin');
+  const more = group('more');
   replace(
     nav,
     h('div', { class: 'nav-group' }, group('records').map(link)),
-    group('tools').length > 0 && h('div', { class: 'nav-group' }, group('tools').map(link)),
-    admin.length > 0 &&
+    // Admins have their pages there too; for the others it holds only the keys and the downloads.
+    more.length > 0 &&
       h(
         'details',
-        { class: admin.some((p) => current.startsWith(p.hash)) ? 'nav-admin active' : 'nav-admin' },
-        h('summary', {}, h('span', { class: 'nav-icon', 'aria-hidden': 'true' }, '⚙️'), t('Админка'), requestsBadge()),
-        h('div', { class: 'nav-admin-body' }, admin.map(link)),
+        { class: more.some((p) => current.startsWith(p.hash)) ? 'nav-admin active' : 'nav-admin' },
+        h('summary', {}, h('span', { class: 'nav-icon', 'aria-hidden': 'true' }, '⚙️'), hasRole(me, 'admin') ? t('Админка') : t('Ещё'), requestsBadge()),
+        h('div', { class: 'nav-admin-body' }, more.map(link)),
       ),
   );
+}
+
+function pageContext() {
+  return {
+    me,
+    main,
+    // Pages call this after approving or rejecting access requests.
+    onRequestsChanged: async () => {
+      await refreshPendingRequests();
+      renderNav(currentHash);
+    },
+  };
 }
 
 async function route() {
@@ -175,15 +210,8 @@ async function route() {
   currentHash = hash;
   setMenuOpen(false);
   renderNav(hash);
-  const context = {
-    me,
-    main,
-    // Pages call this after approving or rejecting access requests.
-    onRequestsChanged: async () => {
-      await refreshPendingRequests();
-      renderNav(currentHash);
-    },
-  };
+  checkPendingRequests();
+  const context = pageContext();
   const deviceMatch = /^#\/devices\/(.+)$/.exec(hash);
   const personMatch = /^#\/people(?:\/(\d+))?$/.exec(hash);
   const itemsMatch = /^#\/items(?:\/owner\/(\d+))?$/.exec(hash);

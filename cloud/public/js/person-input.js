@@ -39,7 +39,7 @@ export async function resolvePeople(fields, people) {
   }
   const added = [...new Set(Object.values(newNames))];
   if (added.length === 0) return result;
-  if (!confirm(f('Добавить в О/С: {0}?', added.join(', ')))) return null;
+  if (!confirm(f('Добавить в особовий склад: {0}?', added.join(', ')))) return null;
   const ids = {};
   for (const name of added) ids[name] = (await api('/people', { method: 'POST', body: { name } })).person.id;
   for (const [field, name] of Object.entries(newNames)) result[field] = ids[name];

@@ -118,6 +118,24 @@ export function itemTypes(items) {
   return [...counts].sort((a, b) => b[1] - a[1] || collator.compare(a[0], b[0]));
 }
 
+// Models typed before, for the model field of the property form: the models of this type when it has any
+// (so a monitor suggests monitors), otherwise every model. The most used first; the same model in another
+// case or with other spaces counts once.
+export function itemModels(items, type = '') {
+  const all = (items ?? []).filter((item) => !isBlank(item.model));
+  const sameType = (item) => !isBlank(type) && String(item.type ?? '').trim().toLowerCase() === type.trim().toLowerCase();
+  const ofType = all.filter(sameType);
+  const counts = new Map();
+  for (const item of ofType.length > 0 ? ofType : all) {
+    const model = item.model.trim().replace(/\s+/g, ' ');
+    const key = model.toLowerCase();
+    const seen = counts.get(key);
+    if (seen) seen[1] += 1;
+    else counts.set(key, [model, 1]);
+  }
+  return [...counts.values()].sort((a, b) => b[1] - a[1] || collator.compare(a[0], b[0])).map(([model]) => model);
+}
+
 // Items of one type and person whose text has every word of the query, as typed or in another alphabet.
 /**
  * @param {any[]} items
@@ -452,7 +470,7 @@ export function deviceAuthor(device) {
 // ---------- Journal ----------
 
 // Keys of the settings table (src/settings.ts, src/trigger-words.ts) and their names in the journal.
-const SETTINGS_NAMES = { network: t('Сеть'), 'suspector-trigger-words': t('Слова SUSpector') };
+const SETTINGS_NAMES = { network: t('Настройки сети'), 'suspector-trigger-words': t('Суспектор: слова-триггеры') };
 const ACTIVE_LABELS = { true: t('включён'), false: t('отключён') };
 
 // One journal entry as text: what was done and to what, with a link to the device card when there is one.

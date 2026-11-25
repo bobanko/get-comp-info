@@ -2,19 +2,12 @@ import { api } from '../api.js';
 import { errorBox, h, replace, toast } from '../dom.js';
 import { f, t } from '../i18n.js';
 import { focusSearch, listToolbar, marked } from '../list-toolbar.js';
+import { addItemPanel, escapeTo, ITEM_FIELDS as FIELDS, itemDatalists, itemInputs, itemTitle, itemValues } from '../item-form.js';
 import { filterItems, findPerson, formatDate, hasRole, isBlank, itemTypes, personName, setPeople } from '../logic.js';
-import { peopleDatalist, personInput, personInputText, resolvePeople } from '../person-input.js';
 import { queryWords } from '../search-logic.js';
 
 // Survives navigation to a person and back.
 const state = { query: '', type: '' };
-
-const FIELDS = [
-  { key: 'type', label: t('Тип'), max: 100 },
-  { key: 'model', label: t('Модель'), max: 200 },
-  { key: 'serial', label: t('Серийный номер'), max: 200, mono: true },
-  { key: 'location', label: t('Место / секция'), max: 200 },
-];
 
 // Property from the property register, «Майно» in every language: who is materially responsible (МВО) for what.
 // Items have numbers in the cloud (the journal, the API), but the page does not show them: the register is
@@ -63,6 +56,8 @@ function draw(context, items, people, view) {
   const redraw = (changes = {}) => draw(context, items, people, { ...view, ...changes });
   const reload = () => renderItems(context, view.ownerId);
   const cancelEdit = () => redraw({ editing: null });
+  // The suggestions of the form come from the items typed by hand, not from the computers.
+  const propertyItems = items.filter((item) => item.kind === 'item');
 
   const tbody = h('tbody');
   const count = h('p', { class: 'muted count' });
@@ -131,46 +126,11 @@ function draw(context, items, people, view) {
     );
   }
 
-  // The form fields of an item, shared by adding and editing.
-  function inputs(item) {
-    const fields = Object.fromEntries(
-      FIELDS.map((field) => [
-        field.key,
-        h('input', {
-          value: item[field.key] ?? '',
-          maxlength: String(field.max),
-          'aria-label': field.label,
-          placeholder: field.label,
-          class: field.mono ? 'mono' : undefined,
-          list: field.key === 'type' ? 'item-types' : undefined,
-        }),
-      ]),
-    );
-    fields.owner = personInput('owner', personInputText(item.ownerId), { 'aria-label': 'МВО' });
-    fields.note = h('input', { value: item.note ?? '', maxlength: '1000', 'aria-label': t('Примечание'), placeholder: t('Примечание') });
-    return fields;
-  }
-
-  async function values(fields) {
-    const owner = await resolvePeople({ ownerId: { label: 'МВО', text: fields.owner.value } }, people);
-    if (owner === null) return null;
-    const result = { ownerId: owner.ownerId, note: fields.note.value };
-    for (const field of FIELDS) result[field.key] = fields[field.key].value;
-    return result;
-  }
-
-  // Escape cancels the editing, as the «Отмена» button.
-  const escapeTo = (cancel) => (event) => {
-    if (event.key !== 'Escape') return;
-    event.preventDefault();
-    cancel();
-  };
-
   function editRow(item) {
-    const fields = inputs(item);
+    const fields = itemInputs(item, propertyItems);
     const save = async () => {
       try {
-        const body = await values(fields);
+        const body = await itemValues(fields, people);
         if (body === null) return;
         await api('/items/' + item.id, { method: 'PATCH', body });
         toast(t('Сохранено.'));
@@ -180,7 +140,7 @@ function draw(context, items, people, view) {
       }
     };
     const remove = async () => {
-      if (!confirm(f('Удалить «{0}»?', [item.type, item.model].filter((v) => !isBlank(v)).join(' ')))) return;
+      if (!confirm(f('Удалить «{0}»?', itemTitle(item)))) return;
       try {
         await api('/items/' + item.id, { method: 'DELETE' });
         toast(t('Удалено.'));
@@ -202,46 +162,6 @@ function draw(context, items, people, view) {
         h('button', { class: 'button small primary', type: 'button', onclick: save }, t('Сохранить')),
         h('button', { class: 'button small', type: 'button', title: t('Отмена (Esc)'), onclick: cancelEdit }, t('Отмена')),
         hasRole(me, 'admin') && h('button', { class: 'button small danger', type: 'button', onclick: remove }, t('Удалить')),
-      ),
-    );
-  }
-
-  function addPanel() {
-    const fields = inputs({ ownerId: view.ownerId, type: state.type });
-    const add = h('button', { class: 'button primary', type: 'submit' }, t('Добавить'));
-    const cancel = () => redraw({ adding: false });
-    return h(
-      'section',
-      { class: 'panel add-panel' },
-      h('h2', {}, t('Добавить майно')),
-      h(
-        'form',
-        {
-          class: 'inline-form items-form',
-          onkeydown: escapeTo(cancel),
-          onsubmit: async (event) => {
-            event.preventDefault();
-            add.disabled = true;
-            try {
-              const body = await values(fields);
-              if (body === null) {
-                add.disabled = false;
-                return;
-              }
-              const { item } = await api('/items', { method: 'POST', body });
-              toast(f('Добавлено: {0}.', [item.type, item.model].filter((v) => !isBlank(v)).join(' ')));
-              await reload();
-            } catch (error) {
-              add.disabled = false;
-              toast(error.message, 'error');
-            }
-          },
-        },
-        FIELDS.map((field) => fields[field.key]),
-        fields.owner,
-        fields.note,
-        add,
-        h('button', { class: 'button', type: 'button', title: t('Отмена (Esc)'), onclick: cancel }, t('Отмена')),
       ),
     );
   }
@@ -277,7 +197,10 @@ function draw(context, items, people, view) {
   });
   const owner = view.ownerId === null ? null : findPerson(view.ownerId);
 
-  const panel = editor && view.adding && addPanel();
+  const panel =
+    editor &&
+    view.adding &&
+    addItemPanel({ items: propertyItems, people, defaults: { ownerId: view.ownerId, type: state.type }, onAdded: reload, onCancel: () => redraw({ adding: false }) });
   replace(
     main,
     h('h1', { class: 'list-title' }, t('Майно')),
@@ -309,8 +232,7 @@ function draw(context, items, people, view) {
         tbody,
       ),
     ),
-    h('datalist', { id: 'item-types' }, types.map(([type]) => h('option', { value: type }))),
-    peopleDatalist(people),
+    itemDatalists(propertyItems, people),
   );
   fill();
   if (panel) {

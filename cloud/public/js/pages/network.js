@@ -33,7 +33,7 @@ export async function renderNetwork(context) {
   try {
     [{ setting }, { history }] = await Promise.all([api('/settings/network'), api('/settings/network/history')]);
   } catch (error) {
-    replace(main, h('h1', {}, t('Сеть')), errorBox(error, () => renderNetwork(context)));
+    replace(main, h('h1', {}, t('Настройки сети')), errorBox(error, () => renderNetwork(context)));
     return;
   }
 
@@ -583,7 +583,7 @@ function draw(context, setting, history, draft, view, errorText) {
 
   replace(
     main,
-    h('h1', {}, t('Сеть')),
+    h('h1', {}, t('Настройки сети')),
     h(
       'p',
       { class: 'lead' },

@@ -493,6 +493,9 @@ table.items td.type .host { display: block; margin-top: 3px; font-weight: 600; }
 table.items td.empty, table.people td.empty { padding: 24px; }
 .toolbar-actions { display: flex; gap: 8px; }
 .add-panel h2 { margin-bottom: 10px; }
+/* The property form inside the «МВО майна» panel of a person card. */
+.panel .add-panel { margin: 0 0 12px; background: var(--bg); box-shadow: none; }
+.panel .add-panel h2 { font-size: 15px; }
 details.panel ul { margin: 8px 0 0; }
 /* «Ключи»: the rename form in the name cell. */
 table.keys td { vertical-align: middle; }
@@ -536,6 +539,29 @@ table.reserved + .actions, .panel .table-wrap + .actions { margin-top: 10px; }
 
 details summary { cursor: pointer; }
 .notes { margin: 6px 0 0; padding-left: 18px; color: var(--muted); }
+.release-cards { display: grid; gap: 10px; margin-bottom: 16px; }
+.release-card { margin: 0; padding: 12px 16px; }
+.release-card.current { border-color: color-mix(in srgb, var(--ok) 45%, var(--border)); }
+.release-card-head { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
+.release-card-head .badge { margin-left: 0; }
+.release-version { font-size: 15px; font-weight: 600; }
+.release-card p { margin: 4px 0 0; }
+.release-card .release-note { margin: 8px 0 0; }
+
+/* ---------- Users ---------- */
+
+.user-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.user-card { display: flex; flex-direction: column; gap: 8px; margin: 0; }
+.user-card.request { border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); background: color-mix(in srgb, var(--warn-soft) 40%, var(--surface)); }
+.user-card.inactive { opacity: 0.7; }
+.user-card p { margin: 0; }
+.user-card-title { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; font-weight: 600; overflow-wrap: anywhere; }
+.user-card-title .badge { margin-left: 0; font-weight: 400; }
+.card-fields { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+.card-field { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.card-field input { width: 100%; }
+.user-card-foot { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; margin-top: auto; }
+.user-card .actions { margin-top: auto; }
 
 /* ---------- Keys ---------- */
 
@@ -550,6 +576,8 @@ details summary { cursor: pointer; }
 }
 
 @media (max-width: 640px) {
+  .user-cards { grid-template-columns: 1fr; }
+  .user-card .actions .button { padding: 8px 14px; }
   /* Too little height on phones: back to normal page scrolling. */
   body:has(.table-scroll) { height: auto; display: block; overflow: visible; }
   body:has(.table-scroll) main { display: block; }

@@ -19,6 +19,7 @@ import {
   journalActor,
   journalLine,
   filterItems,
+  itemModels,
   itemTypes,
   parsePerson,
   personLinks,
@@ -421,7 +422,7 @@ describe('journal lines', () => {
       .toBe('b@example.com: роль Просмотр → Редактор, отключён');
     expect(journalLine({ ...base, kind: 'suspector-release', action: 'publish', target: '2026.11.21.2', actor: 'GitHub Actions', actorName: null }))
       .toMatchObject({ what: 'Опубликована версия SUSpector', object: '2026.11.21.2' });
-    expect(journalLine({ ...base, kind: 'settings', action: 'update', target: 'network' }).object).toBe('Сеть');
+    expect(journalLine({ ...base, kind: 'settings', action: 'update', target: 'network' }).object).toBe('Настройки сети');
   });
 
   it('names the console key before the person', () => {
@@ -545,6 +546,14 @@ describe('property items', () => {
     expect(ids(filterItems(items, { query: 'тоц' }))).toEqual([3]);
     const computer = { id: 'PF1', kind: 'device', hostname: 'IF-042-A208-SUK', type: 'Комп’ютер', model: 'LENOVO 82YU', serial: 'PF1', location: '', ownerId: 1, note: '' };
     expect(filterItems([...items, computer], { query: 'a208' }).map((i: { id: unknown }) => i.id)).toEqual(['PF1']);
+  });
+
+  it('suggest the models typed before, of the same type when it has any', () => {
+    const more = [...items, item(4, { model: ' dell  p2217h ' }), item(5, { model: 'Asus VA24' }), item(6, { type: 'Флешка', model: 'Kingston' })];
+    expect(itemModels(more, 'монітор')).toEqual(['Dell P2217H', 'Asus VA24']);
+    expect(itemModels(more, 'Флешка')).toEqual(['Goodram 32GB', 'Kingston']);
+    expect(itemModels(more, 'Принтер')).toEqual(['Dell P2217H', 'Asus VA24', 'Goodram 32GB', 'Kingston']);
+    expect(itemModels(more)).toEqual(['Dell P2217H', 'Asus VA24', 'Goodram 32GB', 'Kingston']);
   });
 
   it('show up in the journal', () => {

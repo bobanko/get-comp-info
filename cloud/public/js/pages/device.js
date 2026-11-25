@@ -106,7 +106,7 @@ function valueNode(name, value) {
       'a',
       { href: '#/people/' + value, title: person?.note || undefined },
       person ? person.name : `#${value}`,
-      h('span', { class: 'muted small' }, person ? ` · #${value}` : t(' (нет в О/С)')),
+      h('span', { class: 'muted small' }, person ? ` · #${value}` : t(' (нет в особовом складе)')),
     );
   }
   if (/At$/.test(name) && !isBlank(value)) return h('span', { title: displayValue(value) }, formatDate(value));
