@@ -25,9 +25,11 @@ jobs:
           if ($version -notmatch '^\d{4}\.\d{2}\.\d{2}\.\d+$') { throw "The tag $env:GITHUB_REF_NAME is not yousbee-vYYYY.MM.DD.N" }
           if ($version -ne $file) { throw "The tag $env:GITHUB_REF_NAME does not match app/youSBee.version ($file)" }
 
-      - name: Build youSBee and run the checks
+      # All the programs, not youSBee alone: the checks of app\tests also read bin\comp-info.exe and bin\SUSpector.exe
+      # (which sections each program contains), and on a clean runner only what this build makes exists.
+      - name: Build the programs and run their checks
         shell: cmd
-        run: tools\build.BAT yousbee
+        run: tools\build.BAT
 
       - name: Publish the GitHub Release
         shell: pwsh
