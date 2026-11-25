@@ -28,22 +28,24 @@
 
 - **Лицензия** — открытая, одобренная OSI: [GPL-3.0-or-later](LICENSE). Закрытых частей в программах нет.
 - **Сведения в файле.** `tools\build.BAT` записывает в каждый exe название продукта (`AssemblyProduct`:
-  «CHAGEAR Toolbox», «SUSpector», «youSBee»), версию, компанию CHAGEAR и copyright. В настройках артефакта SignPath
+  «CHAGEAR Toolbox», «SUSpector», «youSBee», «FlashStashBee»), версию, компанию CHAGEAR и copyright. В настройках артефакта SignPath
   можно потребовать, чтобы название и версия совпадали с ожидаемыми, — тогда подписать «не тот» файл не получится.
 - **Происхождение** — сборка на runner'е GitHub (`windows-latest`) из тега этого репозитория.
 
 ## Перед заявкой
 
 1. Репозиторий открыт, в нём LICENSE и README с правилами подписи и политикой конфиденциальности — готово.
-2. youSBee собирается в GitHub Actions — готово: тег `yousbee-vВЕРСИЯ` выкладывает exe в GitHub Release, сайт
-   chagear.top скачивает его оттуда ([YOUSBEE.md](YOUSBEE.md)). Подпись встанет в
-   [release-yousbee.yml](.github/workflows/release-yousbee.yml) между сборкой и `gh release create`.
+2. youSBee и FlashStashBee собираются в GitHub Actions — готово: теги `yousbee-vВЕРСИЯ` и
+   `flashstashbee-vВЕРСИЯ` выкладывают exe в GitHub Release, сайт chagear.top скачивает его оттуда
+   ([YOUSBEE.md](YOUSBEE.md), [FLASHSTASHBEE.md](FLASHSTASHBEE.md)). Подпись встанет в
+   [release-yousbee.yml](.github/workflows/release-yousbee.yml) и
+   [release-flashstashbee.yml](.github/workflows/release-flashstashbee.yml) между сборкой и `gh release create`.
 3. Хотя бы один выпуск каждой программы уже опубликован (SignPath не принимает проекты без выпусков) — есть
-   у всех трёх.
+   у всех четырёх.
 4. **Страницы загрузки.** По условиям ([signpath.org/terms](https://signpath.org/terms), прочитаны 21.11.2026) термин
    «Code signing policy» должен быть на главной странице проекта и на страницах загрузки: фраза «Free code signing
    provided by SignPath.io, certificate by SignPath Foundation», роли команды со ссылками на участников и политика
-   конфиденциальности. В README это есть; на chagear.top/toolbox, /suspector и /yousbee — ещё нет. Сайт только на
+   конфиденциальности. В README это есть; на chagear.top/toolbox, /suspector, /yousbee и /flashstashbee — ещё нет. Сайт только на
    украинском, поэтому ссылка вида «Політика підпису коду (Code signing policy)» на раздел README.
 5. **Метаданные файла.** Условия требуют, чтобы название продукта в файле было названием проекта, а версия была
    одинаковой во всех сборках, и чтобы это проверяли ограничения метаданных SignPath. У нас три программы с разными

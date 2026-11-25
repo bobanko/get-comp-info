@@ -97,6 +97,21 @@ FlashStashBee.exe --theme light --language ru --screenshot settings.png 2000
 FlashStashBee.exe --about --screenshot about.png 2000
 ```
 
+## Распространение
+
+Страница https://chagear.top/flashstashbee/ и ссылка https://chagear.top/download/FlashStashBee.exe. Облака у
+FlashStashBee нет: по тегу `flashstashbee-vВЕРСИЯ` GitHub Actions
+([release-flashstashbee.yml](.github/workflows/release-flashstashbee.yml)) проверяет, что тег совпадает с
+`app/FlashStashBee.version`, собирает все программы с проверками `app\tests` (они читают `bin\comp-info.exe` и
+`bin\SUSpector.exe`, поэтому одной утилиты мало) и выкладывает `FlashStashBee.exe` в GitHub Release с этим тегом.
+Сборка сайта (`chagear-site`, `npm run deploy`) скачивает exe из этого выпуска, а не с диска, поэтому пользователи
+получают только то, что собрано на сервере GitHub из репозитория (это нужно и для подписи,
+[CODE_SIGNING.md](CODE_SIGNING.md)).
+
+Новая версия: `update-version.BAT flashstashbee`, коммит, тег `flashstashbee-vВЕРСИЯ`, push (`git push --atomic
+origin main flashstashbee-vВЕРСИЯ`). Когда Actions опубликует выпуск (пара минут), заново опубликовать сайт.
+Кнопки «Обновление» в программе нет.
+
 ## Антивирус и SmartScreen
 
 Фоновое копирование со вставленных флешек — поведение, на которое реагируют эвристики (так ведут себя
@@ -105,8 +120,8 @@ USB-стилеры). Сделать утилиту «невидимой» для
 
 1. **Подпись кода.** Подписанный релиз (SignPath Foundation, [CODE_SIGNING.md](CODE_SIGNING.md)), собранный
    на GitHub Actions, с чистыми метаданными (Company/Product/Version их ставит `build.BAT`) — главный способ
-   снять и SmartScreen, и репутационные движки. Если заводить облако/релиз, как у youSBee, тег —
-   `flashstashbee-vВЕРСИЯ` (workflow ещё нет).
+   снять и SmartScreen, и репутационные движки. Выпуск уже собирается на Actions («Распространение»);
+   подписи пока нет.
 2. **Исключение в Defender на своей машине** — `tools\flashstashbee\allow-in-defender.ps1` (нужен админ;
    `-Remove` убирает). Для стороннего антивируса — добавить исключение в нём.
 3. Утилита намеренно «не подозрительная»: видимый значок в трее, без упаковки/обфускации, манифест

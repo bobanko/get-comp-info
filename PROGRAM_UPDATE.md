@@ -15,18 +15,21 @@
 | Тулбокс: `comp-info.exe` и консольная версия (скрипты, BAT) | `$script:toolboxVersion` в `console-ui.ps1` | тег `vВЕРСИЯ` → облако, `/api/release` |
 | `SUSpector.exe` | `app/SUSpector.version` | тег `suspector-vВЕРСИЯ` → облако, `/api/suspector-release` (публичный архив только с SUSpector, см. [SUSPECTOR.md](SUSPECTOR.md)) |
 | `youSBee.exe` | `app/youSBee.version` | тег `yousbee-vВЕРСИЯ` → GitHub Release, без облака: сайт chagear.top берёт exe оттуда в `/download/` (см. [YOUSBEE.md](YOUSBEE.md)) |
+| `FlashStashBee.exe` | `app/FlashStashBee.version` | тег `flashstashbee-vВЕРСИЯ` → GitHub Release, без облака, как у youSBee (см. [FLASHSTASHBEE.md](FLASHSTASHBEE.md)) |
 
-Версию поднимает `tools\update-version.BAT [toolbox|suspector|yousbee]` (по умолчанию тулбокс), собирает
-`tools\build.BAT [toolbox] [suspector] [yousbee]` (без аргументов — все три, проверки `app\tests` идут всегда).
+Версию поднимает `tools\update-version.BAT [toolbox|suspector|yousbee|flashstashbee]` (по умолчанию тулбокс), собирает
+`tools\build.BAT [toolbox] [suspector] [yousbee] [flashstashbee]` (без аргументов — все четыре, проверки `app\tests`
+идут всегда и требуют `bin\comp-info.exe` с `bin\SUSpector.exe`, поэтому выпуски собирают все программы).
 `tools\release.BAT` выпускает только тулбокс; SUSpector — `update-version.BAT suspector`, раздел новой версии
 в `app\SUSpector.notes` («Что нового»: строка с номером версии, затем строки `- …`), коммит `chore: SUSpector version …`,
 тег `suspector-vВЕРСИЯ` и push: GitHub Actions по такому тегу собирает и публикует только SUSpector.
 «Что нового» SUSpector пишется вручную, а не из журнала коммитов: его файлы общие с тулбоксом и youSBee,
 и журнал перечислял бы чужие изменения. Без раздела для выпускаемой версии сборка архива останавливается.
 youSBee — `update-version.BAT yousbee`, коммит, тег `yousbee-vВЕРСИЯ` и push, затем публикация сайта.
+FlashStashBee — так же: `update-version.BAT flashstashbee`, коммит, тег `flashstashbee-vВЕРСИЯ` и push, затем сайт.
 
 Каждый push в `main` и каждый pull request проверяет [ci.yml](.github/workflows/ci.yml): тесты PowerShell, сборка
-трёх программ с проверками `app\tests`, `npm run typecheck` и `npm test` облака. Ставить тег выпуска стоит на коммит,
+всех программ с проверками `app\tests`, `npm run typecheck` и `npm test` облака. Ставить тег выпуска стоит на коммит,
 у которого эти проверки зелёные: при выпуске Actions прогоняет те же тесты, и упавшая на них версия не публикуется.
 Собранные exe каждой проверки лежат две недели в артефакте `programs-<коммит>` запуска (не подписаны).
 

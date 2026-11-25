@@ -1,0 +1,46 @@
+# Publishes FlashStashBee when a tag flashstashbee-v<version> is pushed (FLASHSTASHBEE.md). FlashStashBee has no
+# cloud and no updater: the exe built here goes to a GitHub Release of this repository, and the site chagear.top
+# (chagear-site, npm run deploy) downloads it from there for chagear.top/download/FlashStashBee.exe. So users get only
+# what Actions built from a tag, which code signing also requires (CODE_SIGNING.md) — the main way to clear SmartScreen
+# and antivirus heuristics for a utility that copies flash drives by itself.
+name: Release FlashStashBee
+
+on:
+  push:
+    tags: ['flashstashbee-v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the version
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME.Substring('flashstashbee-v'.Length)
+          $file = (Get-Content app/FlashStashBee.version -TotalCount 1).Trim()
+          if ($version -notmatch '^\d{4}\.\d{2}\.\d{2}\.\d+$') { throw "The tag $env:GITHUB_REF_NAME is not flashstashbee-vYYYY.MM.DD.N" }
+          if ($version -ne $file) { throw "The tag $env:GITHUB_REF_NAME does not match app/FlashStashBee.version ($file)" }
+
+      # All the programs, not FlashStashBee alone: the checks of app\tests also read bin\comp-info.exe and
+      # bin\SUSpector.exe (which sections each program contains), and on a clean runner only what this build makes exists.
+      - name: Build the programs and run their checks
+        shell: cmd
+        run: tools\build.BAT
+
+      - name: Publish the GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = $env:GITHUB_REF_NAME.Substring('flashstashbee-v'.Length)
+          $built = (Get-Item bin/FlashStashBee.exe).VersionInfo.ProductVersion
+          if ($built -ne $version) { throw "bin/FlashStashBee.exe has version $built, expected $version" }
+          $sha = (Get-FileHash bin/FlashStashBee.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          $notes = "FlashStashBee $version — утиліта в треї: вставили флешку, і її вміст копіюється в папку на диску.`n`nСторінка програми: https://chagear.top/flashstashbee/`n`nSHA-256 ``FlashStashBee.exe``: ``$sha``"
+          gh release create $env:GITHUB_REF_NAME bin/FlashStashBee.exe --title "FlashStashBee $version" --notes $notes
+          if ($LASTEXITCODE -ne 0) { throw 'gh release create failed' }
