@@ -9,18 +9,19 @@ namespace CompInfo.Wpf
 {
     // Light and dark theme of the WPF programs: the brushes of Styles.xaml are replaced at the application level,
     // so open windows repaint at once (DynamicResource), nothing is built again.
-    // The palette is the one of the web interface (cloud/public/app.css): a change there is a change here too.
+    // The palette follows the web interface (cloud/public/app.css), except the dark neutral surfaces and text:
+    // those are plain neutral greys like Windows 11 / Visual Studio, with no blue tint (user's choice, 25.11.2026).
     public static class WpfTheme
     {
         // key, light, dark
         static readonly string[,] Palette = {
-            { "WindowBack",  "#F5F6F8", "#111317" },
-            { "Surface",     "#FFFFFF", "#1A1D23" },
-            { "HeaderBack",  "#F0F2F5", "#22262D" },
-            { "Text",        "#1A1D21", "#E6E8EB" },
-            { "Muted",       "#5D6673", "#9AA3AE" },
-            { "Border",      "#DDE1E6", "#2E333B" },
-            { "Divider",     "#E6E9ED", "#262A31" },
+            { "WindowBack",  "#F5F6F8", "#202020" },
+            { "Surface",     "#FFFFFF", "#2B2B2B" },
+            { "HeaderBack",  "#F0F2F5", "#2B2B2B" },
+            { "Text",        "#1A1D21", "#E4E4E4" },
+            { "Muted",       "#5D6673", "#A0A0A0" },
+            { "Border",      "#DDE1E6", "#3C3C3C" },
+            { "Divider",     "#E6E9ED", "#343434" },
             // blue as on the web; hover = brightness 1.08, pressed a bit darker (lighter in the dark theme)
             { "Accent",      "#2563EB", "#6C9BFF" },
             { "AccentHover", "#3B73ED", "#7BA5FF" },
@@ -66,16 +67,16 @@ namespace CompInfo.Wpf
             { "SubtleHover", "#0A000000", "#0FFFFFFF" },
             { "SubtleDown",  "#06000000", "#0AFFFFFF" },
             // text fields and buttons
-            { "FieldBack",   "#FFFFFF", "#1A1D23" },
-            { "FieldHover",  "#F0F2F5", "#22262D" },
-            { "FieldDown",   "#E6E9ED", "#2E333B" },
-            { "FieldFocus",  "#FFFFFF", "#111317" },
-            { "FieldBottom", "#8A9099", "#7D8590" },
+            { "FieldBack",   "#FFFFFF", "#2D2D2D" },
+            { "FieldHover",  "#F0F2F5", "#353535" },
+            { "FieldDown",   "#E6E9ED", "#2A2A2A" },
+            { "FieldFocus",  "#FFFFFF", "#1F1F1F" },
+            { "FieldBottom", "#8A9099", "#8A8A8A" },
             // drop-down lists, tooltips, scroll bars
-            { "FlyoutBack",  "#FFFFFF", "#22262D" },
-            { "ScrollThumb", "#A3AAB4", "#5D6673" },
+            { "FlyoutBack",  "#FFFFFF", "#2C2C2C" },
+            { "ScrollThumb", "#A3AAB4", "#6B6B6B" },
             // InfoBar and Dialog (WinUI 3): background and icon circle per severity, the mark inside the circle, the frame
-            { "BarInfoBack", "#F8F9FB", "#1A1D23" },
+            { "BarInfoBack", "#F8F9FB", "#2B2B2B" },
             { "BarInfoIcon", "#2563EB", "#6C9BFF" },
             { "BarGoodBack", "#E3F5E9", "#173323" },
             { "BarGoodIcon", "#16723A", "#57C47F" },
